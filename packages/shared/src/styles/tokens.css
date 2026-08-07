@@ -80,12 +80,25 @@
   --color-brand-edge: #B9C8F0;
 
   /* ── PANIC — reserved ───────────────────────────────────────────────────
-   * Rubber-stamp vermilion. This colour appears on the Panic control, on an
-   * active emergency, and NOWHERE else. Not on destructive buttons, not on
-   * form errors, not on overdue SLA badges, not on a delete icon. The moment
-   * it is reused for anything ordinary it stops meaning "someone is in danger"
-   * and starts meaning "warning", and the Panic button loses the thing that
-   * makes it work. Errors use --color-alert instead.
+   * Rubber-stamp vermilion. This colour appears in exactly three places:
+   *
+   *   1. the Panic control
+   *   2. an active emergency
+   *   3. the leading edge of an emergency category in the Describe flow
+   *
+   * and NOWHERE else. Not on destructive buttons, not on form errors, not on
+   * overdue SLA badges, not on a delete icon. The moment it is reused for
+   * anything ordinary it stops meaning "someone is in danger" and starts
+   * meaning "warning", and the Panic button loses the thing that makes it
+   * work. Errors use --color-alert instead.
+   *
+   * The third place is not a loosening of the rule, it is the same meaning
+   * through a slower door: choosing an emergency category is choosing the
+   * emergency channel, and it carries the identical consequence — the report
+   * files immediately, anonymously, with no account and no login prompt. The
+   * grey twin of that edge means the opposite: a resident account is required
+   * before this can be submitted. Colour never carries it alone; the card also
+   * ships a door/padlock icon and the words.
    */
   --color-panic: #E2231A;
   --color-panic-strong: #A81109;

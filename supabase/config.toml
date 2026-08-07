@@ -58,6 +58,40 @@ double_confirm_changes = true
 # anyone could register someone else's email and receive their report updates.
 enable_confirmations = true
 
+# Custom SMTP via Gmail.
+#
+# Supabase's built-in email service only delivers to members of the project
+# team, which is why resident self-signup returned "Email address is invalid"
+# for every outside address. Any working SMTP server fixes it; Gmail is the one
+# available here.
+#
+# Two Gmail specifics that are not optional:
+#   1. `pass` must be a Google App Password (16 characters, no spaces), not the
+#      account password. App Passwords only exist once 2-Step Verification is
+#      switched on for the account.
+#   2. Gmail rewrites the From header to the authenticated mailbox, so
+#      `sender_name`'s address and `user` must be the same mailbox. Setting a
+#      different sender address does not work — Gmail silently overrides it.
+#
+# The password is read from the environment at `supabase config push` time and
+# is never written to this file. See the SMTP section of README.md.
+[auth.email.smtp]
+enabled = true
+host = "smtp.gmail.com"
+port = 465
+user = "env(SARO_SMTP_USER)"
+pass = "env(SARO_SMTP_PASSWORD)"
+admin_email = "env(SARO_SMTP_USER)"
+sender_name = "SARO Legazpi"
+
+# Gmail's free tier allows roughly 500 recipients a day and throttles well
+# before that per hour, so this sits deliberately under it. The default of 2 an
+# hour is a built-in-service limit and is far too low for a launch day; 30 is
+# enough for real signups without handing an abuser a way to burn the daily
+# quota and lock out everyone else.
+[auth.rate_limit]
+email_sent = 30
+
 [analytics]
 enabled = false
 

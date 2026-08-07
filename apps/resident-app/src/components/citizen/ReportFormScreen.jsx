@@ -5,7 +5,8 @@ import L from "leaflet";
 import {
   AlertTriangle, MapPin, Navigation, Camera, Mic, MicOff,
   Send, ChevronDown, Phone, Users, CheckCircle2, Copy, X, Plus, WifiOff, Search, Check,
-  Waves, Mountain, Wind, Ambulance, Car, Flame, Wrench, ShieldAlert, Droplets, Anchor
+  Waves, Mountain, Wind, Ambulance, Car, Flame, Wrench, ShieldAlert, Droplets, Anchor,
+  Lock, DoorOpen
 } from "lucide-react";
 import { booleanPointInPolygon, point } from "@turf/turf";
 import {
@@ -560,8 +561,34 @@ export default function ReportFormScreen() {
             })}
           </div>
 
-          {/* Thumb-Friendly Category Cards List (Un-truncated, multi-line wrapping, icons, colored left border) */}
-          <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+          {/* Category cards.
+           *
+           * The 4px leading edge is a functional signal, not decoration, and it
+           * carries the single rule that decides whether this form can be
+           * submitted at all:
+           *
+           *   vermilion edge  → emergency category → files immediately, no
+           *                     account, no login prompt, ever
+           *   grey edge       → standard category  → needs a resident account
+           *
+           * This is the same rule enforced by `needsAccount` above, by the
+           * describe-flow keyword check, and by the RLS insert policies. One
+           * fact, stated in three places, and this is the only place a resident
+           * can see it before they hit it.
+           *
+           * The vermilion is the reserved Panic ink, used here deliberately:
+           * picking an emergency category is the same act as pressing Panic,
+           * taken through a slower door. It is the third and last permitted
+           * place for this colour — see the reservation note in tokens.css.
+           *
+           * Colour is never alone. Every card also carries an icon (open door
+           * vs padlock) and the words, so the rule survives greyscale, a sunlit
+           * screen, and deuteranopia.
+           *
+           * The access clause is shown to guests only. A signed-in resident can
+           * file anything, so telling them to sign in would be a lie.
+           */}
+          <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
             {categories
               .filter((cat) => {
                 if (catTab === "emergency" && !cat.is_emergency) return false;
@@ -579,6 +606,8 @@ export default function ReportFormScreen() {
               .map((cat) => {
                 const isSelected = selectedCategoryId === cat.id;
                 const IconComp = getCategoryIcon(cat);
+                const openToGuests = cat.is_emergency;
+                const AccessIcon = openToGuests ? DoorOpen : Lock;
                 return (
                   <button
                     key={cat.id}
@@ -587,53 +616,74 @@ export default function ReportFormScreen() {
                       setSelectedCategoryId(cat.id);
                       setValidationErrors((prev) => ({ ...prev, category: "" }));
                     }}
-                    className={`w-full text-left p-3.5 rounded-xs border-2 transition-all flex items-start justify-between gap-3 ${
-                      cat.is_emergency ? "border-l-4 border-l-red-500" : "border-l-4 border-l-slate-400"
-                    } ${
-                      isSelected
-                        ? "bg-brand-wash/80 border-brand shadow-sm"
-                        : cat.is_emergency
-                        ? "bg-alert-wash/20 border-line hover:border-alert hover:bg-alert-wash/40"
-                        : "bg-white border-line hover:border-line-strong active:bg-raised"
+                    aria-pressed={isSelected}
+                    className={`saro-card flex w-full items-start gap-3 p-3.5 pl-4 text-left transition-colors ${
+                      isSelected ? "bg-brand-wash" : "bg-surface hover:bg-raised"
                     }`}
+                    style={{
+                      // Inset rather than border-left: selection changes the
+                      // border colour on all four sides, and a border-l utility
+                      // would lose that fight unpredictably. The edge must
+                      // never disappear — it is the signal.
+                      boxShadow: `inset 4px 0 0 0 ${
+                        openToGuests ? "var(--color-panic)" : "var(--color-line-strong)"
+                      }`,
+                      borderColor: isSelected ? "var(--color-brand)" : undefined,
+                    }}
                   >
-                    {/* Left Icon Badge */}
-                    <div className={`w-10 h-10 rounded-xs flex items-center justify-center shrink-0 mt-0.5 ${
-                      cat.is_emergency ? "bg-alert-wash text-alert border border-alert" : "bg-sunken text-brand border border-line"
-                    }`}>
-                      <IconComp className="w-5 h-5" />
-                    </div>
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center border"
+                      style={
+                        openToGuests
+                          ? {
+                              background: "var(--color-panic-wash)",
+                              borderColor: "var(--color-panic)",
+                              color: "var(--color-panic-strong)",
+                            }
+                          : {
+                              background: "var(--color-sunken)",
+                              borderColor: "var(--color-line)",
+                              color: "var(--color-brand)",
+                            }
+                      }
+                    >
+                      <IconComp width={20} height={20} aria-hidden="true" />
+                    </span>
 
-                    {/* Un-truncated Title & Subtitle */}
-                    <div className="flex-1 min-w-0 pr-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-bold text-sm text-ink leading-snug">
-                          {cat.name}
-                        </span>
-                        {cat.is_emergency ? (
-                          <span className="inline-flex items-center gap-1 t-micro font-extrabold px-2 py-0.5 rounded bg-alert-wash text-alert border border-alert uppercase tracking-wider">
-                            <AlertTriangle className="w-3 h-3" /> Emergency
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center t-micro font-bold px-2 py-0.5 rounded bg-sunken text-ink-muted border border-line uppercase tracking-wider">
-                            Non-Urgent
-                          </span>
-                        )}
-                      </div>
-
+                    <span className="min-w-0 flex-1">
+                      <span className="t-subhead block font-bold leading-snug text-ink">
+                        {cat.name}
+                      </span>
                       {cat.name_bikol && (
-                        <p className="text-xs text-ink-muted font-medium leading-relaxed">
+                        <span className="t-body-sm mt-0.5 block text-ink-muted">
                           {cat.name_bikol}
-                        </p>
+                        </span>
                       )}
-                    </div>
+                      <span
+                        className="t-label mt-1.5 flex items-center gap-1.5"
+                        style={{
+                          color: openToGuests
+                            ? "var(--color-panic-strong)"
+                            : "var(--color-ink-faint)",
+                        }}
+                      >
+                        <AccessIcon width={12} height={12} aria-hidden="true" />
+                        {openToGuests ? "Emergency" : "Non-urgent"}
+                        {isGuest && (openToGuests ? " · No account needed" : " · Sign in to file")}
+                      </span>
+                    </span>
 
-                    {/* Selection Radio Circle */}
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 ${
-                      isSelected ? "border-brand bg-brand text-white" : "border-line-strong bg-white"
-                    }`}>
-                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                    </div>
+                    <span
+                      className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2"
+                      style={{
+                        borderColor: isSelected ? "var(--color-brand)" : "var(--color-line-strong)",
+                        background: isSelected ? "var(--color-brand)" : "var(--color-surface)",
+                        color: "#fff",
+                      }}
+                      aria-hidden="true"
+                    >
+                      {isSelected && <Check width={14} height={14} strokeWidth={3} />}
+                    </span>
                   </button>
                 );
               })}

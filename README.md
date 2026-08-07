@@ -62,17 +62,58 @@ directory.
 
 ### Environment variables
 
+Both apps ship only the Supabase URL and the **publishable** key to the browser.
+The secret key and the Gemini key exist as Supabase secrets and nowhere else —
+not in `.env.local`, not in Vercel, not in any committed file.
+
 | Variable | App | Purpose |
 |---|---|---|
+| `VITE_SUPABASE_URL` | both | Project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | both | Anon/publishable key. Safe in the browser; RLS is what protects the data |
 | `VITE_ADMIN_APP_URL` | resident | Where the "for city officials" link goes |
-| `VITE_RESIDENT_APP_URL` | admin | Where "Back to Public Portal" goes |
-| `VITE_GEMINI_API_KEY` | resident | **Temporary.** Client-side FAQ assistant key; being moved to a Supabase Edge Function |
+| `VITE_RESIDENT_APP_URL` | admin | Where "Back to public site" goes |
 
-See each app's `.env.example`.
+See each app's `.env.example`. Both `.env.local` files are gitignored.
+
+## Auth email (custom SMTP)
+
+Supabase's built-in email service only delivers to members of the project team.
+Left on it, resident self-signup fails for every real address with *"Email
+address is invalid"*. SARO uses Gmail SMTP instead, configured in
+`supabase/config.toml` under `[auth.email.smtp]`.
+
+Two prerequisites on the Google account:
+
+1. **2-Step Verification must be on.** App Passwords do not exist without it.
+2. **Generate an App Password** at <https://myaccount.google.com/apppasswords>.
+   It is 16 characters; strip the spaces Google displays it with. The ordinary
+   account password will be rejected.
+
+Gmail rewrites the `From` header to the authenticated mailbox, so the sender
+address is always `SARO_SMTP_USER` — setting a different one has no effect.
+
+Push the config with both values in the environment. They are read at push time
+and never written to a file:
+
+```bash
+export SARO_SMTP_USER='saro.legazpi@gmail.com'
+export SARO_SMTP_PASSWORD='abcdefghijklmnop'
+supabase config push
+```
+
+Free Gmail allows roughly 500 recipients a day and throttles well below that per
+hour. `[auth.rate_limit] email_sent = 30` sits under it deliberately: enough for
+real signups, not enough for someone to burn the daily quota and lock everyone
+else out of registering.
+
+**Before launch:** `site_url` and `additional_redirect_urls` in `config.toml`
+still point at `localhost`. Confirmation links are built from `site_url`, so
+they must be changed to the deployed resident-app domain or every confirmation
+email will send residents to a dead link.
 
 ## Current state
 
-The data layer is still the offline `localStorage` mock in
-`packages/shared/src/api/`, which deliberately mirrors the Supabase tables and
-RLS policies it will be replaced by. The mapping is documented in
-[packages/shared/src/api/README.md](packages/shared/src/api/README.md).
+Both apps run against the live Supabase project. Schema, RLS, storage and
+realtime are in `supabase/migrations/`; the Gemini calls live in the
+`gemini-proxy` Edge Function. The design system is documented in
+[DESIGN.md](DESIGN.md).

@@ -47,13 +47,38 @@ declares a colour, a font size, or a spacing value of its own.
 | **Panic** | `--color-panic` | `#E2231A` |
 | Alert | `--color-alert` | `#B4460F` |
 
-**The Panic reservation is a rule, not a preference.** `--color-panic` appears on
-the Panic control and on an active emergency and nowhere else — not on
-destructive buttons, not on form validation, not on overdue SLA, not on a delete
-icon. Ordinary failure uses `--color-alert`, which is a visibly different ink.
+**The Panic reservation is a rule, not a preference.** `--color-panic` appears in
+three places and nowhere else:
+
+1. the Panic control
+2. an active emergency
+3. the leading edge of an emergency category in the Describe flow
+
+Not on destructive buttons, not on form validation, not on overdue SLA, not on a
+delete icon. Ordinary failure uses `--color-alert`, a visibly different ink.
 Reuse the vermilion once for something ordinary and it stops meaning *someone is
 in danger*; the Panic button then has no way to say what it is for. Any PR that
-introduces `--color-panic` outside those two places is wrong.
+introduces `--color-panic` outside those three places is wrong.
+
+The third place is the same meaning through a slower door — see below.
+
+### The access edge
+
+Category cards in the Describe flow carry a 4px leading edge that is **a
+functional signal, not decoration**. It states the one rule that decides whether
+the form can be submitted at all:
+
+| Edge | Meaning | Enforced by |
+|---|---|---|
+| `--color-panic` + open-door icon + "No account needed" | Emergency category. Files immediately, anonymously, no login prompt ever. | `needsAccount`, the describe-flow keyword check, the anon insert policy |
+| `--color-line-strong` + padlock icon + "Sign in to file" | Standard category. Requires a resident account. | the same three |
+
+Three carriers — colour, icon shape, words — so the rule survives greyscale, a
+sunlit phone and deuteranopia. The access clause is shown to guests only; a
+signed-in resident can file anything, so telling them to sign in would be false.
+
+This distinction may be restyled. It may not be removed or reduced to a single
+carrier. It is the only place a resident can learn the rule before hitting it.
 
 ### Status
 
@@ -154,7 +179,10 @@ under office fluorescents. Neither is a dark-room scene.
   re-composed from scratch: `ReportFormScreen`, `PublicMapScreen`,
   `AssistantScreen`, `LandingPage`, `AdminDashboard`. They are consistent and
   correct; they are not as considered as the Panic screen, Track, the queue and
-  the shells.
+  the shells. `ReportFormScreen`'s category list is the exception — it was
+  rebuilt when the access edge was formalised. The rest of that file (search
+  field, filter pills, location and photo sections) still carries `text-xs`,
+  `rounded-full` and its original three-section stack.
 - 10 ESLint warnings remain, all `react-hooks/set-state-in-effect` or
   `react-refresh/only-export-components`. Zero errors.
 - No screenshot pass was run: this environment has no browser, so the build was

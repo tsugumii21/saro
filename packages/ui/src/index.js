@@ -1,8 +1,16 @@
-// @saro/ui — visual components genuinely shared by resident-app and admin-app.
+// @saro/ui — the shared component vocabulary.
 //
-// Admission rule: a component only belongs here if both apps render it for the
-// same purpose. Components that will diverge (landing pages, shells, queues,
-// forms) stay inside their owning app.
+// Admission rule: a component belongs here when both apps render it for the
+// same purpose. What changed with the run-card system is that this is now
+// most of the interface's atoms rather than just the logo — the status tab,
+// the tracking code and the mark are the three things a resident and a
+// dispatcher must recognise as the same object, which is exactly what stops
+// the two apps reading as two products.
+//
+// Components that will diverge — landing pages, shells, queues, forms — still
+// stay inside their owning app.
 
-export { default as Logo } from "./Logo.jsx";
+export { default as Logo, CARD_PATH, DOOR_PATH } from "./Logo.jsx";
 export { default as Wordmark } from "./Wordmark.jsx";
+export { default as StatusTag, STATUS_META, statusTab } from "./StatusTag.jsx";
+export { default as TrackingCode } from "./TrackingCode.jsx";

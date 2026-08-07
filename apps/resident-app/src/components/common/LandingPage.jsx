@@ -1,14 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
-import {
-  Shield, AlertTriangle, ArrowRight, CheckCircle2, Phone, Building2,
-  Clock, MapPin, Layers, Radio, ShieldCheck, UserCheck, ChevronRight,
-  Flame, Waves, Car, Construction, Lock, GitFork, Activity, HeartPulse,
-  Droplet, Anchor, Share2, Sparkles, Check, X
-} from "lucide-react";
-import { Wordmark } from "@saro/ui";
-import { getPublicMapReports, getCategories, getBarangays, LEGAZPI_CENTER } from "@saro/shared";
+import {Shield, AlertTriangle, ArrowRight, Phone, Clock, MapPin, Radio, Flame, Waves, Construction, Activity, HeartPulse, Droplet, Anchor, Share2, X} from "lucide-react";
+import { Wordmark, StatusTag } from "@saro/ui";
+import { getPublicMapReports, getCategories, LEGAZPI_CENTER } from "@saro/shared";
 import { saroEvents } from "@saro/shared";
 
 const LEGAZPI_BOUNDS = [
@@ -16,17 +11,11 @@ const LEGAZPI_BOUNDS = [
   [13.20, 123.78]
 ];
 
-const STATUS_LABELS = {
-  received: "Received",
-  assigned: "Assigned",
-  in_progress: "In Progress",
-  resolved: "Resolved"
-};
 
 const STATUS_COLORS = {
   received: "#94A3B8",
   assigned: "#F59E0B",
-  in_progress: "#0F766E",
+  in_progress: "#0060A9",
   resolved: "#22C55E"
 };
 
@@ -58,18 +47,15 @@ function BoundsController() {
 export default function LandingPage({ onSelectResident, onSelectOfficer }) {
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [barangays, setBarangays] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
 
   const loadData = useCallback(async () => {
-    const [rRes, cRes, bRes] = await Promise.all([
+    const [rRes, cRes] = await Promise.all([
       getPublicMapReports(),
       getCategories(),
-      getBarangays()
     ]);
     if (rRes.data) setReports(rRes.data);
     if (cRes.data) setCategories(cRes.data);
-    if (bRes.data) setBarangays(bRes.data);
   }, []);
 
   useEffect(() => {
@@ -80,7 +66,6 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
   }, [loadData]);
 
   const getCatName = (id) => categories.find((c) => c.id === id)?.name || id;
-  const getBrgyName = (id) => barangays.find((b) => b.id === id)?.name || "Legazpi City";
 
   // Deduplicate clustered reports for live preview
   const clusterMap = new Map();
@@ -99,18 +84,18 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
   clusterMap.forEach((val) => displayReports.push(val));
 
   return (
-    <div className="min-h-screen bg-saro-surface text-saro-ink font-sans flex flex-col justify-between selection:bg-saro-primary-light selection:text-saro-primary">
+    <div className="min-h-screen bg-canvas text-ink font-sans flex flex-col justify-between selection:bg-brand-wash selection:text-brand">
       {/* Top Header / Navigation */}
-      <header className="bg-white border-b border-saro-line sticky top-0 z-50 shadow-2xs">
+      <header className="bg-white border-b border-line sticky top-0 z-50 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Wordmark variant="teal" size="md" />
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-saro-secondary">
-              <a href="#how-it-works" className="hover:text-saro-primary transition-colors">How It Works</a>
-              <a href="#agencies" className="hover:text-saro-primary transition-colors">Connected Offices</a>
-              <a href="#hotlines" className="hover:text-saro-primary transition-colors">Emergency Hotlines</a>
+            <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-ink-muted">
+              <a href="#how-it-works" className="hover:text-brand transition-colors">How It Works</a>
+              <a href="#agencies" className="hover:text-brand transition-colors">Connected Offices</a>
+              <a href="#hotlines" className="hover:text-brand transition-colors">Emergency Hotlines</a>
             </nav>
           </div>
 
@@ -118,9 +103,9 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
           <div className="flex items-center gap-3">
             <button
               onClick={onSelectOfficer}
-              className="text-xs font-bold text-saro-secondary hover:text-saro-ink bg-saro-mist hover:bg-slate-200 border border-saro-line px-3.5 py-2 rounded-xl transition-colors flex items-center gap-1.5 min-h-[40px]"
+              className="text-xs font-bold text-ink-muted hover:text-ink bg-raised hover:bg-line border border-line px-3.5 py-2 rounded-xs transition-colors flex items-center gap-1.5 min-h-[40px]"
             >
-              <Shield className="w-3.5 h-3.5 text-saro-primary" />
+              <Shield className="w-3.5 h-3.5 text-brand" />
               <span>Officer Portal</span>
             </button>
 
@@ -139,10 +124,10 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
       <main className="flex-1">
 
         {/* Hero Section with Live Dark Map Preview & Single Primary CTA */}
-        <section className="bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 text-white relative overflow-hidden py-14 md:py-24 border-b border-teal-900/50">
+        <section className="bg-gradient-to-br from-ink via-brand-strong to-ink text-white relative overflow-hidden py-14 md:py-24 border-b border-brand-strong/50">
           
           {/* Legazpi Contour Lines SVG Background Overlay */}
-          <svg className="absolute inset-0 w-full h-full opacity-20 pointer-events-none stroke-teal-300/40" fill="none" strokeWidth="1.2">
+          <svg className="absolute inset-0 w-full h-full opacity-20 pointer-events-none stroke-brand-edge/40" fill="none" strokeWidth="1.2">
             <path d="M-100 180 C 150 120, 350 420, 700 220 C 1000 80, 1300 320, 1700 180" />
             <path d="M-100 260 C 180 190, 380 480, 740 280 C 1040 140, 1340 380, 1740 240" />
             <path d="M-100 340 C 210 260, 410 540, 780 340 C 1080 200, 1380 440, 1780 300" />
@@ -154,8 +139,8 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
             
             {/* Left Hero Text Column */}
             <div className="md:col-span-6 space-y-6">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-500/20 text-teal-200 border border-teal-400/30 text-xs font-bold shadow-xs">
-                <Radio className="w-3.5 h-3.5 text-teal-300 animate-pulse" />
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-bright/20 text-brand-edge border border-brand-bright/30 text-xs font-bold shadow-xs">
+                <Radio className="w-3.5 h-3.5 text-brand-edge animate-pulse" />
                 Legazpi City Official Civic Hazard Portal
               </div>
 
@@ -163,15 +148,15 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                 One front door for civic hazard & emergency reporting.
               </h1>
 
-              <p className="text-sm sm:text-base text-teal-100/90 leading-relaxed max-w-xl font-normal">
-                <strong className="text-white font-semibold">"SARO"</strong> means <strong className="text-teal-300 font-semibold italic">"One"</strong> in Bikol. We replace disconnected hotlines with automated department routing and end-to-end report transparency for all Legazpi residents.
+              <p className="text-sm sm:text-base text-brand-wash/90 leading-relaxed max-w-xl font-normal">
+                <strong className="text-white font-semibold">"SARO"</strong> means <strong className="text-brand-edge font-semibold italic">"One"</strong> in Bikol. We replace disconnected hotlines with automated department routing and end-to-end report transparency for all Legazpi residents.
               </p>
 
               {/* Single Confident Primary CTA (Officer login moved to top nav / footer per request) */}
               <div className="pt-2">
                 <button
                   onClick={onSelectResident}
-                  className="saro-btn-primary text-sm py-4 px-8 shadow-xl rounded-xl font-extrabold inline-flex items-center gap-3 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                  className="saro-btn-primary text-sm py-4 px-8 shadow-none rounded-xs font-extrabold inline-flex items-center gap-3 transition-transform hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <AlertTriangle className="w-5 h-5" />
                   <span>Report a Hazard (Public)</span>
@@ -183,17 +168,17 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
 
             {/* Right Side: Real Live Dark Map Preview */}
             <div className="md:col-span-6">
-              <div className="bg-slate-900/90 backdrop-blur-xl border border-teal-500/30 rounded-2xl shadow-2xl overflow-hidden relative flex flex-col h-[360px] sm:h-[420px]">
+              <div className="bg-ink/90 backdrop-blur-xl border border-brand-bright/30 rounded-xs shadow-none overflow-hidden relative flex flex-col h-[360px] sm:h-[420px]">
                 
                 {/* Live EOC Overlay Header */}
-                <div className="bg-slate-900/95 border-b border-teal-500/30 px-4 py-3 z-[500] flex items-center justify-between shrink-0">
+                <div className="bg-ink/95 border-b border-brand-bright/30 px-4 py-3 z-[500] flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-saro-green animate-pulse" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-status-resolved-tab animate-pulse" />
                     <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
                       LIVE EOC INCIDENT MAP
                     </span>
                   </div>
-                  <span className="text-[10px] bg-teal-400/20 text-teal-200 border border-teal-300/30 px-2.5 py-0.5 rounded font-mono font-bold">
+                  <span className="t-micro bg-brand-bright/20 text-brand-edge border border-brand-edge/30 px-2.5 py-0.5 rounded font-mono font-bold">
                     {reports.length} Active Incident Pins
                   </span>
                 </div>
@@ -231,33 +216,31 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
 
                   {/* Selected Incident Floating Detail Card */}
                   {selectedReport ? (
-                    <div className="absolute bottom-3 left-3 right-3 z-[500] bg-slate-900/95 backdrop-blur-md border border-teal-500/40 rounded-xl p-3.5 text-xs text-white shadow-xl animate-slide-up">
+                    <div className="absolute bottom-3 left-3 right-3 z-[500] bg-ink/95 backdrop-blur-md border border-brand-bright/40 rounded-xs p-3.5 text-xs text-white shadow-none animate-slide-up">
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-teal-300">{selectedReport.tracking_code}</span>
-                          <span className={`saro-pill saro-pill-status-${selectedReport.status}`}>
-                            {STATUS_LABELS[selectedReport.status]}
-                          </span>
+                          <span className="font-mono text-xs font-bold text-brand-edge">{selectedReport.tracking_code}</span>
+                          <StatusTag status={selectedReport.status} />
                         </div>
-                        <button onClick={() => setSelectedReport(null)} className="text-teal-200/60 hover:text-white">
+                        <button onClick={() => setSelectedReport(null)} className="text-brand-edge/60 hover:text-white">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                       <div className="font-bold text-white text-xs mb-1">
                         {getCatName(selectedReport.category_id)}
                       </div>
-                      <div className="text-[11px] text-teal-200/70 mb-2 truncate">
+                      <div className="t-label text-brand-edge/70 mb-2 truncate">
                         {selectedReport.description}
                       </div>
                       <button
                         onClick={onSelectResident}
-                        className="saro-btn-primary w-full text-[11px] py-1.5"
+                        className="saro-btn-primary w-full t-label py-1.5"
                       >
                         Report in this area →
                       </button>
                     </div>
                   ) : (
-                    <div className="absolute bottom-3 left-3 z-[500] bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-lg px-3 py-1.5 text-[11px] text-teal-200/80 font-mono pointer-events-none">
+                    <div className="absolute bottom-3 left-3 z-[500] bg-ink/80 backdrop-blur-md border border-white/10 rounded-xs px-3 py-1.5 t-label text-brand-edge/80 font-mono pointer-events-none">
                       Tap pins to preview incident status
                     </div>
                   )}
@@ -270,45 +253,45 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
         </section>
 
         {/* Editorial Focal Stats Banner (Non-Uniform Asymmetric Layout) */}
-        <section className="bg-saro-mist border-b border-saro-line py-8">
+        <section className="bg-raised border-b border-line py-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="grid md:grid-cols-12 gap-4 items-center">
               
               {/* Highlighted Hero Focal Metric: SLA Speed */}
-              <div className="md:col-span-5 bg-gradient-to-br from-slate-900 to-teal-950 text-white rounded-2xl p-6 border border-teal-800/60 shadow-md relative overflow-hidden flex flex-col justify-between">
+              <div className="md:col-span-5 bg-gradient-to-br from-ink to-brand-strong text-white rounded-xs p-6 border border-brand/60 shadow-md relative overflow-hidden flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-teal-300 font-bold flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-teal-400" />
+                  <span className="t-label font-mono uppercase tracking-wider text-brand-edge font-bold flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-brand-bright" />
                     Target Dispatch SLA
                   </span>
-                  <span className="saro-pill saro-pill-emergency">1-Hour Guarantee</span>
+                  <span className="t-micro border border-line-strong px-2 py-1 text-ink-muted">1-hour target</span>
                 </div>
                 <div className="text-4xl font-extrabold text-white font-mono tracking-tight my-1">
                   &lt; 60 Mins
                 </div>
-                <p className="text-xs text-teal-100/80 leading-relaxed">
+                <p className="text-xs text-brand-wash/80 leading-relaxed">
                   Maximum response window for critical emergency hazard reports across all 12 Legazpi barangays.
                 </p>
               </div>
 
               {/* Secondary Metrics Stack */}
               <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-white border border-saro-line rounded-2xl p-4 shadow-2xs space-y-1">
-                  <div className="text-2xl font-black text-saro-primary font-mono">8</div>
-                  <div className="text-xs font-bold text-saro-ink">Municipal Offices</div>
-                  <div className="text-[11px] text-saro-secondary leading-tight">CDRRMO, 911, BFP, PNP, CEO connected</div>
+                <div className="bg-white border border-line rounded-xs p-4 shadow-2xs space-y-1">
+                  <div className="text-2xl font-black text-brand font-mono">8</div>
+                  <div className="text-xs font-bold text-ink">Municipal Offices</div>
+                  <div className="t-label text-ink-muted leading-tight">CDRRMO, 911, BFP, PNP, CEO connected</div>
                 </div>
 
-                <div className="bg-white border border-saro-line rounded-2xl p-4 shadow-2xs space-y-1">
-                  <div className="text-2xl font-black text-saro-primary font-mono">14</div>
-                  <div className="text-xs font-bold text-saro-ink">Hazard Types</div>
-                  <div className="text-[11px] text-saro-secondary leading-tight">Floods, fires, landslides & accidents</div>
+                <div className="bg-white border border-line rounded-xs p-4 shadow-2xs space-y-1">
+                  <div className="text-2xl font-black text-brand font-mono">14</div>
+                  <div className="text-xs font-bold text-ink">Hazard Types</div>
+                  <div className="t-label text-ink-muted leading-tight">Floods, fires, landslides & accidents</div>
                 </div>
 
-                <div className="bg-white border border-saro-line rounded-2xl p-4 shadow-2xs space-y-1">
-                  <div className="text-2xl font-black text-saro-primary font-mono">100%</div>
-                  <div className="text-xs font-bold text-saro-ink">Transparent Tracking</div>
-                  <div className="text-[11px] text-saro-secondary leading-tight">Unique tracking codes for residents</div>
+                <div className="bg-white border border-line rounded-xs p-4 shadow-2xs space-y-1">
+                  <div className="text-2xl font-black text-brand font-mono">100%</div>
+                  <div className="text-xs font-bold text-ink">Transparent Tracking</div>
+                  <div className="t-label text-ink-muted leading-tight">Unique tracking codes for residents</div>
                 </div>
               </div>
 
@@ -319,54 +302,54 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
         {/* Connected Process Flow Timeline */}
         <section id="how-it-works" className="py-16 max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center max-w-xl mx-auto mb-12">
-            <span className="text-xs font-bold text-saro-primary uppercase tracking-wider block mb-1">Simple & Direct</span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-saro-ink">How SARO processes citizen hazard reports</h2>
+            <span className="text-xs font-bold text-brand uppercase tracking-wider block mb-1">Simple & Direct</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-ink">How SARO processes citizen hazard reports</h2>
           </div>
 
           <div className="relative">
             {/* Desktop Connecting Line */}
-            <div className="hidden md:block absolute top-1/2 left-10 right-10 h-0.5 bg-gradient-to-r from-teal-200 via-saro-primary to-slate-400 -translate-y-6 z-0" />
+            <div className="hidden md:block absolute top-1/2 left-10 right-10 h-0.5 bg-gradient-to-r from-brand-edge via-brand to-ink-faint -translate-y-6 z-0" />
 
             <div className="grid md:grid-cols-3 gap-6 relative z-10">
               
               {/* Step 1: Report */}
-              <div className="bg-white border border-saro-line rounded-2xl p-6 shadow-xs space-y-4 hover:border-saro-primary/40 transition-all">
+              <div className="bg-white border border-line rounded-xs p-6 shadow-xs space-y-4 hover:border-brand/40 transition-all">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-teal-50 text-saro-primary border border-teal-100 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-xs bg-brand-wash text-brand border border-brand-wash flex items-center justify-center">
                     <MapPin className="w-6 h-6" />
                   </div>
-                  <span className="text-xs font-mono font-bold text-saro-secondary bg-saro-mist px-2.5 py-1 rounded-full border border-saro-line">STEP 01</span>
+                  <span className="text-xs font-mono font-bold text-ink-muted bg-raised px-2.5 py-1 rounded-full border border-line">STEP 01</span>
                 </div>
-                <h3 className="text-base font-bold text-saro-ink">1. Pin & Describe Hazard</h3>
-                <p className="text-xs text-saro-secondary leading-relaxed">
+                <h3 className="text-base font-bold text-ink">1. Pin & Describe Hazard</h3>
+                <p className="text-xs text-ink-muted leading-relaxed">
                   Pin exact location on the Legazpi map, attach photo evidence, or use voice dictation. Works offline if disconnected.
                 </p>
               </div>
 
               {/* Step 2: Route */}
-              <div className="bg-saro-primary-light/40 border-2 border-saro-primary/30 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="bg-brand-wash/40 border-2 border-brand/30 rounded-xs p-6 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-saro-primary text-white flex items-center justify-center shadow-md">
+                  <div className="w-12 h-12 rounded-xs bg-brand text-white flex items-center justify-center shadow-md">
                     <Share2 className="w-6 h-6" />
                   </div>
-                  <span className="text-xs font-mono font-bold text-saro-primary bg-white px-2.5 py-1 rounded-full border border-teal-200">STEP 02</span>
+                  <span className="text-xs font-mono font-bold text-brand bg-white px-2.5 py-1 rounded-full border border-brand-edge">STEP 02</span>
                 </div>
-                <h3 className="text-base font-bold text-saro-ink">2. Automated Smart Dispatch</h3>
-                <p className="text-xs text-saro-secondary leading-relaxed">
+                <h3 className="text-base font-bold text-ink">2. Automated Smart Dispatch</h3>
+                <p className="text-xs text-ink-muted leading-relaxed">
                   SARO's routing engine instantly assigns the report to CDRRMO, BFP, 911, or City Engineering based on hazard type and barangay.
                 </p>
               </div>
 
               {/* Step 3: Track */}
-              <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl p-6 shadow-md space-y-4">
+              <div className="bg-ink text-white border border-ink rounded-xs p-6 shadow-md space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-800 text-teal-300 border border-teal-500/30 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-xs bg-ink text-brand-edge border border-brand-bright/30 flex items-center justify-center">
                     <Activity className="w-6 h-6" />
                   </div>
-                  <span className="text-xs font-mono font-bold text-teal-300 bg-slate-800 px-2.5 py-1 rounded-full border border-teal-500/30">STEP 03</span>
+                  <span className="text-xs font-mono font-bold text-brand-edge bg-ink px-2.5 py-1 rounded-full border border-brand-bright/30">STEP 03</span>
                 </div>
                 <h3 className="text-base font-bold text-white">3. Track Until Resolved</h3>
-                <p className="text-xs text-teal-100/80 leading-relaxed">
+                <p className="text-xs text-brand-wash/80 leading-relaxed">
                   Follow live responder status updates with your unique tracking code until the hazard is verified resolved.
                 </p>
               </div>
@@ -376,50 +359,50 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
         </section>
 
         {/* Connected Agencies with Category Color-Coded Accents */}
-        <section id="agencies" className="py-16 bg-white border-y border-saro-line">
+        <section id="agencies" className="py-16 bg-white border-y border-line">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-xl mx-auto mb-10">
-              <span className="text-xs font-bold text-saro-primary uppercase tracking-wider block mb-1">Unified Response</span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-saro-ink">Connected Legazpi City Emergency Offices</h2>
+              <span className="text-xs font-bold text-brand uppercase tracking-wider block mb-1">Unified Response</span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-ink">Connected Legazpi City Emergency Offices</h2>
             </div>
 
             {/* Primary Responders (Prominent Highlight Cards) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               
-              <div className="bg-teal-50/50 border border-teal-200 border-l-4 border-l-saro-primary rounded-xl p-4 space-y-2">
+              <div className="bg-brand-wash/50 border border-brand-edge border-l-4 border-l-brand rounded-xs p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-saro-ink">CDRRMO</span>
-                  <Waves className="w-4 h-4 text-saro-primary" />
+                  <span className="text-xs font-extrabold text-ink">CDRRMO</span>
+                  <Waves className="w-4 h-4 text-brand" />
                 </div>
-                <div className="text-xs font-bold text-saro-primary">City Disaster Risk Reduction</div>
-                <div className="text-[11px] text-saro-secondary leading-tight">Flooding, Landslides & Typhoon Debris</div>
+                <div className="text-xs font-bold text-brand">City Disaster Risk Reduction</div>
+                <div className="t-label text-ink-muted leading-tight">Flooding, Landslides & Typhoon Debris</div>
               </div>
 
-              <div className="bg-red-50/50 border border-red-200 border-l-4 border-l-saro-red rounded-xl p-4 space-y-2">
+              <div className="bg-alert-wash/50 border border-alert border-l-4 border-l-alert rounded-xs p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-saro-ink">Legazpi 911</span>
-                  <HeartPulse className="w-4 h-4 text-saro-red" />
+                  <span className="text-xs font-extrabold text-ink">Legazpi 911</span>
+                  <HeartPulse className="w-4 h-4 text-alert" />
                 </div>
-                <div className="text-xs font-bold text-saro-red">911 Command Center</div>
-                <div className="text-[11px] text-saro-secondary leading-tight">Medical Emergency & Vehicular Collisions</div>
+                <div className="text-xs font-bold text-alert">911 Command Center</div>
+                <div className="t-label text-ink-muted leading-tight">Medical Emergency & Vehicular Collisions</div>
               </div>
 
-              <div className="bg-amber-50/50 border border-amber-200 border-l-4 border-l-saro-amber rounded-xl p-4 space-y-2">
+              <div className="bg-status-assigned-wash/50 border border-status-assigned-tab border-l-4 border-l-status-assigned-tab rounded-xs p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-saro-ink">BFP Legazpi</span>
-                  <Flame className="w-4 h-4 text-saro-amber" />
+                  <span className="text-xs font-extrabold text-ink">BFP Legazpi</span>
+                  <Flame className="w-4 h-4 text-status-assigned-tab" />
                 </div>
-                <div className="text-xs font-bold text-amber-800">Bureau of Fire Protection</div>
-                <div className="text-[11px] text-saro-secondary leading-tight">Fire Outbreaks & Gas Leaks</div>
+                <div className="text-xs font-bold text-status-assigned-ink">Bureau of Fire Protection</div>
+                <div className="t-label text-ink-muted leading-tight">Fire Outbreaks & Gas Leaks</div>
               </div>
 
-              <div className="bg-indigo-50/50 border border-indigo-200 border-l-4 border-l-indigo-600 rounded-xl p-4 space-y-2">
+              <div className="bg-indigo-50/50 border border-indigo-200 border-l-4 border-l-indigo-600 rounded-xs p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-saro-ink">PNP Legazpi</span>
+                  <span className="text-xs font-extrabold text-ink">PNP Legazpi</span>
                   <Shield className="w-4 h-4 text-indigo-600" />
                 </div>
                 <div className="text-xs font-bold text-indigo-900">National Police Station</div>
-                <div className="text-[11px] text-saro-secondary leading-tight">Public Order & Crime Incidents</div>
+                <div className="t-label text-ink-muted leading-tight">Public Order & Crime Incidents</div>
               </div>
 
             </div>
@@ -434,12 +417,12 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
               ].map((office, i) => {
                 const IconComponent = office.icon;
                 return (
-                  <div key={i} className="bg-saro-mist border border-saro-line rounded-xl p-3.5 text-left space-y-1">
+                  <div key={i} className="bg-raised border border-line rounded-xs p-3.5 text-left space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-saro-ink">{office.name}</span>
-                      <IconComponent className="w-3.5 h-3.5 text-saro-secondary" />
+                      <span className="text-xs font-bold text-ink">{office.name}</span>
+                      <IconComponent className="w-3.5 h-3.5 text-ink-muted" />
                     </div>
-                    <div className="text-[11px] text-saro-secondary leading-tight">{office.desc}</div>
+                    <div className="t-label text-ink-muted leading-tight">{office.desc}</div>
                   </div>
                 );
               })}
@@ -450,11 +433,11 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
 
         {/* Emergency Hotlines Banner */}
         <section id="hotlines" className="py-14 max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="bg-gradient-to-r from-teal-900 to-slate-900 rounded-2xl p-6 sm:p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+          <div className="bg-gradient-to-r from-brand-strong to-ink rounded-xs p-6 sm:p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-none">
             <div className="space-y-2">
-              <div className="text-xs font-bold text-teal-300 uppercase tracking-wider">Immediate Life Threat?</div>
+              <div className="text-xs font-bold text-brand-edge uppercase tracking-wider">Immediate Life Threat?</div>
               <h3 className="text-xl sm:text-2xl font-extrabold">Call Legazpi City Emergency Hotlines</h3>
-              <p className="text-xs text-teal-100/80 max-w-lg">
+              <p className="text-xs text-brand-wash/80 max-w-lg">
                 For life-threatening emergencies requiring immediate rescue or fire response, call hotlines directly or file a report.
               </p>
             </div>
@@ -462,7 +445,7 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
             <div className="flex items-center gap-3 shrink-0">
               <a
                 href="tel:911"
-                className="px-5 py-3 bg-saro-red hover:bg-red-600 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-2 transition-colors"
+                className="px-5 py-3 bg-alert hover:bg-alert text-white font-extrabold text-xs rounded-xs shadow-md flex items-center gap-2 transition-colors"
               >
                 <Phone className="w-4 h-4" />
                 Call 911
@@ -480,18 +463,18 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
       </main>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-slate-400 border-t border-slate-800 py-10 text-xs">
+      <footer className="bg-ink text-ink-faint border-t border-ink py-10 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Wordmark variant="white" size="md" />
-            <div className="flex items-center gap-6 text-slate-300 font-semibold">
+            <div className="flex items-center gap-6 text-line-strong font-semibold">
               <button onClick={onSelectResident} className="hover:text-white transition-colors">Resident Portal</button>
               <button onClick={onSelectOfficer} className="hover:text-white transition-colors">Officer Portal</button>
               <a href="#hotlines" className="hover:text-white transition-colors">Hotlines</a>
             </div>
           </div>
 
-          <div className="border-t border-slate-800 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
+          <div className="border-t border-ink pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 t-label text-ink-faint">
             <div>
               Legazpi City Emergency Operations Center &bull; Heroes of Innovation Challenge 2026
             </div>

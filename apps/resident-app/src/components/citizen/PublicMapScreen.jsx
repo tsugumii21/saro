@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import { PlusCircle, Clock, MapPin, Layers, X, Plus, Minus } from "lucide-react";
+import { StatusTag } from "@saro/ui";
 import { getPublicMapReports, getCategories, getBarangays, LEGAZPI_CENTER } from "@saro/shared";
 import { saroEvents } from "@saro/shared";
 
@@ -21,7 +22,7 @@ const STATUS_LABELS = {
 const STATUS_COLORS = {
   received: "#94A3B8",
   assigned: "#F59E0B",
-  in_progress: "#0F766E",
+  in_progress: "#0060A9",
   resolved: "#22C55E"
 };
 
@@ -32,7 +33,7 @@ function makeMarkerIcon(color, isResolved, clusterCount) {
   const opacity = isResolved ? 0.4 : 1;
   const size = clusterCount > 1 ? 28 : 18;
   const badge = clusterCount > 1
-    ? `<span style="position:absolute;top:-6px;right:-6px;background:#1E293B;color:#fff;font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;">${clusterCount}</span>`
+    ? `<span style="position:absolute;top:-6px;right:-6px;background:#101725;color:#fff;font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;">${clusterCount}</span>`
     : "";
 
   return L.divIcon({
@@ -63,14 +64,14 @@ function MapZoomButtons() {
     <div className="absolute bottom-20 right-4 z-[500] flex flex-col gap-1 shadow-md">
       <button
         onClick={() => map.zoomIn()}
-        className="w-9 h-9 bg-white/95 backdrop-blur hover:bg-white text-saro-ink border border-saro-line rounded-t-lg flex items-center justify-center font-bold text-lg active:bg-slate-100 transition-colors"
+        className="w-9 h-9 bg-white/95 backdrop-blur hover:bg-white text-ink border border-line rounded-t-lg flex items-center justify-center font-bold text-lg active:bg-sunken transition-colors"
         aria-label="Zoom in"
       >
         <Plus className="w-4 h-4" />
       </button>
       <button
         onClick={() => map.zoomOut()}
-        className="w-9 h-9 bg-white/95 backdrop-blur hover:bg-white text-saro-ink border-x border-b border-saro-line rounded-b-lg flex items-center justify-center font-bold text-lg active:bg-slate-100 transition-colors"
+        className="w-9 h-9 bg-white/95 backdrop-blur hover:bg-white text-ink border-x border-b border-line rounded-b-lg flex items-center justify-center font-bold text-lg active:bg-sunken transition-colors"
         aria-label="Zoom out"
       >
         <Minus className="w-4 h-4" />
@@ -151,7 +152,7 @@ export default function PublicMapScreen() {
   return (
     <div className="flex flex-col h-full w-full relative overflow-hidden">
       {/* Map Container */}
-      <div className="flex-1 relative overflow-hidden border-b border-saro-line">
+      <div className="flex-1 relative overflow-hidden border-b border-line">
         <MapContainer
           center={LEGAZPI_CENTER}
           zoom={14}
@@ -189,10 +190,10 @@ export default function PublicMapScreen() {
           <div className="flex items-center gap-1.5 min-w-max pb-1">
             <button
               onClick={() => setStatusFilter("")}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all shadow-xs border ${
+              className={`px-3 py-1.5 rounded-full t-label font-bold transition-all shadow-xs border ${
                 !statusFilter
-                  ? "bg-saro-ink text-white border-saro-ink"
-                  : "bg-white/95 backdrop-blur text-saro-ink border-saro-line hover:bg-white"
+                  ? "bg-ink text-white border-ink"
+                  : "bg-white/95 backdrop-blur text-ink border-line hover:bg-white"
               }`}
             >
               All
@@ -204,10 +205,10 @@ export default function PublicMapScreen() {
                 <button
                   key={status}
                   onClick={() => setStatusFilter(isActive ? "" : status)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all shadow-xs flex items-center gap-1.5 border ${
+                  className={`px-3 py-1.5 rounded-full t-label font-bold transition-all shadow-xs flex items-center gap-1.5 border ${
                     isActive
-                      ? "bg-saro-ink text-white border-saro-ink"
-                      : "bg-white/95 backdrop-blur text-saro-ink border-saro-line hover:bg-white"
+                      ? "bg-ink text-white border-ink"
+                      : "bg-white/95 backdrop-blur text-ink border-line hover:bg-white"
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }}></span>
@@ -221,27 +222,27 @@ export default function PublicMapScreen() {
         {/* Map Legend Toggle (Top Right) */}
         <button
           onClick={() => setShowLegend(!showLegend)}
-          className="absolute top-3 right-3 z-[500] bg-white/95 backdrop-blur border border-saro-line rounded-full p-2 shadow-xs hover:bg-white transition-colors"
+          className="absolute top-3 right-3 z-[500] bg-white/95 backdrop-blur border border-line rounded-full p-2 shadow-xs hover:bg-white transition-colors"
           aria-label={showLegend ? "Close legend" : "Show map legend"}
         >
-          {showLegend ? <X className="w-4 h-4 text-saro-ink" /> : <Layers className="w-4 h-4 text-saro-secondary" />}
+          {showLegend ? <X className="w-4 h-4 text-ink" /> : <Layers className="w-4 h-4 text-ink-muted" />}
         </button>
 
         {/* Map Legend Panel (Synced order & colors) */}
         {showLegend && (
-          <div className="absolute top-12 right-3 z-[500] bg-white/95 backdrop-blur border border-saro-line rounded-xl p-3.5 shadow-lg min-w-[170px] animate-fade-in">
-            <h4 className="text-[11px] font-bold text-saro-ink mb-2 uppercase tracking-wider">Map Legend</h4>
+          <div className="absolute top-12 right-3 z-[500] bg-white/95 backdrop-blur border border-line rounded-xs p-3.5 shadow-none min-w-[170px] animate-fade-in">
+            <h4 className="t-label font-bold text-ink mb-2 uppercase tracking-wider">Map Legend</h4>
             <div className="space-y-2">
               {STATUS_ORDER.map((status) => (
-                <div key={status} className="flex items-center gap-2 text-[11px]">
+                <div key={status} className="flex items-center gap-2 t-label">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-xs" style={{ backgroundColor: STATUS_COLORS[status] }}></span>
-                  <span className="text-saro-ink font-semibold">{STATUS_LABELS[status]}</span>
+                  <span className="text-ink font-semibold">{STATUS_LABELS[status]}</span>
                 </div>
               ))}
-              <div className="border-t border-saro-line pt-2 mt-2">
-                <div className="flex items-center gap-2 text-[11px]">
-                  <span className="bg-saro-ink text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shrink-0">3</span>
-                  <span className="text-saro-secondary font-medium">Clustered reports</span>
+              <div className="border-t border-line pt-2 mt-2">
+                <div className="flex items-center gap-2 t-label">
+                  <span className="bg-ink text-white t-micro font-bold w-4 h-4 rounded-full flex items-center justify-center shrink-0">3</span>
+                  <span className="text-ink-muted font-medium">Clustered reports</span>
                 </div>
               </div>
             </div>
@@ -252,7 +253,7 @@ export default function PublicMapScreen() {
         {!selectedReport && (
           <button
             onClick={() => navigate("/report")}
-            className="absolute bottom-4 right-4 z-[500] bg-saro-primary hover:bg-saro-primary-hover text-white rounded-full px-4 py-3 shadow-lg flex items-center gap-2 text-xs font-bold active:scale-95 transition-all min-h-[44px]"
+            className="absolute bottom-4 right-4 z-[500] bg-brand hover:bg-brand-mid text-white rounded-full px-4 py-3 shadow-none flex items-center gap-2 text-xs font-bold active:scale-95 transition-all min-h-[44px]"
             aria-label="Report a Hazard"
           >
             <PlusCircle className="w-4 h-4" aria-hidden="true" />
@@ -263,7 +264,7 @@ export default function PublicMapScreen() {
 
       {/* Connected Bottom Sheet for Selected Report */}
       {selectedReport && (
-        <div className="bg-white border-t border-saro-line shadow-2xl px-4 pt-4 pb-4 animate-slide-up z-[500]">
+        <div className="bg-white border-t border-line shadow-none px-4 pt-4 pb-4 animate-slide-up z-[500]">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span
@@ -271,35 +272,33 @@ export default function PublicMapScreen() {
                 style={{ backgroundColor: STATUS_COLORS[selectedReport.status] }}
                 aria-hidden="true"
               ></span>
-              <span className={`saro-pill saro-pill-status-${selectedReport.status}`}>
-                {STATUS_LABELS[selectedReport.status]}
-              </span>
+              <StatusTag status={selectedReport.status} />
               {selectedReport.clusterCount > 1 && (
-                <span className="saro-badge-dup">
+                <span className="t-data-sm inline-flex items-center gap-1 border border-line bg-raised px-1.5 text-ink-muted">
                   {selectedReport.clusterCount} reports
                 </span>
               )}
             </div>
             <button
               onClick={() => setSelectedReport(null)}
-              className="text-xs text-saro-secondary hover:text-saro-ink p-1 rounded-md"
+              className="text-xs text-ink-muted hover:text-ink p-1 rounded-xs"
               aria-label="Close detail"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <h3 className="text-sm font-bold text-saro-ink mb-1">
+          <h3 className="text-sm font-bold text-ink mb-1">
             {getCategoryName(selectedReport.category_id)}
           </h3>
 
-          <div className="flex items-center gap-3 text-xs text-saro-secondary mb-3 font-medium">
+          <div className="flex items-center gap-3 text-xs text-ink-muted mb-3 font-medium">
             <span className="flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-saro-primary" aria-hidden="true" />
+              <MapPin className="w-3.5 h-3.5 text-brand" aria-hidden="true" />
               {getBarangayName(selectedReport.barangay_id)}
             </span>
             <span className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-saro-secondary" aria-hidden="true" />
+              <Clock className="w-3.5 h-3.5 text-ink-muted" aria-hidden="true" />
               {timeSince(selectedReport.created_at)}
             </span>
           </div>

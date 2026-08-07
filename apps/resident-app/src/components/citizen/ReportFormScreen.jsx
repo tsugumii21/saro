@@ -79,7 +79,7 @@ function getCategoryIcon(cat) {
 
 const pinIcon = L.divIcon({
   className: "saro-pin",
-  html: `<div style="width:20px;height:20px;background:#0F766E;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);"></div>`,
+  html: `<div style="width:20px;height:20px;background:#1B2E6B;border:2px solid #fff;box-shadow:0 1px 4px rgba(16,23,37,.4);"></div>`,
   iconSize: [20, 20],
   iconAnchor: [10, 10]
 });
@@ -393,15 +393,15 @@ export default function ReportFormScreen() {
   if (offlineQueued) {
     return (
       <div className="px-4 py-6 max-w-md mx-auto">
-        <div className="bg-white rounded-xl border border-saro-line p-5">
-          <div className="flex items-center gap-2 text-saro-amber font-semibold text-base mb-3">
+        <div className="bg-white rounded-xs border border-line p-5">
+          <div className="flex items-center gap-2 text-status-assigned-tab font-semibold text-base mb-3">
             <WifiOff className="w-5 h-5" />
             Report saved offline
           </div>
-          <p className="text-sm text-saro-secondary mb-4">
+          <p className="text-sm text-ink-muted mb-4">
             Your report has been saved locally and will be automatically submitted once your connection returns. You'll receive a tracking code after it syncs.
           </p>
-          <div className="bg-saro-amber/10 border border-saro-amber/30 rounded-lg px-4 py-3 text-xs text-amber-800 font-medium mb-4">
+          <div className="bg-status-assigned-tab/10 border border-status-assigned-tab/30 rounded-xs px-4 py-3 text-xs text-status-assigned-ink font-medium mb-4">
             Pending sync — {getOfflineQueue().length} report(s) queued
           </div>
           <button
@@ -427,31 +427,31 @@ export default function ReportFormScreen() {
   if (submitted) {
     return (
       <div className="px-4 py-6 max-w-md mx-auto">
-        <div className="bg-white rounded-xl border border-saro-line p-5">
-          <div className="flex items-center gap-2 text-saro-primary font-semibold text-base mb-3">
+        <div className="bg-white rounded-xs border border-line p-5">
+          <div className="flex items-center gap-2 text-brand font-semibold text-base mb-3">
             <CheckCircle2 className="w-5 h-5" />
             Report received
           </div>
 
-          <p className="text-sm text-saro-secondary mb-2">
+          <p className="text-sm text-ink-muted mb-2">
             Your report has been logged and will be routed to the appropriate office.
           </p>
           {getAssignedOfficeName() && (
-            <p className="text-xs text-saro-primary font-semibold mb-4">
+            <p className="text-xs text-brand font-semibold mb-4">
               Assigned to: {getAssignedOfficeName()}
             </p>
           )}
 
-          <div className="bg-saro-mist rounded-lg p-4 border border-saro-line mb-4 text-center">
-            <div className="text-[11px] uppercase text-saro-secondary font-medium tracking-wider mb-1">Tracking Code</div>
-            <div className="text-2xl font-bold text-saro-ink tracking-widest font-mono mb-2">
+          <div className="bg-raised rounded-xs p-4 border border-line mb-4 text-center">
+            <div className="t-label uppercase text-ink-muted font-medium tracking-wider mb-1">Tracking Code</div>
+            <div className="text-2xl font-bold text-ink tracking-widest font-mono mb-2">
               {submitted.tracking_code}
             </div>
             <button
               onClick={() => {
                 navigator.clipboard?.writeText(submitted.tracking_code);
               }}
-              className="inline-flex items-center gap-1.5 text-xs text-saro-primary font-medium px-3 py-1.5 rounded border border-saro-primary/30 active:bg-saro-primary-light"
+              className="inline-flex items-center gap-1.5 text-xs text-brand font-medium px-3 py-1.5 rounded border border-brand/30 active:bg-brand-wash"
               aria-label="Copy tracking code"
             >
               <Copy className="w-3.5 h-3.5" />
@@ -478,7 +478,7 @@ export default function ReportFormScreen() {
                 setIsProxy(false);
                 setValidationErrors({});
               }}
-              className="flex-1 py-2.5 bg-saro-mist text-saro-ink rounded-lg text-sm font-semibold border border-saro-line active:bg-slate-100"
+              className="flex-1 py-2.5 bg-raised text-ink rounded-xs text-sm font-semibold border border-line active:bg-sunken"
             >
               File another
             </button>
@@ -491,8 +491,8 @@ export default function ReportFormScreen() {
   return (
     <div className="px-4 py-3 max-w-md mx-auto pb-24">
       <div className="mb-4">
-        <h2 className="text-base font-bold text-saro-ink">File a Hazard Report</h2>
-        <p className="text-xs text-saro-secondary mt-0.5">
+        <h2 className="text-base font-bold text-ink">File a Hazard Report</h2>
+        <p className="text-xs text-ink-muted mt-0.5">
           One front door for Legazpi City. We route your report to the correct office.
         </p>
       </div>
@@ -502,12 +502,12 @@ export default function ReportFormScreen() {
         {/* Thumb-Friendly Un-truncated Category Picker */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-              What Type of Hazard? <span className="text-red-600">*</span>
+            <label className="block text-xs font-bold text-ink uppercase tracking-wider">
+              What Type of Hazard? <span className="text-alert">*</span>
             </label>
             {selectedCategory && (
-              <span className="text-xs text-teal-800 font-bold flex items-center gap-1 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
+              <span className="text-xs text-brand font-bold flex items-center gap-1 bg-brand-wash px-2 py-0.5 rounded border border-brand-edge">
+                <CheckCircle2 className="w-3.5 h-3.5 text-brand" />
                 {selectedCategory.name}
               </span>
             )}
@@ -515,19 +515,19 @@ export default function ReportFormScreen() {
 
           {/* Scaled Search Bar */}
           <div className="relative mb-3">
-            <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3.5 top-3 text-ink-faint" />
             <input
               type="text"
               placeholder="e.g. flood, fire, pothole, medical..."
               value={catSearch}
               onChange={(e) => setCatSearch(e.target.value)}
-              className="w-full text-sm pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/20 font-medium"
+              className="w-full text-sm pl-10 pr-9 py-2.5 rounded-xs border border-line bg-white text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 font-medium"
             />
             {catSearch && (
               <button
                 type="button"
                 onClick={() => setCatSearch("")}
-                className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-800 font-bold"
+                className="absolute right-3 top-2.5 text-xs text-ink-faint hover:text-ink font-bold"
               >
                 Clear
               </button>
@@ -549,11 +549,11 @@ export default function ReportFormScreen() {
                   onClick={() => setCatTab(tab.id)}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${
                     isActive
-                      ? "bg-slate-900 text-white shadow-sm border border-slate-900"
-                      : "bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200 hover:text-slate-900"
+                      ? "bg-ink text-white shadow-sm border border-ink"
+                      : "bg-sunken text-ink-muted border border-line hover:bg-line hover:text-ink"
                   }`}
                 >
-                  {isActive && <Check className="w-3.5 h-3.5 text-teal-300 stroke-[3]" />}
+                  {isActive && <Check className="w-3.5 h-3.5 text-brand-edge stroke-[3]" />}
                   {tab.label}
                 </button>
               );
@@ -587,19 +587,19 @@ export default function ReportFormScreen() {
                       setSelectedCategoryId(cat.id);
                       setValidationErrors((prev) => ({ ...prev, category: "" }));
                     }}
-                    className={`w-full text-left p-3.5 rounded-xl border-2 transition-all flex items-start justify-between gap-3 ${
+                    className={`w-full text-left p-3.5 rounded-xs border-2 transition-all flex items-start justify-between gap-3 ${
                       cat.is_emergency ? "border-l-4 border-l-red-500" : "border-l-4 border-l-slate-400"
                     } ${
                       isSelected
-                        ? "bg-teal-50/80 border-teal-700 shadow-sm"
+                        ? "bg-brand-wash/80 border-brand shadow-sm"
                         : cat.is_emergency
-                        ? "bg-red-50/20 border-slate-200 hover:border-red-300 hover:bg-red-50/40"
-                        : "bg-white border-slate-200 hover:border-slate-300 active:bg-slate-50"
+                        ? "bg-alert-wash/20 border-line hover:border-alert hover:bg-alert-wash/40"
+                        : "bg-white border-line hover:border-line-strong active:bg-raised"
                     }`}
                   >
                     {/* Left Icon Badge */}
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                      cat.is_emergency ? "bg-red-100 text-red-700 border border-red-200" : "bg-slate-100 text-teal-800 border border-slate-200"
+                    <div className={`w-10 h-10 rounded-xs flex items-center justify-center shrink-0 mt-0.5 ${
+                      cat.is_emergency ? "bg-alert-wash text-alert border border-alert" : "bg-sunken text-brand border border-line"
                     }`}>
                       <IconComp className="w-5 h-5" />
                     </div>
@@ -607,22 +607,22 @@ export default function ReportFormScreen() {
                     {/* Un-truncated Title & Subtitle */}
                     <div className="flex-1 min-w-0 pr-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-bold text-sm text-slate-900 leading-snug">
+                        <span className="font-bold text-sm text-ink leading-snug">
                           {cat.name}
                         </span>
                         {cat.is_emergency ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-200 uppercase tracking-wider">
+                          <span className="inline-flex items-center gap-1 t-micro font-extrabold px-2 py-0.5 rounded bg-alert-wash text-alert border border-alert uppercase tracking-wider">
                             <AlertTriangle className="w-3 h-3" /> Emergency
                           </span>
                         ) : (
-                          <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
+                          <span className="inline-flex items-center t-micro font-bold px-2 py-0.5 rounded bg-sunken text-ink-muted border border-line uppercase tracking-wider">
                             Non-Urgent
                           </span>
                         )}
                       </div>
 
                       {cat.name_bikol && (
-                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                        <p className="text-xs text-ink-muted font-medium leading-relaxed">
                           {cat.name_bikol}
                         </p>
                       )}
@@ -630,7 +630,7 @@ export default function ReportFormScreen() {
 
                     {/* Selection Radio Circle */}
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 ${
-                      isSelected ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white"
+                      isSelected ? "border-brand bg-brand text-white" : "border-line-strong bg-white"
                     }`}>
                       {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                     </div>
@@ -647,14 +647,14 @@ export default function ReportFormScreen() {
               }
               return true;
             }).length === 0 && (
-              <div className="text-center py-6 text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200 font-medium">
+              <div className="text-center py-6 text-xs text-ink-faint bg-raised rounded-xs border border-line font-medium">
                 No matching hazard categories found. Try clearing your search.
               </div>
             )}
           </div>
 
           {validationErrors.category && (
-            <p className="text-xs text-saro-red mt-1.5 font-medium">{validationErrors.category}</p>
+            <p className="text-xs text-alert mt-1.5 font-medium">{validationErrors.category}</p>
           )}
         </div>
 
@@ -665,28 +665,28 @@ export default function ReportFormScreen() {
 
         {/* Location Section */}
         <div>
-          <label className="block text-xs font-semibold text-saro-ink mb-1.5">
-            Where is it? <span className="text-saro-red">*</span>
+          <label className="block text-xs font-semibold text-ink mb-1.5">
+            Where is it? <span className="text-alert">*</span>
           </label>
           <div className="flex items-center gap-2 mb-2">
             <button
               type="button"
               onClick={handleUseMyLocation}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-saro-line rounded-lg text-xs font-medium text-saro-ink active:bg-saro-mist min-h-[44px]"
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-line rounded-xs text-xs font-medium text-ink active:bg-raised min-h-[44px]"
             >
-              <Navigation className="w-3.5 h-3.5 text-saro-primary" aria-hidden="true" />
+              <Navigation className="w-3.5 h-3.5 text-brand" aria-hidden="true" />
               Use my location
             </button>
-            <span className="text-[11px] text-saro-secondary">or tap the map below</span>
+            <span className="t-label text-ink-muted">or tap the map below</span>
           </div>
 
           {boundsError && (
-            <p className="text-xs text-saro-red mb-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-alert mb-2 bg-alert-wash border border-alert rounded-xs px-3 py-2">
               {boundsError}
             </p>
           )}
 
-          <div className="h-44 rounded-lg overflow-hidden border border-saro-line relative">
+          <div className="h-44 rounded-xs overflow-hidden border border-line relative">
             <MapContainer
               center={LEGAZPI_CENTER}
               zoom={14}
@@ -708,47 +708,47 @@ export default function ReportFormScreen() {
           </div>
 
           {coords && (
-            <p className="text-[11px] text-saro-secondary mt-1.5 flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-saro-primary" aria-hidden="true" />
+            <p className="t-label text-ink-muted mt-1.5 flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-brand" aria-hidden="true" />
               {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
               {barangayAutoDetected && (
-                <span className="text-saro-primary font-medium">
+                <span className="text-brand font-medium">
                   &mdash; {barangays.find((b) => b.id === barangayId)?.name}
                 </span>
               )}
             </p>
           )}
           {validationErrors.coords && (
-            <p className="text-xs text-saro-red mt-1.5 font-medium">{validationErrors.coords}</p>
+            <p className="text-xs text-alert mt-1.5 font-medium">{validationErrors.coords}</p>
           )}
         </div>
 
         {/* Barangay Override */}
         {coords && !barangayAutoDetected && (
           <div>
-            <label className="block text-xs font-semibold text-saro-ink mb-1">
-              Barangay <span className="text-saro-secondary font-normal">(auto-detection missed; select manually)</span>
+            <label className="block text-xs font-semibold text-ink mb-1">
+              Barangay <span className="text-ink-muted font-normal">(auto-detection missed; select manually)</span>
             </label>
             <div className="relative">
               <select
                 value={barangayId}
                 onChange={(e) => setBarangayId(e.target.value)}
-                className="w-full text-xs py-2.5 px-3 rounded-lg border border-saro-line bg-white text-saro-ink font-medium appearance-none pr-8"
+                className="w-full text-xs py-2.5 px-3 rounded-xs border border-line bg-white text-ink font-medium appearance-none pr-8"
               >
                 <option value="">Select barangay</option>
                 {barangays.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
-              <ChevronDown className="w-4 h-4 absolute right-2.5 top-2.5 text-saro-secondary pointer-events-none" />
+              <ChevronDown className="w-4 h-4 absolute right-2.5 top-2.5 text-ink-muted pointer-events-none" />
             </div>
           </div>
         )}
 
         {/* Description */}
         <div>
-          <label className="block text-xs font-semibold text-saro-ink mb-1">
-            What happened? <span className="text-saro-red">*</span>
+          <label className="block text-xs font-semibold text-ink mb-1">
+            What happened? <span className="text-alert">*</span>
           </label>
           <div className="relative">
             <textarea
@@ -756,7 +756,7 @@ export default function ReportFormScreen() {
               value={description}
               onChange={(e) => { setDescription(e.target.value); setValidationErrors((prev) => ({ ...prev, description: "" })); }}
               placeholder="Describe what you see. Be specific about the location and danger."
-              className="w-full text-sm p-3 rounded-lg border border-saro-line bg-white text-saro-ink placeholder:text-saro-secondary resize-none"
+              className="w-full text-sm p-3 rounded-xs border border-line bg-white text-ink placeholder:text-ink-muted resize-none"
             />
             {speechSupported && (
               <button
@@ -764,8 +764,8 @@ export default function ReportFormScreen() {
                 onClick={toggleSpeech}
                 className={`absolute bottom-2.5 right-2.5 p-2 rounded-full transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${
                   isListening
-                    ? "bg-saro-red text-white animate-pulse"
-                    : "bg-saro-mist text-saro-secondary active:bg-slate-200"
+                    ? "bg-alert text-white animate-pulse"
+                    : "bg-raised text-ink-muted active:bg-line"
                 }`}
                 title={isListening ? "Stop dictation" : "Speak to type"}
                 aria-label={isListening ? "Stop dictation" : "Speak to type"}
@@ -775,14 +775,14 @@ export default function ReportFormScreen() {
             )}
           </div>
           {validationErrors.description && (
-            <p className="text-xs text-saro-red mt-1 font-medium">{validationErrors.description}</p>
+            <p className="text-xs text-alert mt-1 font-medium">{validationErrors.description}</p>
           )}
         </div>
 
         {/* Photo Evidence — Multi-photo */}
         <div>
-          <label className="block text-xs font-semibold text-saro-ink mb-1">
-            Photo evidence <span className="text-saro-secondary font-normal">(optional, up to 5)</span>
+          <label className="block text-xs font-semibold text-ink mb-1">
+            Photo evidence <span className="text-ink-muted font-normal">(optional, up to 5)</span>
           </label>
           {photos.length > 0 && (
             <div className="flex gap-2 mb-2 overflow-x-auto no-scrollbar">
@@ -791,12 +791,12 @@ export default function ReportFormScreen() {
                   <img
                     src={photo}
                     alt={`Evidence ${i + 1}`}
-                    className="w-full h-full object-cover rounded-lg border border-saro-line"
+                    className="w-full h-full object-cover rounded-xs border border-line"
                   />
                   <button
                     type="button"
                     onClick={() => removePhoto(i)}
-                    className="absolute -top-1.5 -right-1.5 bg-saro-ink text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
+                    className="absolute -top-1.5 -right-1.5 bg-ink text-white w-5 h-5 rounded-full flex items-center justify-center t-micro"
                     aria-label={`Remove photo ${i + 1}`}
                   >
                     <X className="w-3 h-3" />
@@ -806,13 +806,13 @@ export default function ReportFormScreen() {
             </div>
           )}
           {photos.length < 5 && (
-            <label className="flex items-center gap-2 px-4 py-3 bg-white border border-saro-line border-dashed rounded-lg cursor-pointer active:bg-saro-mist min-h-[44px]">
+            <label className="flex items-center gap-2 px-4 py-3 bg-white border border-line border-dashed rounded-xs cursor-pointer active:bg-raised min-h-[44px]">
               {photos.length > 0 ? (
-                <Plus className="w-5 h-5 text-saro-secondary" aria-hidden="true" />
+                <Plus className="w-5 h-5 text-ink-muted" aria-hidden="true" />
               ) : (
-                <Camera className="w-5 h-5 text-saro-secondary" aria-hidden="true" />
+                <Camera className="w-5 h-5 text-ink-muted" aria-hidden="true" />
               )}
-              <span className="text-xs text-saro-secondary font-medium">
+              <span className="text-xs text-ink-muted font-medium">
                 {photos.length > 0 ? "Add another photo" : "Take photo or choose from gallery"}
               </span>
               <input
@@ -828,20 +828,20 @@ export default function ReportFormScreen() {
         </div>
 
         {/* Proxy Reporting Toggle */}
-        <div className="bg-white rounded-lg border border-saro-line p-3">
+        <div className="bg-white rounded-xs border border-line p-3">
           <label className="flex items-center gap-3 cursor-pointer min-h-[44px]">
             <input
               type="checkbox"
               checked={isProxy}
               onChange={(e) => setIsProxy(e.target.checked)}
-              className="w-4 h-4 rounded border-saro-line text-saro-primary accent-saro-primary"
+              className="w-4 h-4 rounded border-line text-brand accent-brand"
             />
             <div>
-              <span className="text-xs font-semibold text-saro-ink flex items-center gap-1">
-                <Users className="w-3.5 h-3.5 text-saro-secondary" aria-hidden="true" />
+              <span className="text-xs font-semibold text-ink flex items-center gap-1">
+                <Users className="w-3.5 h-3.5 text-ink-muted" aria-hidden="true" />
                 Reporting for someone else
               </span>
-              <span className="text-[11px] text-saro-secondary block mt-0.5">
+              <span className="t-label text-ink-muted block mt-0.5">
                 They will need the tracking code. A callback number is required.
               </span>
             </div>
@@ -849,32 +849,32 @@ export default function ReportFormScreen() {
 
           {isProxy && (
             <div className="mt-3">
-              <label className="block text-xs font-semibold text-saro-ink mb-1">
-                Callback number <span className="text-saro-red">*</span>
+              <label className="block text-xs font-semibold text-ink mb-1">
+                Callback number <span className="text-alert">*</span>
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3 top-2.5 text-saro-secondary" aria-hidden="true" />
+                <Phone className="w-4 h-4 absolute left-3 top-2.5 text-ink-muted" aria-hidden="true" />
                 <input
                   type="tel"
                   value={callbackNumber}
                   onChange={(e) => { setCallbackNumber(e.target.value); setValidationErrors((prev) => ({ ...prev, callback: "" })); }}
                   placeholder="09XX-XXX-XXXX"
-                  className="w-full text-sm py-2.5 pl-9 pr-3 rounded-lg border border-saro-line bg-white text-saro-ink placeholder:text-saro-secondary"
+                  className="w-full text-sm py-2.5 pl-9 pr-3 rounded-xs border border-line bg-white text-ink placeholder:text-ink-muted"
                   required={isProxy}
                 />
               </div>
               {validationErrors.callback && (
-                <p className="text-xs text-saro-red mt-1 font-medium">{validationErrors.callback}</p>
+                <p className="text-xs text-alert mt-1 font-medium">{validationErrors.callback}</p>
               )}
             </div>
           )}
         </div>
 
         {/* Sticky Submit Button */}
-        <div className="fixed bottom-16 left-0 right-0 z-30 px-4 pb-2 bg-gradient-to-t from-saro-surface via-saro-surface/95 to-transparent pt-4">
+        <div className="fixed bottom-16 left-0 right-0 z-30 px-4 pb-2 bg-gradient-to-t from-canvas via-canvas/95 to-transparent pt-4">
           <div className="max-w-md mx-auto">
             {!isOnline && (
-              <div className="flex items-center gap-1.5 text-[11px] text-amber-800 bg-saro-amber/10 border border-saro-amber/30 rounded-lg px-3 py-1.5 mb-2 font-medium">
+              <div className="flex items-center gap-1.5 t-label text-status-assigned-ink bg-status-assigned-tab/10 border border-status-assigned-tab/30 rounded-xs px-3 py-1.5 mb-2 font-medium">
                 <WifiOff className="w-3.5 h-3.5" aria-hidden="true" />
                 Offline — report will be queued for later submission
               </div>

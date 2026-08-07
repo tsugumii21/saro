@@ -1,10 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
-import {
-  BarChart3, Settings, HelpCircle, AlertTriangle, CheckCircle2,
-  TrendingUp, TrendingDown, Edit3, Save, X, ChevronDown, Flag, Download,
-  Plus, BookOpen, Calendar, Activity, ChevronRight, PieChart, ShieldCheck
-} from "lucide-react";
+import { Navigate } from "react-router-dom";
+import {BarChart3, Settings, HelpCircle, AlertTriangle, TrendingUp, TrendingDown, Edit3, X, Download, Plus, Activity, ChevronRight} from "lucide-react";
 import {
   getReports, getCategories, getOffices, getBarangays, getAssistantLogs, updateCategory,
   addKnowledgeBaseEntry
@@ -78,7 +74,7 @@ function generateCSV(reports, categories, offices) {
 }
 
 // Inline Mini 7-Day Sparkline SVG
-function Sparkline({ data = [4, 6, 3, 7, 5, 8, 4], color = "#0F766E" }) {
+function Sparkline({ data = [4, 6, 3, 7, 5, 8, 4], color = "var(--color-brand)" }) {
   const min = Math.min(...data);
   const max = Math.max(...data) || 1;
   const points = data
@@ -103,6 +99,32 @@ function Sparkline({ data = [4, 6, 3, 7, 5, 8, 4], color = "#0F766E" }) {
   );
 }
 
+/**
+ * Period-over-period delta. Hoisted to module scope: defining a component
+ * inside render gives it a new identity every pass, so React unmounts and
+ * remounts it on each keystroke in the filter bar.
+ */
+function KpiTrendBadge({ current, previous, suffix = "", lowerIsBetter = false }) {
+  const diff = current - previous;
+  if (diff === 0) {
+    return (
+      <span className="inline-flex items-center t-micro font-bold px-1.5 py-0.5 rounded bg-sunken text-ink-muted border border-line">
+        0.0{suffix} vs prev
+      </span>
+    );
+  }
+  const isUp = diff > 0;
+  const isGood = lowerIsBetter ? !isUp : isUp;
+  return (
+    <span className={`inline-flex items-center gap-0.5 t-micro font-bold px-1.5 py-0.5 rounded ${
+      isGood ? "bg-status-resolved-wash text-status-resolved-ink border border-status-resolved-tab" : "bg-alert-wash text-alert border border-alert"
+    }`}>
+      {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+      {isUp ? "+" : ""}{diff.toFixed(1)}{suffix}
+    </span>
+  );
+}
+
 export default function AdminDashboard() {
   const { isAdmin } = useAuth();
 
@@ -116,7 +138,6 @@ export default function AdminDashboard() {
 }
 
 function AdminDashboardContent() {
-  const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
   const [offices, setOffices] = useState([]);
@@ -289,26 +310,6 @@ function AdminDashboardContent() {
   const maxBrgyCount = Math.max(1, ...barangayCounts.map((b) => b.count));
 
   // Explicit, Unambiguous KPI Trend Indicator
-  function KpiTrendBadge({ current, previous, suffix = "", lowerIsBetter = false }) {
-    const diff = current - previous;
-    if (diff === 0) {
-      return (
-        <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-          0.0{suffix} vs prev
-        </span>
-      );
-    }
-    const isUp = diff > 0;
-    const isGood = lowerIsBetter ? !isUp : isUp;
-    return (
-      <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded ${
-        isGood ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"
-      }`}>
-        {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-        {isUp ? "+" : ""}{diff.toFixed(1)}{suffix}
-      </span>
-    );
-  }
 
   const toggleOfficeGroup = (officeId) => {
     setCollapsedOffices((prev) => ({ ...prev, [officeId]: !prev[officeId] }));
@@ -318,17 +319,17 @@ function AdminDashboardContent() {
     <div className="w-full space-y-4 font-sans max-w-7xl mx-auto pb-6">
       
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-saro-line">
+      <div className="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-line">
         <div className="flex items-center gap-3">
-          <h2 className="text-base font-bold text-slate-900">City Operations & SLA Admin Panel</h2>
-          <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-mono font-bold">
+          <h2 className="text-base font-bold text-ink">City Operations & SLA Admin Panel</h2>
+          <span className="t-micro bg-status-assigned-wash text-status-assigned-ink border border-status-assigned-tab px-2 py-0.5 rounded font-mono font-bold">
             COORDINATOR GATEWAY
           </span>
         </div>
 
         <div className="flex items-center gap-3">
           {/* Date Range Selector */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+          <div className="flex items-center bg-sunken p-0.5 rounded-xs border border-line text-xs">
             {[
               { key: "all", label: "All Time" },
               { key: "month", label: "This Month" },
@@ -337,8 +338,8 @@ function AdminDashboardContent() {
               <button
                 key={key}
                 onClick={() => setDateRange(key)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
-                  dateRange === key ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500 hover:text-slate-900"
+                className={`px-2.5 py-1 rounded-xs t-label font-bold transition-colors ${
+                  dateRange === key ? "bg-white text-ink shadow-2xs" : "text-ink-faint hover:text-ink"
                 }`}
               >
                 {label}
@@ -347,7 +348,7 @@ function AdminDashboardContent() {
           </div>
 
           {/* Panel Tab Selector */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <div className="flex items-center bg-sunken p-1 rounded-xs border border-line">
             {[
               { key: "metrics", label: "Metrics & Analytics", icon: BarChart3 },
               { key: "routing", label: "Routing & SLA Editor", icon: Settings },
@@ -356,8 +357,8 @@ function AdminDashboardContent() {
               <button
                 key={key}
                 onClick={() => setActivePanel(key)}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-colors ${
-                  activePanel === key ? "bg-teal-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                className={`px-3 py-1.5 rounded-xs text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                  activePanel === key ? "bg-brand text-white shadow-2xs" : "text-ink-muted hover:text-ink hover:bg-line/60"
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -376,63 +377,63 @@ function AdminDashboardContent() {
           <div className="grid grid-cols-4 gap-3">
             
             {/* Median Assignment Time */}
-            <div className="bg-white rounded-xl border border-saro-line p-3.5 space-y-1">
+            <div className="bg-white rounded-xs border border-line p-3.5 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Median Assignment</span>
+                <span className="t-label font-bold text-ink-faint uppercase tracking-wider">Median Assignment</span>
                 <KpiTrendBadge current={medianAssignment} previous={prevMedian} suffix="h" lowerIsBetter={true} />
               </div>
               <div className="flex items-end justify-between">
-                <div className="font-mono text-2xl font-extrabold text-slate-900">
-                  {medianAssignment.toFixed(1)} <span className="text-xs text-slate-500 font-sans font-normal">hrs</span>
+                <div className="font-mono text-2xl font-extrabold text-ink">
+                  {medianAssignment.toFixed(1)} <span className="text-xs text-ink-faint font-sans font-normal">hrs</span>
                 </div>
-                <Sparkline data={[1.8, 1.5, 1.6, 1.2, 1.4, 1.1, 0.9]} color="#0F766E" />
+                <Sparkline data={[1.8, 1.5, 1.6, 1.2, 1.4, 1.1, 0.9]} color="var(--color-brand)" />
               </div>
-              <div className="text-[10px] text-slate-400 font-medium">Target SLA: &lt; 1.0h initial dispatch</div>
+              <div className="t-micro text-ink-faint font-medium">Target SLA: &lt; 1.0h initial dispatch</div>
             </div>
 
             {/* Resolution Velocity */}
-            <div className="bg-white rounded-xl border border-saro-line p-3.5 space-y-1">
+            <div className="bg-white rounded-xs border border-line p-3.5 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Resolution Velocity</span>
+                <span className="t-label font-bold text-ink-faint uppercase tracking-wider">Resolution Velocity</span>
                 <KpiTrendBadge current={resolvedPercent} previous={prevResolvedPercent} suffix="%" lowerIsBetter={false} />
               </div>
               <div className="flex items-end justify-between">
-                <div className="font-mono text-2xl font-extrabold text-slate-900">
+                <div className="font-mono text-2xl font-extrabold text-ink">
                   {resolvedPercent}%
                 </div>
-                <Sparkline data={[60, 65, 68, 72, 75, 78, 83]} color="#16A34A" />
+                <Sparkline data={[60, 65, 68, 72, 75, 78, 83]} color="var(--color-status-resolved-tab)" />
               </div>
-              <div className="text-[10px] text-slate-400 font-medium">{resolvedReports.length} of {totalReports} reports closed</div>
+              <div className="t-micro text-ink-faint font-medium">{resolvedReports.length} of {totalReports} reports closed</div>
             </div>
 
             {/* False Report Rate */}
-            <div className="bg-white rounded-xl border border-saro-line p-3.5 space-y-1">
+            <div className="bg-white rounded-xs border border-line p-3.5 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">False Report Rate</span>
+                <span className="t-label font-bold text-ink-faint uppercase tracking-wider">False Report Rate</span>
                 <KpiTrendBadge current={parseFloat(falseRate)} previous={parseFloat(prevFalseRate)} suffix="%" lowerIsBetter={true} />
               </div>
               <div className="flex items-end justify-between">
-                <div className="font-mono text-2xl font-extrabold text-slate-900">
+                <div className="font-mono text-2xl font-extrabold text-ink">
                   {falseRate}%
                 </div>
-                <Sparkline data={[8.0, 7.2, 6.5, 5.8, 6.0, 5.2, 4.5]} color="#D97706" />
+                <Sparkline data={[8.0, 7.2, 6.5, 5.8, 6.0, 5.2, 4.5]} color="var(--color-status-assigned-tab)" />
               </div>
-              <div className="text-[10px] text-slate-400 font-medium">{falseReports.length} verified false reports</div>
+              <div className="t-micro text-ink-faint font-medium">{falseReports.length} verified false reports</div>
             </div>
 
             {/* Assistant Coverage */}
-            <div className="bg-white rounded-xl border border-saro-line p-3.5 space-y-1">
+            <div className="bg-white rounded-xs border border-line p-3.5 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assistant Coverage</span>
-                <span className="text-[10px] bg-teal-50 text-teal-700 font-bold px-1.5 py-0.5 rounded border border-teal-200">RAG ACTIVE</span>
+                <span className="t-label font-bold text-ink-faint uppercase tracking-wider">Assistant Coverage</span>
+                <span className="t-micro bg-brand-wash text-brand font-bold px-1.5 py-0.5 rounded border border-brand-edge">RAG ACTIVE</span>
               </div>
               <div className="flex items-end justify-between">
-                <div className="font-mono text-2xl font-extrabold text-slate-900">
-                  {unansweredLogs.length} <span className="text-xs text-slate-500 font-sans font-normal">unanswered</span>
+                <div className="font-mono text-2xl font-extrabold text-ink">
+                  {unansweredLogs.length} <span className="text-xs text-ink-faint font-sans font-normal">unanswered</span>
                 </div>
                 <Sparkline data={[5, 4, 6, 3, 2, 4, 3]} color="#2563EB" />
               </div>
-              <div className="text-[10px] text-slate-400 font-medium">{questionClusters.length} distinct query clusters</div>
+              <div className="t-micro text-ink-faint font-medium">{questionClusters.length} distinct query clusters</div>
             </div>
 
           </div>
@@ -441,13 +442,13 @@ function AdminDashboardContent() {
           <div className="grid md:grid-cols-12 gap-4">
             
             {/* Left 7 Cols: Incident Volume by Agency Column Chart */}
-            <div className="md:col-span-7 bg-white rounded-xl border border-saro-line p-4 space-y-3">
+            <div className="md:col-span-7 bg-white rounded-xs border border-line p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-teal-700" />
+                <h3 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-brand" />
                   Incident Volume by Agency
                 </h3>
-                <span className="text-[11px] text-slate-500 font-medium">Distribution across 8 offices</span>
+                <span className="t-label text-ink-faint font-medium">Distribution across 8 offices</span>
               </div>
 
               <div className="space-y-2 pt-1">
@@ -456,16 +457,16 @@ function AdminDashboardContent() {
                   return (
                     <div key={office.id} className="space-y-1">
                       <div className="flex items-center justify-between text-xs font-medium">
-                        <span className="font-bold text-slate-800 w-32 truncate">{office.short_name}</span>
-                        <div className="flex items-center gap-3 font-mono text-[11px]">
-                          <span className="text-slate-700 font-bold">{total} total</span>
-                          <span className="text-teal-700 font-semibold">{active} active</span>
-                          {breached > 0 && <span className="text-red-600 font-bold">{breached} breached</span>}
+                        <span className="font-bold text-ink w-32 truncate">{office.short_name}</span>
+                        <div className="flex items-center gap-3 font-mono t-label">
+                          <span className="text-ink-muted font-bold">{total} total</span>
+                          <span className="text-brand font-semibold">{active} active</span>
+                          {breached > 0 && <span className="text-alert font-bold">{breached} breached</span>}
                         </div>
                       </div>
-                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden flex">
+                      <div className="w-full h-2.5 bg-sunken rounded-full overflow-hidden flex">
                         <div
-                          className="h-full bg-teal-700 rounded-full transition-all"
+                          className="h-full bg-brand rounded-full transition-all"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -476,15 +477,15 @@ function AdminDashboardContent() {
             </div>
 
             {/* Right 5 Cols: High Incident Barangays Horizontal Bar Chart */}
-            <div className="md:col-span-5 bg-white rounded-xl border border-saro-line p-4 space-y-3">
+            <div className="md:col-span-5 bg-white rounded-xs border border-line p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-teal-700" />
+                <h3 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-brand" />
                   High Incident Barangays
                 </h3>
                 <button
                   onClick={() => generateCSV(rangedReports, categories, offices)}
-                  className="flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:underline"
+                  className="flex items-center gap-1 t-label font-bold text-brand hover:underline"
                 >
                   <Download className="w-3 h-3" />
                   CSV
@@ -498,12 +499,12 @@ function AdminDashboardContent() {
                   return (
                     <div key={barangay.id} className="space-y-1">
                       <div className="flex items-center justify-between text-xs font-medium">
-                        <span className="font-bold text-slate-800 truncate">{barangay.name}</span>
-                        <span className="font-mono font-bold text-slate-900 text-[11px]">{count} reports</span>
+                        <span className="font-bold text-ink truncate">{barangay.name}</span>
+                        <span className="font-mono font-bold text-ink t-label">{count} reports</span>
                       </div>
-                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 bg-sunken rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-amber-500 rounded-full transition-all"
+                          className="h-full bg-status-assigned-tab rounded-full transition-all"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -516,15 +517,15 @@ function AdminDashboardContent() {
           </div>
 
           {/* Grouped SLA Compliance Table with Per-Office Rollup Summaries */}
-          <div className="bg-white rounded-xl border border-saro-line overflow-hidden">
-            <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+          <div className="bg-white rounded-xs border border-line overflow-hidden">
+            <div className="px-4 py-3 bg-ink text-white flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-white">SLA Compliance Grouped by Office</h3>
-              <span className="text-[11px] text-slate-400 font-mono">
+              <span className="t-label text-ink-faint font-mono">
                 {categories.length} Incident Categories Configured
               </span>
             </div>
 
-            <div className="divide-y divide-slate-200">
+            <div className="divide-y divide-line">
               {offices.map((office) => {
                 const officeCats = categories.filter((c) => c.office_id === office.id);
                 if (officeCats.length === 0) return null;
@@ -546,25 +547,25 @@ function AdminDashboardContent() {
                     {/* Office Group Header with Rollup Summary */}
                     <button
                       onClick={() => toggleOfficeGroup(office.id)}
-                      className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-bold text-slate-900 border-b border-slate-200 transition-colors"
+                      className="w-full px-4 py-2.5 bg-raised hover:bg-sunken flex items-center justify-between text-xs font-bold text-ink border-b border-line transition-colors"
                     >
                       <div className="flex items-center gap-2">
-                        <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
+                        <ChevronRight className={`w-4 h-4 text-ink-faint transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
                         <span>{office.full_name} ({office.short_name})</span>
                       </div>
                       
                       {/* Rollup Summary Badge Strip */}
-                      <div className="flex items-center gap-3 text-[11px] font-mono font-semibold">
-                        <span className="text-slate-500">{officeCats.length} Categories</span>
+                      <div className="flex items-center gap-3 t-label font-mono font-semibold">
+                        <span className="text-ink-faint">{officeCats.length} Categories</span>
                         <span className={`px-2 py-0.5 rounded border ${
-                          avgCompliance >= 80 ? "bg-green-50 text-green-700 border-green-200" :
-                          avgCompliance >= 50 ? "bg-amber-50 text-amber-700 border-amber-200" :
-                          "bg-red-50 text-red-700 border-red-200"
+                          avgCompliance >= 80 ? "bg-status-resolved-wash text-status-resolved-ink border-status-resolved-tab" :
+                          avgCompliance >= 50 ? "bg-status-assigned-wash text-status-assigned-ink border-status-assigned-tab" :
+                          "bg-alert-wash text-alert border-alert"
                         }`}>
                           {avgCompliance}% Avg Compliance
                         </span>
                         {activeBreaches > 0 && (
-                          <span className="bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-bold">
+                          <span className="bg-alert-wash text-alert border border-alert px-2 py-0.5 rounded font-bold">
                             {activeBreaches} Breach
                           </span>
                         )}
@@ -573,7 +574,7 @@ function AdminDashboardContent() {
 
                     {!isCollapsed && (
                       <table className="w-full text-xs">
-                        <thead className="bg-white text-slate-500 border-b border-slate-200 uppercase text-[10px]">
+                        <thead className="bg-white text-ink-faint border-b border-line uppercase t-micro">
                           <tr>
                             <th className="text-left px-4 py-2 font-semibold">Category Name</th>
                             <th className="text-center px-3 py-2 font-semibold">Type</th>
@@ -582,38 +583,38 @@ function AdminDashboardContent() {
                             <th className="text-center px-4 py-2 font-semibold">Compliance Rate</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-sunken">
                           {officeCats.map((cat) => {
                             const stats = slaByCat.find((s) => s.cat.id === cat.id) || { total: 0, rate: 100 };
                             return (
-                              <tr key={cat.id} className="hover:bg-slate-50">
-                                <td className="px-4 py-2 text-slate-900 font-semibold">
+                              <tr key={cat.id} className="hover:bg-raised">
+                                <td className="px-4 py-2 text-ink font-semibold">
                                   <div className="flex items-center gap-1.5">
-                                    {cat.is_emergency && <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+                                    {cat.is_emergency && <AlertTriangle className="w-3.5 h-3.5 text-alert shrink-0" />}
                                     {cat.name}
                                   </div>
                                 </td>
                                 <td className="px-3 py-2 text-center">
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
-                                    cat.is_emergency ? "bg-red-50 text-red-700 border-red-200" : "bg-slate-100 text-slate-600 border-slate-200"
+                                  <span className={`t-micro font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                                    cat.is_emergency ? "bg-alert-wash text-alert border-alert" : "bg-sunken text-ink-muted border-line"
                                   }`}>
                                     {cat.is_emergency ? "Emergency" : "Standard"}
                                   </span>
                                 </td>
-                                <td className="px-3 py-2 text-center font-mono font-bold text-slate-700">{cat.sla_hours}h</td>
-                                <td className="px-3 py-2 text-center font-mono font-bold text-slate-900">{stats.total}</td>
+                                <td className="px-3 py-2 text-center font-mono font-bold text-ink-muted">{cat.sla_hours}h</td>
+                                <td className="px-3 py-2 text-center font-mono font-bold text-ink">{stats.total}</td>
                                 <td className="px-4 py-2 text-center">
                                   <div className="flex items-center justify-center gap-2">
-                                    <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="w-20 h-2 bg-sunken rounded-full overflow-hidden">
                                       <div
-                                        className={`h-full rounded-full ${stats.rate >= 80 ? "bg-green-600" : stats.rate >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                                        className={`h-full rounded-full ${stats.rate >= 80 ? "bg-status-resolved-tab" : stats.rate >= 50 ? "bg-status-assigned-tab" : "bg-alert"}`}
                                         style={{ width: `${stats.rate}%` }}
                                       />
                                     </div>
-                                    <span className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded border ${
-                                      stats.rate >= 80 ? "bg-green-50 text-green-700 border-green-200" :
-                                      stats.rate >= 50 ? "bg-amber-50 text-amber-700 border-amber-200" :
-                                      "bg-red-50 text-red-700 border-red-200"
+                                    <span className={`font-mono t-label font-bold px-2 py-0.5 rounded border ${
+                                      stats.rate >= 80 ? "bg-status-resolved-wash text-status-resolved-ink border-status-resolved-tab" :
+                                      stats.rate >= 50 ? "bg-status-assigned-wash text-status-assigned-ink border-status-assigned-tab" :
+                                      "bg-alert-wash text-alert border-alert"
                                     }`}>
                                       {stats.rate}%
                                     </span>
@@ -636,18 +637,18 @@ function AdminDashboardContent() {
 
       {/* ROUTING & SLA EDITOR PANEL */}
       {activePanel === "routing" && (
-        <div className="bg-white rounded-xl border border-saro-line p-6 space-y-4">
+        <div className="bg-white rounded-xs border border-line p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Department Routing & SLA Target Editor</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <h3 className="text-sm font-bold text-ink">Department Routing & SLA Target Editor</h3>
+              <p className="text-xs text-ink-faint mt-0.5">
                 Configure automatic department dispatch rules and response SLA hours for each hazard category.
               </p>
             </div>
           </div>
 
           <table className="w-full text-xs border-collapse">
-            <thead className="bg-slate-50 text-slate-600 border-b border-saro-line uppercase text-[10px] font-bold">
+            <thead className="bg-raised text-ink-muted border-b border-line uppercase t-micro font-bold">
               <tr>
                 <th className="text-left px-4 py-2.5">Category Name</th>
                 <th className="text-left px-3 py-2.5">Assigned Department</th>
@@ -655,14 +656,14 @@ function AdminDashboardContent() {
                 <th className="text-right px-4 py-2.5">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-sunken">
               {categories.map((cat) => {
                 const isEditing = editingCat === cat.id;
                 return (
-                  <tr key={cat.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-900 font-semibold">
+                  <tr key={cat.id} className="hover:bg-raised">
+                    <td className="px-4 py-3 text-ink font-semibold">
                       <div className="flex items-center gap-1.5">
-                        {cat.is_emergency && <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+                        {cat.is_emergency && <AlertTriangle className="w-3.5 h-3.5 text-alert shrink-0" />}
                         {cat.name}
                       </div>
                     </td>
@@ -672,14 +673,14 @@ function AdminDashboardContent() {
                         <select
                           value={editOfficeId}
                           onChange={(e) => setEditOfficeId(e.target.value)}
-                          className="text-xs py-1 px-2 rounded border border-slate-200 bg-white font-medium text-slate-900"
+                          className="text-xs py-1 px-2 rounded border border-line bg-white font-medium text-ink"
                         >
                           {offices.map((o) => (
                             <option key={o.id} value={o.id}>{o.full_name} ({o.short_name})</option>
                           ))}
                         </select>
                       ) : (
-                        <span className="font-semibold text-slate-800">{getOfficeName(cat.office_id)}</span>
+                        <span className="font-semibold text-ink">{getOfficeName(cat.office_id)}</span>
                       )}
                     </td>
 
@@ -691,10 +692,10 @@ function AdminDashboardContent() {
                           max="168"
                           value={editSlaHours}
                           onChange={(e) => setEditSlaHours(e.target.value)}
-                          className="w-16 text-center text-xs py-1 px-2 rounded border border-slate-200 bg-white font-mono font-bold text-slate-900"
+                          className="w-16 text-center text-xs py-1 px-2 rounded border border-line bg-white font-mono font-bold text-ink"
                         />
                       ) : (
-                        <span className="font-mono font-bold text-slate-900">{cat.sla_hours}h</span>
+                        <span className="font-mono font-bold text-ink">{cat.sla_hours}h</span>
                       )}
                     </td>
 
@@ -704,13 +705,13 @@ function AdminDashboardContent() {
                           <button
                             disabled={saving}
                             onClick={handleSaveCategory}
-                            className="bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold px-3 py-1 rounded transition-colors"
+                            className="bg-brand hover:bg-brand text-white text-xs font-bold px-3 py-1 rounded transition-colors"
                           >
                             Save
                           </button>
                           <button
                             onClick={() => setEditingCat(null)}
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-2 py-1 rounded transition-colors"
+                            className="bg-sunken hover:bg-line text-ink-muted text-xs font-semibold px-2 py-1 rounded transition-colors"
                           >
                             Cancel
                           </button>
@@ -718,7 +719,7 @@ function AdminDashboardContent() {
                       ) : (
                         <button
                           onClick={() => handleEditCategory(cat)}
-                          className="text-teal-700 hover:underline font-semibold text-xs flex items-center justify-end gap-1 ml-auto"
+                          className="text-brand hover:underline font-semibold text-xs flex items-center justify-end gap-1 ml-auto"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                           Edit Rules
@@ -735,30 +736,30 @@ function AdminDashboardContent() {
 
       {/* UNANSWERED QUESTIONS PANEL */}
       {activePanel === "questions" && (
-        <div className="bg-white rounded-xl border border-saro-line p-6 space-y-4">
+        <div className="bg-white rounded-xs border border-line p-6 space-y-4">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Unanswered Assistant Queries</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h3 className="text-sm font-bold text-ink">Unanswered Assistant Queries</h3>
+            <p className="text-xs text-ink-faint mt-0.5">
               Review frequent questions asked by citizens that were not found in the local knowledge base.
             </p>
           </div>
 
           <div className="space-y-3">
             {questionClusters.map((cluster, idx) => (
-              <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start justify-between gap-4">
+              <div key={idx} className="p-4 bg-raised border border-line rounded-xs flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                    <HelpCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <div className="text-xs font-bold text-ink flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-status-assigned-tab shrink-0" />
                     "{cluster.representative}"
                   </div>
-                  <div className="text-[11px] text-slate-500 font-medium">
+                  <div className="t-label text-ink-faint font-medium">
                     Asked {cluster.count} time(s) &bull; Latest: {new Date(cluster.latestAt).toLocaleString()}
                   </div>
                 </div>
 
                 <button
                   onClick={() => setKbTarget(cluster)}
-                  className="bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shrink-0 flex items-center gap-1.5"
+                  className="bg-brand hover:bg-brand text-white text-xs font-bold px-3 py-1.5 rounded-xs transition-colors shrink-0 flex items-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Add to Knowledge Base
@@ -766,7 +767,7 @@ function AdminDashboardContent() {
               </div>
             ))}
             {questionClusters.length === 0 && (
-              <div className="p-8 text-center text-xs text-slate-500">
+              <div className="p-8 text-center text-xs text-ink-faint">
                 No unanswered query clusters recorded.
               </div>
             )}
@@ -776,42 +777,42 @@ function AdminDashboardContent() {
 
       {/* KB Add Modal */}
       {kbTarget && (
-        <div className="fixed inset-0 bg-slate-950/60 z-50 flex items-center justify-center p-6">
-          <div className="bg-white border border-saro-line rounded-xl p-6 w-full max-w-lg shadow-xl space-y-4">
+        <div className="fixed inset-0 bg-ink-strong/60 z-50 flex items-center justify-center p-6">
+          <div className="bg-white border border-line rounded-xs p-6 w-full max-w-lg shadow-none space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900">Add Answer to Knowledge Base</h3>
-              <button onClick={() => setKbTarget(null)} className="text-slate-400 hover:text-slate-800">
+              <h3 className="text-sm font-bold text-ink">Add Answer to Knowledge Base</h3>
+              <button onClick={() => setKbTarget(null)} className="text-ink-faint hover:text-ink">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-              <span className="font-bold text-slate-700 block mb-1">Question:</span>
-              <span className="text-slate-900 font-medium">"{kbTarget.representative}"</span>
+            <div className="p-3 bg-raised border border-line rounded-xs text-xs">
+              <span className="font-bold text-ink-muted block mb-1">Question:</span>
+              <span className="text-ink font-medium">"{kbTarget.representative}"</span>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">Official City Answer</label>
+              <label className="block text-xs font-bold text-ink mb-1.5">Official City Answer</label>
               <textarea
                 rows={4}
                 value={kbAnswer}
                 onChange={(e) => setKbAnswer(e.target.value)}
                 placeholder="Enter official public service response..."
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 font-medium focus:border-teal-700 focus:outline-none"
+                className="w-full p-3 bg-raised border border-line rounded-xs text-xs text-ink font-medium focus:border-brand focus:outline-none"
               />
             </div>
 
             <div className="flex items-center justify-end gap-2">
               <button
                 onClick={() => setKbTarget(null)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200"
+                className="px-4 py-2 bg-sunken text-ink-muted text-xs font-bold rounded-xs hover:bg-line"
               >
                 Cancel
               </button>
               <button
                 disabled={!kbAnswer.trim() || kbSaving}
                 onClick={handleAddToKB}
-                className="px-4 py-2 bg-teal-700 text-white text-xs font-bold rounded-lg hover:bg-teal-800 disabled:opacity-40"
+                className="px-4 py-2 bg-brand text-white text-xs font-bold rounded-xs hover:bg-brand disabled:opacity-40"
               >
                 {kbSaving ? "Saving..." : "Publish to KB"}
               </button>

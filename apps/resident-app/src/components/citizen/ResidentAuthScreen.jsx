@@ -80,29 +80,29 @@ export default function ResidentAuthScreen({
         <div className="max-w-sm mx-auto w-full space-y-6">
           <Wordmark size="md" />
 
-          <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl w-fit text-teal-700">
+          <div className="p-3 bg-brand-wash border border-brand-edge rounded-xs w-fit text-brand">
             <MailCheck className="w-6 h-6" />
           </div>
 
           <div className="space-y-2">
-            <h1 className="text-lg font-bold text-saro-ink">Confirm your email</h1>
-            <p className="text-sm text-saro-secondary leading-relaxed">
-              We sent a link to <span className="font-mono font-semibold text-saro-ink">{email}</span>.
+            <h1 className="text-lg font-bold text-ink">Confirm your email</h1>
+            <p className="text-sm text-ink-muted leading-relaxed">
+              We sent a link to <span className="font-mono font-semibold text-ink">{email}</span>.
               Open it to finish setting up your account.
             </p>
-            <p className="text-xs text-saro-secondary leading-relaxed">
+            <p className="text-xs text-ink-muted leading-relaxed">
               You can keep using SARO without an account in the meantime. Reporting an
               emergency never requires signing in.
             </p>
           </div>
 
           {notice && (
-            <p className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-brand bg-brand-wash border border-brand-edge rounded-xs px-3 py-2">
               {notice}
             </p>
           )}
           {error && (
-            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-alert bg-alert-wash border border-alert rounded-xs px-3 py-2">
               {error}
             </p>
           )}
@@ -112,14 +112,14 @@ export default function ResidentAuthScreen({
               type="button"
               onClick={handleResend}
               disabled={busy}
-              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-saro-ink text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
+              className="w-full py-2.5 bg-sunken hover:bg-line text-ink text-xs font-bold rounded-xs transition-colors disabled:opacity-50"
             >
               {busy ? "Sending…" : "Resend confirmation email"}
             </button>
             <button
               type="button"
               onClick={onCancel}
-              className="w-full py-2.5 text-xs font-bold text-saro-secondary hover:text-saro-ink transition-colors"
+              className="w-full py-2.5 text-xs font-bold text-ink-muted hover:text-ink transition-colors"
             >
               Continue without an account
             </button>
@@ -138,7 +138,7 @@ export default function ResidentAuthScreen({
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1.5 text-xs font-semibold text-saro-secondary hover:text-saro-ink transition-colors -ml-1"
+            className="flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink transition-colors -ml-1"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             Back
@@ -150,16 +150,16 @@ export default function ResidentAuthScreen({
         {/* Shown when a guest hit the non-urgent submit wall, so the prompt
             explains itself instead of appearing out of nowhere. */}
         {reason && (
-          <p className="text-xs text-saro-ink bg-saro-primary-light border border-teal-200 rounded-xl px-3 py-2.5 leading-relaxed">
+          <p className="text-xs text-ink bg-brand-wash border border-brand-edge rounded-xs px-3 py-2.5 leading-relaxed">
             {reason}
           </p>
         )}
 
         <div className="space-y-1.5">
-          <h1 className="text-lg font-bold text-saro-ink">
+          <h1 className="text-lg font-bold text-ink">
             {isSignUp ? "Create a resident account" : "Sign in"}
           </h1>
-          <p className="text-sm text-saro-secondary leading-relaxed">
+          <p className="text-sm text-ink-muted leading-relaxed">
             Keeps your report history if you change or lose your phone. Emergency
             reports never need an account.
           </p>
@@ -168,17 +168,17 @@ export default function ResidentAuthScreen({
         <form onSubmit={handleSubmit} className="space-y-3">
           {isSignUp && (
             <label className="block">
-              <span className="text-[11px] font-bold text-saro-secondary uppercase tracking-wider">
+              <span className="t-label font-bold text-ink-muted uppercase tracking-wider">
                 Full name
               </span>
-              <div className="mt-1 flex items-center gap-2 border border-saro-line rounded-xl px-3 py-2.5 focus-within:border-saro-primary transition-colors">
-                <User className="w-4 h-4 text-saro-secondary shrink-0" aria-hidden="true" />
+              <div className="mt-1 flex items-center gap-2 border border-line rounded-xs px-3 py-2.5 focus-within:border-brand transition-colors">
+                <User className="w-4 h-4 text-ink-muted shrink-0" aria-hidden="true" />
                 <input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   autoComplete="name"
-                  className="w-full text-sm text-saro-ink outline-none bg-transparent"
+                  className="w-full text-sm text-ink outline-none bg-transparent"
                   placeholder="Juan dela Cruz"
                 />
               </div>
@@ -186,41 +186,41 @@ export default function ResidentAuthScreen({
           )}
 
           <label className="block">
-            <span className="text-[11px] font-bold text-saro-secondary uppercase tracking-wider">
+            <span className="t-label font-bold text-ink-muted uppercase tracking-wider">
               Email
             </span>
-            <div className="mt-1 flex items-center gap-2 border border-saro-line rounded-xl px-3 py-2.5 focus-within:border-saro-primary transition-colors">
-              <Mail className="w-4 h-4 text-saro-secondary shrink-0" aria-hidden="true" />
+            <div className="mt-1 flex items-center gap-2 border border-line rounded-xs px-3 py-2.5 focus-within:border-brand transition-colors">
+              <Mail className="w-4 h-4 text-ink-muted shrink-0" aria-hidden="true" />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                className="w-full text-sm text-saro-ink outline-none bg-transparent"
+                className="w-full text-sm text-ink outline-none bg-transparent"
                 placeholder="you@example.com"
               />
             </div>
           </label>
 
           <label className="block">
-            <span className="text-[11px] font-bold text-saro-secondary uppercase tracking-wider">
+            <span className="t-label font-bold text-ink-muted uppercase tracking-wider">
               Password
             </span>
-            <div className="mt-1 flex items-center gap-2 border border-saro-line rounded-xl px-3 py-2.5 focus-within:border-saro-primary transition-colors">
-              <Lock className="w-4 h-4 text-saro-secondary shrink-0" aria-hidden="true" />
+            <div className="mt-1 flex items-center gap-2 border border-line rounded-xs px-3 py-2.5 focus-within:border-brand transition-colors">
+              <Lock className="w-4 h-4 text-ink-muted shrink-0" aria-hidden="true" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={isSignUp ? "new-password" : "current-password"}
-                className="w-full text-sm text-saro-ink outline-none bg-transparent"
+                className="w-full text-sm text-ink outline-none bg-transparent"
                 placeholder={isSignUp ? `At least ${MIN_PASSWORD_LENGTH} characters` : ""}
               />
             </div>
           </label>
 
           {error && (
-            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-alert bg-alert-wash border border-alert rounded-xs px-3 py-2">
               {error}
             </p>
           )}
@@ -237,15 +237,15 @@ export default function ResidentAuthScreen({
             setMode(isSignUp ? "sign-in" : "sign-up");
             setError("");
           }}
-          className="w-full text-xs font-semibold text-saro-primary hover:underline"
+          className="w-full text-xs font-semibold text-brand hover:underline"
         >
           {isSignUp ? "I already have an account" : "Create a resident account"}
         </button>
 
-        <div className="pt-4 border-t border-saro-line space-y-2">
-          <div className="flex items-start gap-2 text-saro-secondary">
-            <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" aria-hidden="true" />
-            <p className="text-[11px] leading-relaxed">
+        <div className="pt-4 border-t border-line space-y-2">
+          <div className="flex items-start gap-2 text-ink-muted">
+            <ShieldCheck className="w-4 h-4 text-brand shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="t-label leading-relaxed">
               An account is never required to report an emergency. Panic and urgent
               reports stay anonymous and work signed out.
             </p>
@@ -254,7 +254,7 @@ export default function ResidentAuthScreen({
             <button
               type="button"
               onClick={onCancel}
-              className="w-full py-2 text-xs font-bold text-saro-secondary hover:text-saro-ink transition-colors"
+              className="w-full py-2 text-xs font-bold text-ink-muted hover:text-ink transition-colors"
             >
               Continue without an account
             </button>

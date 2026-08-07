@@ -1,23 +1,31 @@
 import { useState, useEffect } from "react";
-import { Wifi, WifiOff } from "lucide-react";
+import { WifiOff, Check } from "lucide-react";
 
 /**
- * Floating online/offline connection indicator for the citizen app.
- * Shows a persistent banner when offline, auto-hides when online.
+ * Offline banner.
+ *
+ * Deliberately a plain ink bar, not an alarm. Losing signal in Legazpi during
+ * a typhoon is expected, and the app still works — reports queue locally and
+ * send when the connection returns. Styling this as a warning would spend the
+ * user's alarm budget on something that is not going wrong.
+ *
+ * It takes the full width at the very top so it never covers a control, and it
+ * announces politely rather than assertively: a screen reader should not
+ * interrupt someone mid-Panic to mention the network.
  */
 export default function ConnectionIndicator() {
   const [isOnline, setIsOnline] = useState(() =>
     typeof navigator !== "undefined" ? navigator.onLine : true
   );
-  const [showOnlineToast, setShowOnlineToast] = useState(false);
+  const [showRestored, setShowRestored] = useState(false);
   const [wasOffline, setWasOffline] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       if (wasOffline) {
-        setShowOnlineToast(true);
-        setTimeout(() => setShowOnlineToast(false), 3000);
+        setShowRestored(true);
+        setTimeout(() => setShowRestored(false), 3000);
       }
     };
     const handleOffline = () => {
@@ -27,36 +35,34 @@ export default function ConnectionIndicator() {
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
   }, [wasOffline]);
 
-  if (isOnline && !showOnlineToast) return null;
+  if (isOnline && !showRestored) return null;
+
+  const offline = !isOnline;
 
   return (
     <div
-      className={`fixed top-0 left-0 right-0 z-[9999] flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold transition-all animate-fade-in ${
-        isOnline
-          ? "bg-saro-green/10 text-saro-green border-b border-saro-green/20"
-          : "bg-saro-amber/10 text-amber-800 border-b border-saro-amber/20"
-      }`}
       role="status"
       aria-live="polite"
+      className="saro-rise flex shrink-0 items-center justify-center gap-2 px-4 py-1.5"
+      style={{
+        background: offline ? "var(--color-ink)" : "var(--color-status-resolved-wash)",
+        color: offline ? "#FFFFFF" : "var(--color-status-resolved-ink)",
+      }}
     >
-      {isOnline ? (
-        <>
-          <Wifi className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>Connection restored — syncing queued reports</span>
-        </>
+      {offline ? (
+        <WifiOff width={13} height={13} aria-hidden="true" />
       ) : (
-        <>
-          <WifiOff className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>You are offline — reports will be saved and submitted when connection returns</span>
-        </>
+        <Check width={13} height={13} aria-hidden="true" />
       )}
+      <span className="t-micro">
+        {offline ? "Offline — reports will send when you reconnect" : "Back online"}
+      </span>
     </div>
   );
 }

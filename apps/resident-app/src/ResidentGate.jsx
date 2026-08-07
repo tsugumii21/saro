@@ -88,24 +88,24 @@ function ResidentGateContent() {
   // 1. Presentation Mode (Simulated 390px Mobile Phone Frame on Desktop)
   if (isPresentationMode) {
     return (
-      <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4 overflow-auto font-sans">
+      <div className="fixed inset-0 bg-ink-strong/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4 overflow-auto font-sans">
         <button
           onClick={() => setIsPresentationMode(false)}
-          className="absolute top-4 right-6 text-xs text-white/80 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 font-semibold"
+          className="absolute top-4 right-6 text-xs text-white/80 hover:text-white bg-ink px-3 py-1.5 rounded-xs border border-ink-muted font-semibold"
         >
           Exit Mobile Preview (Esc / Ctrl+Shift+P)
         </button>
 
         {/* 390x844 Mobile Phone Device Frame */}
-        <div className="w-[390px] h-[844px] bg-slate-900 rounded-[48px] border-[12px] border-slate-800 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col shrink-0 transform-gpu translate-z-0">
+        <div className="w-[390px] h-[844px] bg-ink rounded-[48px] border-[12px] border-ink shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col shrink-0 transform-gpu translate-z-0">
           {/* Phone Top Notch */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-36 h-6 bg-slate-800 rounded-b-2xl z-[500] flex items-center justify-center pointer-events-none">
-            <div className="w-3 h-3 rounded-full bg-slate-950 flex items-center justify-center">
-              <div className="w-1.5 h-1.5 rounded-full bg-slate-700" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-36 h-6 bg-ink rounded-b-2xl z-[500] flex items-center justify-center pointer-events-none">
+            <div className="w-3 h-3 rounded-full bg-ink-strong flex items-center justify-center">
+              <div className="w-1.5 h-1.5 rounded-full bg-ink-muted" />
             </div>
           </div>
           {/* Real 390px Viewport Content */}
-          <div className="w-full h-full relative overflow-hidden bg-slate-50 pt-3 flex flex-col transform-gpu translate-z-0">
+          <div className="w-full h-full relative overflow-hidden bg-raised pt-3 flex flex-col transform-gpu translate-z-0">
             <CitizenShell />
           </div>
         </div>

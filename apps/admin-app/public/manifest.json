@@ -1,0 +1,18 @@
+{
+  "name": "SARO Operations — Legazpi City",
+  "short_name": "SARO Ops",
+  "description": "Dispatch queues, routing and city administration for SARO reports.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#EDF1F6",
+  "theme_color": "#222B38",
+  "categories": ["productivity", "government"],
+  "icons": [
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}

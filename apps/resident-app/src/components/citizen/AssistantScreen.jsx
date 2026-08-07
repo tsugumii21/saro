@@ -41,6 +41,10 @@ export default function AssistantScreen() {
   const inputRef = useRef(null);
   const chipsRef = useRef(null);
   const recognitionRef = useRef(null);
+  // Monotonic message ids. Date.now() during render is an impure read,
+  // and two messages in the same millisecond would collide anyway.
+  const msgSeq = useRef(0);
+  const nextId = (role) => `${role}_${(msgSeq.current += 1)}`;
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -50,7 +54,7 @@ export default function AssistantScreen() {
     const question = text || input.trim();
     if (!question || loading) return;
 
-    const userMsg = { id: `user_${Date.now()}`, role: "user", text: question };
+    const userMsg = { id: nextId('user'), role: "user", text: question };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setLoading(true);
@@ -72,7 +76,7 @@ export default function AssistantScreen() {
     };
 
     const botMsg = {
-      id: `bot_${Date.now()}`,
+      id: nextId('bot'),
       role: "bot",
       text: result.answer,
       isEmergency: result.isEmergency,
@@ -136,7 +140,7 @@ export default function AssistantScreen() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-saro-surface font-sans">
+    <div className="flex flex-col h-full bg-canvas font-sans">
       
       {/* Scrollable Message List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
@@ -148,10 +152,10 @@ export default function AssistantScreen() {
             }`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed ${
+              className={`max-w-[85%] rounded-xs px-4 py-3 text-xs sm:text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-saro-primary text-white rounded-br-none shadow-xs font-medium"
-                  : "bg-white text-saro-ink border border-saro-line rounded-bl-none shadow-xs"
+                  ? "bg-brand text-white rounded-br-none shadow-xs font-medium"
+                  : "bg-white text-ink border border-line rounded-bl-none shadow-xs"
               }`}
             >
               {msg.text}
@@ -159,25 +163,25 @@ export default function AssistantScreen() {
 
             {/* Emergency Hotline Alert overlay for active distress */}
             {msg.isEmergency && (
-              <div className="max-w-[85%] mt-2 bg-red-50 border-2 border-red-300 rounded-xl p-3 text-xs space-y-2 shadow-md">
-                <div className="flex items-center gap-1.5 font-bold text-red-700">
-                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+              <div className="max-w-[85%] mt-2 bg-alert-wash border-2 border-alert rounded-xs p-3 text-xs space-y-2 shadow-md">
+                <div className="flex items-center gap-1.5 font-bold text-alert">
+                  <AlertTriangle className="w-4 h-4 text-alert shrink-0" />
                   <span>EMERGENCY DETECTED ({msg.matchedPhrase})</span>
                 </div>
-                <p className="text-red-700 text-[11px] font-medium leading-normal">
+                <p className="text-alert t-label font-medium leading-normal">
                   If this is a real-time life emergency, call Legazpi 911 or CDRRMO directly:
                 </p>
                 <div className="flex items-center gap-2 pt-1">
                   <a
                     href="tel:911"
-                    className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1 min-h-[36px] shadow-xs"
+                    className="flex-1 py-2 px-3 bg-alert hover:bg-alert text-white font-bold rounded-xs text-center flex items-center justify-center gap-1 min-h-[36px] shadow-xs"
                   >
                     <Phone className="w-3.5 h-3.5" />
                     Call 911
                   </a>
                   <a
                     href="tel:0524801911"
-                    className="flex-1 py-2 px-3 bg-white border border-red-300 text-red-700 hover:bg-red-50 font-bold rounded-lg text-center min-h-[36px] flex items-center justify-center"
+                    className="flex-1 py-2 px-3 bg-white border border-alert text-alert hover:bg-alert-wash font-bold rounded-xs text-center min-h-[36px] flex items-center justify-center"
                   >
                     (052) 480-1911
                   </a>
@@ -189,8 +193,8 @@ export default function AssistantScreen() {
 
         {loading && (
           <div className="flex items-start">
-            <div className="bg-white text-saro-secondary border border-saro-line rounded-2xl rounded-bl-none px-4 py-3 text-xs flex items-center gap-2 shadow-xs">
-              <Bot className="w-4 h-4 text-saro-primary animate-pulse" />
+            <div className="bg-white text-ink-muted border border-line rounded-xs rounded-bl-none px-4 py-3 text-xs flex items-center gap-2 shadow-xs">
+              <Bot className="w-4 h-4 text-brand animate-pulse" />
               <span>SARO AI is thinking...</span>
             </div>
           </div>
@@ -200,7 +204,7 @@ export default function AssistantScreen() {
       </div>
 
       {/* Quick Prompt Chips */}
-      <div className="border-t border-saro-line bg-white/80 backdrop-blur px-3 py-2 shrink-0">
+      <div className="border-t border-line bg-white/80 backdrop-blur px-3 py-2 shrink-0">
         <div className="relative">
           <div
             ref={chipsRef}
@@ -211,7 +215,7 @@ export default function AssistantScreen() {
                 key={i}
                 onClick={() => handleSend(prompt.text)}
                 disabled={loading}
-                className="shrink-0 px-3 py-1.5 rounded-full bg-white border border-saro-line text-[11px] font-semibold text-saro-ink hover:border-saro-primary/40 hover:bg-saro-primary-light active:bg-teal-100 transition-colors whitespace-nowrap disabled:opacity-50 min-h-[32px]"
+                className="shrink-0 px-3 py-1.5 rounded-full bg-white border border-line t-label font-semibold text-ink hover:border-brand/40 hover:bg-brand-wash active:bg-brand-wash transition-colors whitespace-nowrap disabled:opacity-50 min-h-[32px]"
               >
                 {prompt.label}
               </button>
@@ -221,18 +225,18 @@ export default function AssistantScreen() {
       </div>
 
       {/* Input Bar with Voice Message Icon Button */}
-      <div className="border-t border-saro-line bg-white px-3.5 py-2.5 shrink-0">
+      <div className="border-t border-line bg-white px-3.5 py-2.5 shrink-0">
         
         {/* Pulsing Voice Recording Indicator */}
         {isRecording && (
-          <div className="mb-2 text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1 rounded-full flex items-center justify-between animate-pulse">
+          <div className="mb-2 t-label font-bold text-alert bg-alert-wash border border-alert px-3 py-1 rounded-full flex items-center justify-between animate-pulse">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-alert animate-ping" />
               Listening... Speak now (Bikol / Tagalog / English)
             </span>
             <button
               onClick={toggleVoiceRecording}
-              className="text-[10px] bg-red-200 text-red-900 px-2 py-0.5 rounded uppercase font-extrabold"
+              className="t-micro bg-alert text-alert px-2 py-0.5 rounded uppercase font-extrabold"
             >
               Stop
             </button>
@@ -245,10 +249,10 @@ export default function AssistantScreen() {
           <button
             type="button"
             onClick={toggleVoiceRecording}
-            className={`p-2.5 rounded-xl border transition-all min-w-[44px] min-h-[44px] flex items-center justify-center ${
+            className={`p-2.5 rounded-xs border transition-all min-w-[44px] min-h-[44px] flex items-center justify-center ${
               isRecording
-                ? "bg-red-600 text-white border-red-700 animate-pulse shadow-md"
-                : "bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-700 border-slate-200 hover:border-teal-300"
+                ? "bg-alert text-white border-alert animate-pulse shadow-md"
+                : "bg-sunken hover:bg-brand-wash text-ink-muted hover:text-brand border-line hover:border-brand-edge"
             }`}
             title={isRecording ? "Stop recording" : "Voice Message / Dictation"}
             aria-label="Voice Message"
@@ -266,7 +270,7 @@ export default function AssistantScreen() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={isRecording ? "Listening to your voice..." : "Ask about city services..."}
-            className="flex-1 text-xs sm:text-sm py-2.5 px-3.5 rounded-xl border border-saro-line bg-saro-mist text-saro-ink placeholder:text-saro-secondary focus:ring-2 focus:ring-saro-primary focus:border-saro-primary"
+            className="flex-1 text-xs sm:text-sm py-2.5 px-3.5 rounded-xs border border-line bg-raised text-ink placeholder:text-ink-muted focus:ring-2 focus:ring-brand focus:border-brand"
             disabled={loading}
             aria-label="Ask a question"
           />
@@ -275,7 +279,7 @@ export default function AssistantScreen() {
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="p-2.5 bg-saro-primary text-white rounded-xl active:bg-saro-primary-hover disabled:opacity-40 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
+            className="p-2.5 bg-brand text-white rounded-xs active:bg-brand-mid disabled:opacity-40 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
             aria-label="Send message"
           >
             <Send className="w-4 h-4" />
@@ -285,7 +289,7 @@ export default function AssistantScreen() {
         {/* Standing CTA */}
         <button
           onClick={() => navigate("/report")}
-          className="w-full mt-2 flex items-center justify-center gap-1.5 text-[11px] text-saro-primary font-semibold hover:underline py-0.5"
+          className="w-full mt-2 flex items-center justify-center gap-1.5 t-label text-brand font-semibold hover:underline py-0.5"
         >
           <PlusCircle className="w-3.5 h-3.5" aria-hidden="true" />
           Or file a report directly

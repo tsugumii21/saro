@@ -32,12 +32,32 @@ port = 54324
 
 [storage]
 enabled = true
-# Report photos are compressed to ~1280px JPEG client-side before upload.
-file_size_limit = "10MiB"
+# Project-wide ceiling, left at the platform default on purpose.
+#
+# The limit that actually binds is on the bucket: `report-photos` is created
+# with a 10MiB cap and an image-only mime allowlist in migration 06, and that is
+# the one a resident's upload is checked against. Lowering the project ceiling
+# here bought nothing and made `supabase config push` attempt a storage update
+# that the free tier answers with 402 (it carries a vector-bucket field the plan
+# does not include), which aborted the push before it finished.
+file_size_limit = "50MiB"
 
 [auth]
 enabled = true
 # Residents are the public-facing signup, so confirmation mail returns there.
+#
+# ⚠ DEPLOY BLOCKER — site_url is deliberately still localhost.
+#
+# There is no deployed domain yet, and a guessed one would be worse than an
+# obviously-local one: it would look configured while quietly sending every
+# resident a dead confirmation link. Confirmation and password-reset links are
+# both built from site_url, so until this changes, those emails only work on the
+# machine running `npm run dev:resident`.
+#
+# On deploy: set site_url to the resident app's real origin, add it to
+# additional_redirect_urls, and `supabase config push` again. The admin app
+# never appears here — staff accounts are created by an admin and never receive
+# a confirmation link.
 site_url = "http://localhost:5173"
 additional_redirect_urls = ["http://localhost:5173", "http://localhost:5174"]
 jwt_expiry = 3600
@@ -57,6 +77,18 @@ double_confirm_changes = true
 # Residents must confirm their address before the account works. Without this,
 # anyone could register someone else's email and receive their report updates.
 enable_confirmations = true
+
+# Both of these are stated explicitly because they are NOT the CLI's defaults.
+# The first push silently relaxed them: max_frequency went 1m0s -> 1s and
+# otp_length went 8 -> 6, because an unset key pushes the CLI default over
+# whatever the project had.
+#
+# max_frequency is the floor between two emails to the same address. At 1s, one
+# address can be used to pump Gmail's daily quota dry in a couple of minutes and
+# nobody else can register for the rest of the day. 60s costs a real user
+# nothing — they are reading their inbox, not re-requesting.
+max_frequency = "60s"
+otp_length = 8
 
 # Custom SMTP via Gmail.
 #

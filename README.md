@@ -96,20 +96,41 @@ Push the config with both values in the environment. They are read at push time
 and never written to a file:
 
 ```bash
-export SARO_SMTP_USER='saro.legazpi@gmail.com'
-export SARO_SMTP_PASSWORD='abcdefghijklmnop'
+export SARO_SMTP_USER='kimadrianpdeguzman@gmail.com'
+export SARO_SMTP_PASSWORD='<16-char app password, spaces removed>'
 supabase config push
 ```
 
 Free Gmail allows roughly 500 recipients a day and throttles well below that per
-hour. `[auth.rate_limit] email_sent = 30` sits under it deliberately: enough for
-real signups, not enough for someone to burn the daily quota and lock everyone
+hour. Two limits keep SARO under it: `[auth.rate_limit] email_sent = 30` caps
+the project per hour, and `[auth.email] max_frequency = "60s"` caps how often a
+single address can trigger one. Both are stated explicitly in `config.toml`
+because an unset key pushes the CLI's default over whatever the project had —
+the first push silently relaxed `max_frequency` from `1m0s` to `1s`, which is
+enough for one address to drain the daily quota in minutes and lock everyone
 else out of registering.
 
-**Before launch:** `site_url` and `additional_redirect_urls` in `config.toml`
-still point at `localhost`. Confirmation links are built from `site_url`, so
-they must be changed to the deployed resident-app domain or every confirmation
-email will send residents to a dead link.
+The project-wide `[storage] file_size_limit` is likewise left at the platform
+default. Lowering it made `config push` attempt a storage update that the free
+tier answers with `402 … upgrade the project to enable vector buckets`, aborting
+the push. The limit that actually applies to uploads is on the `report-photos`
+bucket (10MiB, images only), set in migration 06.
+
+### Known sender caveat
+
+Mail currently sends from a personal Gmail address, so residents see
+confirmation email from a person rather than from the city, and replies land in
+that personal inbox. Moving to a dedicated `saro.*@gmail.com` is a config change
+and a new App Password — nothing in the code refers to the address.
+
+### Deploy blocker
+
+`site_url` and `additional_redirect_urls` still point at `localhost`. That is
+deliberate rather than forgotten: there is no deployed domain yet, and a guessed
+one would look configured while sending every resident a dead link. Confirmation
+and password-reset links are both built from `site_url`, so until it changes
+those emails only work on the machine running `npm run dev:resident`. Update it
+and push again as part of the deploy step.
 
 ## Current state
 

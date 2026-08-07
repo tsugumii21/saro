@@ -42,12 +42,48 @@ export {
   resolveGapLogEntry,
   // panic
   registerPanicFlag,
+  // resident closure actions
+  confirmReport,
+  disputeReport,
   // profiles
   getProfile,
 } from "./api/index.js";
 
-/* ── Assistant (gemini-proxy Edge Function) ──────────────────────────────── */
-export { askAssistant, structureDescription } from "./api/assistant.js";
+/* ── AI (gemini-proxy Edge Function) ─────────────────────────────────────────
+ * One client, two modes. Describe's structuring call and the public assistant
+ * share it rather than each holding their own integration.
+ */
+export { askAssistant, structureDescription } from "./api/proxy.js";
+
+/* ── Emergency detection (runs in the browser, before any network call) ──── */
+export {
+  detectEmergencyInDescription,
+  checkEmergencyTripwire,
+  EMERGENCY_KEYWORDS,
+} from "./emergency.js";
+
+/* ── Offline queue and device-local report list ──────────────────────────── */
+export {
+  enqueueReport,
+  listOutbox,
+  outboxCount,
+  removeFromOutbox,
+  rememberReport,
+  listRememberedReports,
+  forgetReport,
+  updateRememberedStatus,
+  setSyncConfig,
+} from "./offline/db.js";
+export { flushOutbox, startOutboxSync, requestBackgroundSync } from "./offline/sync.js";
+
+/* ── Web Push ────────────────────────────────────────────────────────────── */
+export {
+  pushSupported,
+  pushPermission,
+  subscribeToPush,
+  unsubscribeFromPush,
+  currentPushSubscription,
+} from "./push.js";
 
 /* ── Realtime ────────────────────────────────────────────────────────────── */
 export { saroEvents, REALTIME_EVENTS } from "./api/events.js";

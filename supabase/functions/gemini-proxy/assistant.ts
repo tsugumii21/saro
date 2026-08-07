@@ -123,12 +123,36 @@ You must answer the user's question ONLY using the official Knowledge Base entri
 
 RULES:
 1. Tone: Plain, calm, direct public service. NO marketing tone, NO exclamation marks, NO celebratory text.
-2. If you find a matching entry in the Knowledge Base, answer clearly. DO NOT include any doc ID tag or brackets in your response text.
-3. If the question CANNOT be answered from the Knowledge Base, DO NOT guess or invent facts. State clearly that the information is not in the knowledge base and recommend the most relevant Legazpi City office to contact (e.g. CDRRMO, Legazpi 911, City Engineering Office, BFP, PNP, CHO, PSO, Coast Guard).
-4. Respond in the same language as the user (English, Tagalog, or Bikol).
+2. If a Knowledge Base entry answers the question, answer from it, and set "doc_id" to that entry's exact id and "answered" to true.
+3. If NO entry answers the question, you MUST set "answered" to false and "doc_id" to null. Do not guess, do not infer, do not combine entries into a new fact, and do not state a phone number, address, office hour or procedure that is not written in an entry. In "answer", say plainly that this is not in the city's published guidance and name the most relevant Legazpi City office to contact (CDRRMO, Legazpi 911, City Engineering Office, BFP, PNP, CHO, PSO, Coast Guard).
+4. A partially relevant entry is NOT an answer. If the entry does not contain the specific fact asked for, "answered" is false.
+5. Respond in the same language as the user (English, Tagalog, or Bikol).
 
 KNOWLEDGE BASE:
 ${JSON.stringify(KB, null, 2)}`;
+
+/**
+ * Structured output, because the old contract was self-contradictory.
+ *
+ * The prompt used to tell the model NOT to emit a doc id, and the code then
+ * parsed the reply for `[doc_xxx]` tags. It never found one — so matchedDocId
+ * was null on every Gemini answer, no answer was ever cited to a document, and
+ * the gap log recorded everything as answered because it fell back to "did not
+ * use the local fallback" as its test.
+ *
+ * With a schema the model states which entry it used and whether it could
+ * answer at all, so a citation is a fact the model asserted rather than
+ * something scraped out of prose.
+ */
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    answer: { type: "STRING" },
+    doc_id: { type: "STRING", nullable: true },
+    answered: { type: "BOOLEAN" },
+  },
+  required: ["answer", "answered"],
+};
 
 export async function askAssistant(question: string): Promise<AssistantResult> {
   const emergency = checkEmergencyTripwire(question);
@@ -151,22 +175,39 @@ export async function askAssistant(question: string): Promise<AssistantResult> {
     const raw = await generate({
       systemInstruction: SYSTEM_PROMPT,
       userText: question,
-      config: { temperature: 0.2, maxOutputTokens: 800 },
+      config: {
+        temperature: 0.2,
+        maxOutputTokens: 800,
+        responseMimeType: "application/json",
+        responseSchema: RESPONSE_SCHEMA,
+      },
     });
 
-    // The model is told not to emit doc tags, but strip them if it does.
-    const docMatch = raw.match(/\[(doc_[a-z0-9_]+)\]/i);
-    const answer = raw.replace(/\s*\[doc_[a-z0-9_]+\]/gi, "").trim();
-    const matchedDocId = docMatch ? docMatch[1] : null;
+    const parsed = JSON.parse(raw) as {
+      answer?: string;
+      doc_id?: string | null;
+      answered?: boolean;
+    };
+
+    // A doc id the model invented is treated as no citation at all. The
+    // knowledge base is the authority on what exists in it, not the model.
+    const entry = parsed.doc_id ? KB.find((e) => e.id === parsed.doc_id) : undefined;
+    const matchedDocId = entry?.id ?? null;
+
+    // Grounded means: the model said it answered AND named an entry that really
+    // exists. Either half missing makes this an unanswered question, which is
+    // what the gap log is for. Claiming a citation SARO cannot verify would be
+    // worse than admitting there is none.
+    const grounded = parsed.answered === true && matchedDocId !== null;
 
     return {
       mode: "assistant",
       isEmergency: false,
-      answer,
+      answer: (parsed.answer ?? "").trim(),
       matchedDocId,
-      source: matchedDocId ? (KB.find((e) => e.id === matchedDocId)?.source ?? null) : null,
-      isFallback: false,
-      topicCluster: matchedDocId ? (KB.find((e) => e.id === matchedDocId)?.category ?? null) : null,
+      source: entry?.source ?? null,
+      isFallback: !grounded,
+      topicCluster: entry?.category ?? null,
     };
   } catch (err) {
     console.error("Gemini assistant call failed, using local knowledge base:", (err as GeminiError).message);

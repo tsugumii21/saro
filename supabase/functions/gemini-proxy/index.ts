@@ -116,9 +116,16 @@ Deno.serve(async (request) => {
 
       const result = await askAssistant(question);
 
-      // An answer that came from the local fallback with no matched document
-      // is exactly the gap the admin viewer is meant to surface.
-      const wasAnswered = !result.isFallback || result.matchedDocId !== null;
+      // Answered means grounded in a real published document — nothing weaker.
+      //
+      // This used to be `!isFallback || matchedDocId !== null`, which counted
+      // every Gemini reply as answered because isFallback was only ever set by
+      // the local fallback path. A fluent "please contact the City Health
+      // Office" with no document behind it therefore never reached the gap log,
+      // which is precisely the question staff needed to see. The emergency
+      // tripwire is excluded too: redirecting somebody to 911 is the right
+      // response, not a documentation gap.
+      const wasAnswered = result.matchedDocId !== null && result.matchedDocId !== "emergency_tripwire";
       await logToGapLog(question, wasAnswered, result.matchedDocId, result.topicCluster, deviceId);
 
       return jsonResponse(request, result);

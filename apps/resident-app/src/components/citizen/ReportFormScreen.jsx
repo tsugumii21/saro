@@ -4,19 +4,21 @@ import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-lea
 import L from "leaflet";
 import {
   AlertTriangle, MapPin, Navigation, Camera, Mic, MicOff,
-  Send, ChevronDown, Phone, Users, CheckCircle2, Copy, X, Plus, WifiOff, Search, Check,
+  Send, ChevronDown, Phone, Users, CheckCircle2, X, Plus, WifiOff, Search, Check,
   Waves, Mountain, Wind, Ambulance, Car, Flame, Wrench, ShieldAlert, Droplets, Anchor,
-  Lock, DoorOpen
+  Lock, DoorOpen, Sparkles
 } from "lucide-react";
 import { booleanPointInPolygon, point } from "@turf/turf";
 import {
   getCategories, getBarangays, getOffices, createReport, addReportMedia,
-  validateReportDraft, LEGAZPI_CENTER, CLIENT_STORAGE_KEYS, useAuth
+  validateReportDraft, LEGAZPI_CENTER, CLIENT_STORAGE_KEYS, useAuth,
+  structureDescription, detectEmergencyInDescription,
+  enqueueReport, removeFromOutbox, rememberReport, requestBackgroundSync,
 } from "@saro/shared";
 import ResidentAuthScreen from "./ResidentAuthScreen";
+import ReportTicket from "./ReportTicket";
 
 const LEGAZPI_BOUNDS = { minLat: 13.10, maxLat: 13.20, minLng: 123.70, maxLng: 123.78 };
-const OFFLINE_QUEUE_KEY = CLIENT_STORAGE_KEYS.OFFLINE_QUEUE;
 
 function getDeviceFingerprint() {
   let fp = localStorage.getItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
@@ -102,18 +104,12 @@ function FlyTo({ position }) {
   return null;
 }
 
-// Offline queue helpers
-function getOfflineQueue() {
-  try {
-    return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || "[]");
-  } catch { return []; }
-}
-
-function saveToOfflineQueue(payload) {
-  const queue = getOfflineQueue();
-  queue.push({ ...payload, queued_at: new Date().toISOString() });
-  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-}
+// The localStorage offline queue that used to live here is gone. It could not
+// survive being closed mid-storm — nothing ever retried it, there was no
+// service worker to drain it, and a queued report simply sat in a string until
+// somebody happened to reopen the app on the same browser. Reports now go to
+// IndexedDB via enqueueReport() and are delivered by background sync. See
+// packages/shared/src/offline/.
 
 export default function ReportFormScreen() {
   const navigate = useNavigate();
@@ -164,9 +160,26 @@ export default function ReportFormScreen() {
 
   // Speech recognition state
   const [isListening, setIsListening] = useState(false);
+  const [speechLang, setSpeechLang] = useState("en-PH");
   const recognitionRef = useRef(null);
   const speechSupported = typeof window !== "undefined" &&
     (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  // Describe-flow structuring
+  const [analysing, setAnalysing] = useState(false);
+  const [aiResult, setAiResult] = useState(null);
+  const [aiDismissed, setAiDismissed] = useState(false);
+
+  /**
+   * The emergency fast-track, decided in this browser, on every keystroke.
+   *
+   * This is the check that governs. It is synchronous, costs nothing, and runs
+   * whether or not the Edge Function is reachable — so somebody typing "may
+   * sunog sa kanto" is on the anonymous path before any request is made, and
+   * stays there if Gemini is down, rate-limited, or slow. The AI result can
+   * only ever add to this, never subtract from it.
+   */
+  const keywordEmergency = detectEmergencyInDescription(description);
 
   // Online/offline detection
   useEffect(() => {
@@ -202,7 +215,19 @@ export default function ReportFormScreen() {
   // An emergency category is filed anonymously by anyone, always. Note this is
   // computed, not stored in state and not asserted anywhere in the UI while the
   // form is being filled — the guest only ever meets it at submit.
-  const isEmergencyReport = Boolean(selectedCategory?.is_emergency);
+  //
+  // Three independent signals, OR'd. Any one of them opens the anonymous path:
+  //
+  //   the chosen category is an emergency one
+  //   the resident's own words contain an emergency keyword  (browser, instant)
+  //   the model classified it as an emergency                (network, optional)
+  //
+  // The order matters for what happens when things break. The first two need
+  // nothing but the device. Only the third can fail, and it can only ever add.
+  const isEmergencyReport =
+    Boolean(selectedCategory?.is_emergency) ||
+    Boolean(keywordEmergency) ||
+    Boolean(aiResult?.isEmergency);
 
   // Guests must sign in for standard reports only.
   const needsAccount = isGuest && Boolean(selectedCategory) && !isEmergencyReport;
@@ -277,8 +302,45 @@ export default function ReportFormScreen() {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
+  /**
+   * Ask the Edge Function to turn what was typed or spoken into a category and
+   * a dispatcher summary.
+   *
+   * Nothing here is applied silently. The suggestion lands in the form as a
+   * pre-selection the resident can see and change, which is the difference
+   * between a helpful guess and a misrouted report: a wrong category costs one
+   * tap to fix, and if it were auto-filed it would cost an office a day.
+   *
+   * Failure is not an error state. A timeout or a rate limit leaves the person
+   * with the form they already had, plus a note explaining they can carry on by
+   * hand — because they always could.
+   */
+  const analyseDescription = async () => {
+    const text = description.trim();
+    if (text.length < 8) return;
+
+    setAnalysing(true);
+    setAiDismissed(false);
+
+    const result = await structureDescription(text);
+    setAiResult(result);
+
+    // Only pre-select when the model actually matched a real category and said
+    // it was confident. A low-confidence guess pushed into the picker looks
+    // like a decision the resident made.
+    if (result.category && result.confidence === "high") {
+      const match = categories.find((c) => c.id === result.category);
+      if (match) {
+        setSelectedCategoryId(match.id);
+        setValidationErrors((prev) => ({ ...prev, category: "" }));
+      }
+    }
+
+    setAnalysing(false);
+  };
+
   // Web Speech API
-  const toggleSpeech = () => {
+  const toggleSpeech = (lang) => {
     if (!speechSupported) return;
     if (isListening) {
       recognitionRef.current?.stop();
@@ -287,7 +349,12 @@ export default function ReportFormScreen() {
     }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.lang = "en-PH";
+    // Bikol has no speech model anywhere, so Bikol speakers get the Tagalog
+    // recogniser: the phonology is close enough that most of a sentence comes
+    // through, and a rough transcript the resident can correct beats no voice
+    // input at all. The written flow accepts Bikol properly, and the Edge
+    // Function reads all three languages.
+    recognition.lang = lang ?? speechLang;
     recognition.interimResults = false;
     recognition.continuous = false;
     recognition.onresult = (event) => {
@@ -343,9 +410,16 @@ export default function ReportFormScreen() {
       device_fingerprint: getDeviceFingerprint()
     };
 
-    // Offline queuing
+    // The report is written to IndexedDB before the network is touched, every
+    // time — not only when `navigator.onLine` says we are offline. onLine is a
+    // notoriously optimistic signal: it reports true behind a captive portal,
+    // on a connected-but-dead cell, and on a phone that has just walked into a
+    // parking structure. Queueing unconditionally means a request that dies
+    // halfway is indistinguishable from one that never started.
+    const queueId = await enqueueReport(payload, { kind: "describe" });
+    requestBackgroundSync();
+
     if (!isOnline) {
-      saveToOfflineQueue(payload);
       setOfflineQueued(true);
       setSubmitting(false);
       return;
@@ -353,13 +427,25 @@ export default function ReportFormScreen() {
 
     const { data, error } = await createReport(payload);
 
-    if (error) {
+    if (error || !data) {
+      // Still queued, so this is a delay rather than a loss, and it is worded
+      // as one.
+      setOfflineQueued(true);
       setSubmitting(false);
       return;
     }
 
+    await removeFromOutbox(queueId);
+    await rememberReport({
+      tracking_code: data.tracking_code,
+      category: data.category,
+      status: data.status,
+      kind: "describe",
+      created_at: data.created_at,
+    });
+
     // Save photo evidence if attached
-    if (photos.length > 0 && data) {
+    if (photos.length > 0) {
       await Promise.all(photos.map((photo) => addReportMedia(data.id, photo, "evidence")));
     }
 
@@ -391,100 +477,85 @@ export default function ReportFormScreen() {
     );
   }
 
+  const clearForm = () => {
+    setSubmitted(null);
+    setOfflineQueued(false);
+    setSelectedCategoryId("");
+    setDescription("");
+    setCoords(null);
+    setBarangayId("");
+    setPhotos([]);
+    setCallbackNumber("");
+    setIsProxy(false);
+    setValidationErrors({});
+    setAiResult(null);
+    setAiDismissed(false);
+  };
+
+  /* ── Queued: the report exists, it just has not arrived yet ────────────── */
   if (offlineQueued) {
     return (
-      <div className="px-4 py-6 max-w-md mx-auto">
-        <div className="bg-white rounded-xs border border-line p-5">
-          <div className="flex items-center gap-2 text-status-assigned-tab font-semibold text-base mb-3">
-            <WifiOff className="w-5 h-5" />
-            Report saved offline
-          </div>
-          <p className="text-sm text-ink-muted mb-4">
-            Your report has been saved locally and will be automatically submitted once your connection returns. You'll receive a tracking code after it syncs.
+      <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-6">
+        <div className="saro-clip saro-card p-5" style={{ borderColor: "var(--color-ink)" }}>
+          <span className="t-label flex items-center gap-2 text-ink-faint">
+            <WifiOff width={14} height={14} aria-hidden="true" />
+            Waiting to send
+          </span>
+          <h1 className="t-heading mt-2">Your report is saved on this phone</h1>
+          <p className="t-body-sm mt-2 text-ink-muted">
+            It is stored on the device, not lost. SARO keeps trying and sends it the moment
+            signal returns — you do not have to leave this app open, and you do not have to
+            do anything.
           </p>
-          <div className="bg-status-assigned-tab/10 border border-status-assigned-tab/30 rounded-xs px-4 py-3 text-xs text-status-assigned-ink font-medium mb-4">
-            Pending sync — {getOfflineQueue().length} report(s) queued
-          </div>
-          <button
-            onClick={() => {
-              setOfflineQueued(false);
-              setSelectedCategoryId("");
-              setDescription("");
-              setCoords(null);
-              setPhotos([]);
-              setCallbackNumber("");
-              setIsProxy(false);
-            }}
-            className="saro-btn-primary w-full"
-          >
-            File another report
-          </button>
+          <p className="t-body-sm mt-3 text-ink-muted">
+            A tracking code is issued when it reaches the city. It will appear under
+            <strong className="font-bold"> Check a report</strong> as soon as it does.
+          </p>
         </div>
+
+        <button type="button" onClick={clearForm} className="saro-btn saro-btn-primary saro-btn-lg saro-btn-block">
+          File another report
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/track")}
+          className="saro-btn saro-btn-ghost saro-btn-block"
+        >
+          Go to Check a report
+        </button>
       </div>
     );
   }
 
-  // Success confirmation screen
+  /* ── Filed ─────────────────────────────────────────────────────────────── */
   if (submitted) {
     return (
-      <div className="px-4 py-6 max-w-md mx-auto">
-        <div className="bg-white rounded-xs border border-line p-5">
-          <div className="flex items-center gap-2 text-brand font-semibold text-base mb-3">
-            <CheckCircle2 className="w-5 h-5" />
-            Report received
-          </div>
-
-          <p className="text-sm text-ink-muted mb-2">
-            Your report has been logged and will be routed to the appropriate office.
+      <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-6">
+        <div>
+          <span className="saro-stamp">Report received</span>
+          <p className="t-body mt-3 text-ink-muted">
+            {getAssignedOfficeName()
+              ? `Routed to ${getAssignedOfficeName()}. Keep this code — it is how you check what happens next.`
+              : "Keep this code — it is how you check what happens next."}
           </p>
-          {getAssignedOfficeName() && (
-            <p className="text-xs text-brand font-semibold mb-4">
-              Assigned to: {getAssignedOfficeName()}
-            </p>
-          )}
-
-          <div className="bg-raised rounded-xs p-4 border border-line mb-4 text-center">
-            <div className="t-label uppercase text-ink-muted font-medium tracking-wider mb-1">Tracking Code</div>
-            <div className="text-2xl font-bold text-ink tracking-widest font-mono mb-2">
-              {submitted.tracking_code}
-            </div>
-            <button
-              onClick={() => {
-                navigator.clipboard?.writeText(submitted.tracking_code);
-              }}
-              className="inline-flex items-center gap-1.5 text-xs text-brand font-medium px-3 py-1.5 rounded border border-brand/30 active:bg-brand-wash"
-              aria-label="Copy tracking code"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              Copy code
-            </button>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate(`/track?code=${submitted.tracking_code}`)}
-              className="saro-btn-primary flex-1"
-            >
-              Track this report
-            </button>
-            <button
-              onClick={() => {
-                setSubmitted(null);
-                setSelectedCategoryId("");
-                setDescription("");
-                setCoords(null);
-                setBarangayId("");
-                setPhotos([]);
-                setCallbackNumber("");
-                setIsProxy(false);
-                setValidationErrors({});
-              }}
-              className="flex-1 py-2.5 bg-raised text-ink rounded-xs text-sm font-semibold border border-line active:bg-sunken"
-            >
-              File another
-            </button>
-          </div>
         </div>
+
+        <ReportTicket
+          code={submitted.tracking_code}
+          categoryLabel={selectedCategory?.name}
+          filedAt={submitted.created_at}
+        />
+
+        <button
+          type="button"
+          onClick={() => navigate(`/track?code=${submitted.tracking_code}`)}
+          className="saro-btn saro-btn-primary saro-btn-lg saro-btn-block"
+        >
+          Track this report
+        </button>
+        <button type="button" onClick={clearForm} className="saro-btn saro-btn-ghost saro-btn-block">
+          File another
+        </button>
       </div>
     );
   }
@@ -499,6 +570,160 @@ export default function ReportFormScreen() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+
+        {/* ── Step 1: say what is happening ─────────────────────────────────
+         *
+         * This is first because it is the only thing the resident actually
+         * knows on arrival. The old form opened with a twenty-item category
+         * grid, which asks someone to classify a hazard using the city's
+         * vocabulary before they have described it in their own — backwards,
+         * and worst for exactly the people under most stress.
+         *
+         * Now: describe it, in any of three languages, typed or spoken. The
+         * category picker below becomes the confirmation surface rather than
+         * the entry point.
+         */}
+        <div>
+          <label htmlFor="describe" className="t-label block text-ink-faint">
+            What is happening? <span className="text-alert">*</span>
+          </label>
+          <p className="t-body-sm mt-1 text-ink-muted">
+            Bikol, Tagalog or English. Say where it is and what you can see.
+          </p>
+
+          <div className="relative mt-2">
+            <textarea
+              id="describe"
+              rows={4}
+              value={description}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                setValidationErrors((prev) => ({ ...prev, description: "" }));
+                // A stale suggestion about text that has since changed is worse
+                // than none: it looks like the system agreed with the new words.
+                if (aiResult) setAiResult(null);
+              }}
+              placeholder="May baha sa tabi kan eskwelahan, abot tuhod na…"
+              className="saro-field w-full resize-none"
+              aria-invalid={Boolean(validationErrors.description)}
+            />
+          </div>
+
+          {speechSupported && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="t-label text-ink-faint">Speak instead</span>
+              {[
+                { code: "fil-PH", label: "Bikol / Tagalog" },
+                { code: "en-PH", label: "English" },
+              ].map((option) => {
+                const active = isListening && speechLang === option.code;
+                return (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() => { setSpeechLang(option.code); toggleSpeech(option.code); }}
+                    aria-pressed={active}
+                    className="saro-btn saro-btn-secondary saro-btn-sm"
+                    style={active ? { borderColor: "var(--color-brand)", color: "var(--color-brand)" } : undefined}
+                  >
+                    {active ? <MicOff width={13} height={13} /> : <Mic width={13} height={13} />}
+                    {active ? "Stop" : option.label}
+                  </button>
+                );
+              })}
+              {isListening && (
+                <span className="t-body-sm text-brand" role="status">Listening…</span>
+              )}
+            </div>
+          )}
+
+          {validationErrors.description && (
+            <p className="t-body-sm mt-1.5 text-alert">{validationErrors.description}</p>
+          )}
+
+          {/* The local fast-track, announced the instant the words appear. It
+              does not wait for the network, and it says out loud that no
+              account will be asked for — the anxiety it removes is the point. */}
+          {keywordEmergency && isGuest && (
+            <p
+              className="t-body-sm mt-3 flex items-start gap-2 border p-3"
+              style={{
+                borderColor: "var(--color-panic)",
+                background: "var(--color-panic-wash)",
+                color: "var(--color-panic-deep)",
+              }}
+              role="status"
+            >
+              <AlertTriangle width={15} height={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>
+                Read as an emergency (“{keywordEmergency.matchedPhrase}”). You can file this
+                straight away — no account, no sign-in.
+              </span>
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={analyseDescription}
+            disabled={analysing || description.trim().length < 8}
+            className="saro-btn saro-btn-secondary saro-btn-block mt-3"
+          >
+            <Sparkles width={15} height={15} />
+            {analysing ? "Reading what you wrote…" : "Suggest a category for me"}
+          </button>
+
+          {/* Step 2: what it understood, shown back for correction. Nothing is
+              filed from here — this is a suggestion sitting next to a picker. */}
+          {aiResult && !aiDismissed && (
+            <div className="saro-clip saro-card mt-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <span className="t-label text-ink-faint">
+                  {aiResult.degraded ? "Could not check that" : "What SARO understood"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAiDismissed(true)}
+                  aria-label="Dismiss suggestion"
+                  className="saro-btn saro-btn-ghost saro-btn-sm shrink-0"
+                >
+                  <X width={14} height={14} />
+                </button>
+              </div>
+
+              {aiResult.degraded ? (
+                <p className="t-body-sm mt-2 text-ink-muted">
+                  The city's assistant did not answer in time. Nothing is lost — pick the
+                  category yourself below and file as normal.
+                </p>
+              ) : (
+                <>
+                  <p className="t-body mt-2">{aiResult.summary}</p>
+
+                  <dl className="mt-3 flex flex-col gap-2 border-t border-rule pt-3">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="t-label text-ink-faint">Suggested category</dt>
+                      <dd className="t-body-sm font-bold">
+                        {aiResult.categoryLabel ?? "None — please choose one below"}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="t-label text-ink-faint">Confidence</dt>
+                      <dd className="t-body-sm">
+                        {aiResult.confidence === "high" ? "Reasonably sure" : "Not sure"}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <p className="t-body-sm mt-3 text-ink-muted">
+                    {aiResult.confidence === "high"
+                      ? "Selected below. Change it if it is wrong — you decide, not the assistant."
+                      : "Not confident enough to choose for you. Pick the category below."}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Thumb-Friendly Un-truncated Category Picker */}
         <div>
@@ -794,40 +1019,6 @@ export default function ReportFormScreen() {
             </div>
           </div>
         )}
-
-        {/* Description */}
-        <div>
-          <label className="block text-xs font-semibold text-ink mb-1">
-            What happened? <span className="text-alert">*</span>
-          </label>
-          <div className="relative">
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => { setDescription(e.target.value); setValidationErrors((prev) => ({ ...prev, description: "" })); }}
-              placeholder="Describe what you see. Be specific about the location and danger."
-              className="w-full text-sm p-3 rounded-xs border border-line bg-white text-ink placeholder:text-ink-muted resize-none"
-            />
-            {speechSupported && (
-              <button
-                type="button"
-                onClick={toggleSpeech}
-                className={`absolute bottom-2.5 right-2.5 p-2 rounded-full transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${
-                  isListening
-                    ? "bg-alert text-white animate-pulse"
-                    : "bg-raised text-ink-muted active:bg-line"
-                }`}
-                title={isListening ? "Stop dictation" : "Speak to type"}
-                aria-label={isListening ? "Stop dictation" : "Speak to type"}
-              >
-                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
-            )}
-          </div>
-          {validationErrors.description && (
-            <p className="text-xs text-alert mt-1 font-medium">{validationErrors.description}</p>
-          )}
-        </div>
 
         {/* Photo Evidence — Multi-photo */}
         <div>

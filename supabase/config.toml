@@ -136,3 +136,10 @@ inspector_port = 8083
 # The resident app calls this anonymously, so no JWT is required.
 # Abuse control is per-device rate limiting inside the function.
 verify_jwt = false
+
+[functions.push-dispatch]
+# The opposite: a JWT is required. This function sends a notification to a
+# resident's phone, so leaving it open would hand anyone with the publishable
+# key a push channel to every device that ever subscribed. Only a signed-in
+# staff session can trigger a send.
+verify_jwt = true

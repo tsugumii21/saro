@@ -7,12 +7,22 @@
 /** Ordered report lifecycle. Index position is the pipeline stage. */
 export const STATUS_PIPELINE = ["received", "assigned", "in_progress", "resolved"];
 
-/** Human labels for each pipeline stage. */
+/**
+ * Human labels for every status, pipeline and terminal alike.
+ *
+ * The two closed labels are written out in full rather than both shortened to
+ * "Closed". A resident who confirmed the work and a resident who never replied
+ * are different outcomes, and the label is where that difference is visible to
+ * the person it happened to.
+ */
 export const STATUS_LABELS = {
   received: "Received",
   assigned: "Assigned",
   in_progress: "In Progress",
-  resolved: "Resolved"
+  resolved: "Resolved",
+  closed_confirmed: "Closed (Confirmed)",
+  closed_unconfirmed: "Closed (Unconfirmed)",
+  reopened: "Reopened"
 };
 
 /** CSS class suffix used by the `.saro-pill-status-*` rules in tokens.css. */
@@ -95,5 +105,46 @@ export const CLIENT_STORAGE_KEYS = {
   LANGUAGE: "saro_lang",
   OFFLINE_QUEUE: "saro_offline_queue",
   UNAUTH_VIEW: "saro_unauth_view",
-  RESIDENT_LOGGED_OUT: "saro_resident_logged_out"
+  RESIDENT_LOGGED_OUT: "saro_resident_logged_out",
+  /** Version of the RA 10173 notice this device has acknowledged. */
+  CONSENT_ACK: "saro_consent_ack",
+  /** Timestamp of the last Panic press, for the local 15-minute repeat check. */
+  PANIC_LAST_AT: "saro_panic_last_at"
 };
+
+/* ── Data privacy notice ─────────────────────────────────────────────────── */
+
+/**
+ * Bump when the notice's substance changes — what is collected, why, how long
+ * it is kept, or who receives it. Everyone re-acknowledges. Do not bump for
+ * wording or layout: retraining people to dismiss a notice without reading it
+ * is worse than a stale acknowledgement of an unchanged fact.
+ */
+export const CONSENT_VERSION = 1;
+
+/* ── Panic ───────────────────────────────────────────────────────────────── */
+
+/** National emergency number. Legazpi's 911 Emergency Action Center answers it. */
+export const EMERGENCY_NUMBER = "911";
+
+/** A second press inside this window is flagged for dispatchers. Never blocks. */
+export const PANIC_REPEAT_WINDOW_MS = 15 * 60 * 1000;
+
+/** Category every Panic press files under. Routed to Legazpi 911, 1-hour SLA. */
+export const PANIC_CATEGORY = "emergency_unspecified";
+
+/* ── Closure states ──────────────────────────────────────────────────────── */
+
+/**
+ * The four pipeline stages a report moves through while it is live. Closure
+ * states are deliberately NOT in this list: they are outcomes, not steps, and
+ * rendering them as a fifth dot would suggest "closed" is progress rather than
+ * an ending that may have been good or bad.
+ */
+export const CLOSED_STATUSES = ["closed_confirmed", "closed_unconfirmed"];
+
+/** Every terminal or post-resolution state. */
+export const POST_RESOLUTION_STATUSES = [...CLOSED_STATUSES, "reopened"];
+
+/** Days a resolved report waits for the resident before closing unconfirmed. */
+export const AUTO_CLOSE_DAYS = 7;

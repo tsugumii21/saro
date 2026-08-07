@@ -21,7 +21,7 @@ const HOLD_MS = 1200;
  *   nothing to aim at.
  * - It is the only vermilion object in the product.
  */
-export default function PanicControl({ onFire, disabled, state = "idle" }) {
+export default function PanicControl({ onFire, onHoldStart, disabled, state = "idle" }) {
   const [held, setHeld] = useState(false);
   const [progress, setProgress] = useState(0);
   const [cancelled, setCancelled] = useState(false);
@@ -50,6 +50,17 @@ export default function PanicControl({ onFire, disabled, state = "idle" }) {
     setHeld(true);
     start.current = performance.now();
 
+    // The hold is 1.2 seconds of otherwise-idle time, and getting a GPS fix is
+    // the slowest thing in this flow. Starting it here means the fix is usually
+    // already in hand when the hold completes, so the alert carries a real
+    // location instead of the city-centre fallback — without adding a single
+    // millisecond to how long the person waits.
+    //
+    // It runs on every hold, including ones that get cancelled. A cancelled
+    // hold costs a wasted position read; a fix that started too late costs
+    // responders the address.
+    onHoldStart?.();
+
     const tick = (now) => {
       const p = Math.min((now - start.current) / HOLD_MS, 1);
       setProgress(p);
@@ -64,7 +75,7 @@ export default function PanicControl({ onFire, disabled, state = "idle" }) {
       raf.current = requestAnimationFrame(tick);
     };
     raf.current = requestAnimationFrame(tick);
-  }, [disabled, state, onFire, stop]);
+  }, [disabled, state, onFire, onHoldStart, stop]);
 
   useEffect(() => stop, [stop]);
 
@@ -114,7 +125,7 @@ export default function PanicControl({ onFire, disabled, state = "idle" }) {
             {sending ? "SENDING" : "PANIC"}
           </span>
           <span className="t-label" style={{ color: "rgba(255,255,255,0.82)" }}>
-            {sending ? "Do not close this screen" : held ? "Keep holding" : "Hold for 1 second"}
+            {sending ? "Calling 911" : held ? "Keep holding" : "Hold for 1 second"}
           </span>
         </span>
       </button>
@@ -126,8 +137,8 @@ export default function PanicControl({ onFire, disabled, state = "idle" }) {
         role={cancelled ? "alert" : undefined}
       >
         {cancelled
-          ? "Released too early — nothing was sent. Hold until the button fills."
-          : "Sends your location to Legazpi 911 straight away. No account, no form, no name required."}
+          ? "Released too early — nothing was sent and no call was placed. Hold until the button fills."
+          : "Calls 911 and sends your location at the same time. No account, no form, no name required."}
       </p>
     </div>
   );

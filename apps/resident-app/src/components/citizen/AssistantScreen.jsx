@@ -1,17 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Send, AlertTriangle, PlusCircle, Phone, Bot, ArrowRight, Mic, MicOff } from "lucide-react";
-import { askAssistant, CLIENT_STORAGE_KEYS } from "@saro/shared";
+import {
+  Send, AlertTriangle, PlusCircle, Phone, Bot, ArrowRight, Mic, MicOff,
+  FileText, HelpCircle, CloudOff,
+} from "lucide-react";
+import { askAssistant } from "@saro/shared";
 
-/** Same browser-local id the report form uses, for rate limiting only. */
-function getDeviceId() {
-  let id = localStorage.getItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
-  if (!id) {
-    id = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    localStorage.setItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT, id);
-  }
-  return id;
-}
+// The device id used to be minted here for rate limiting. The shared client
+// owns that now — one place that knows what a device id is, rather than four
+// copies of the same eight lines drifting apart.
 
 // Quick prompt chips
 const QUICK_PROMPTS = [
@@ -59,28 +56,26 @@ export default function AssistantScreen() {
     setInput("");
     setLoading(true);
 
-    // The Edge Function holds the Gemini key, runs the emergency tripwire and
-    // the knowledge-base fallback, and writes the gap log itself — so there is
-    // no separate analytics call here any more.
-    const { data, error: assistantError } = await askAssistant(question, {
-      deviceId: getDeviceId(),
-    });
-
-    const result = data ?? {
-      answer:
-        assistantError ||
-        "The assistant is unavailable right now. For an emergency, call Legazpi 911.",
-      isEmergency: false,
-      matchedDocId: null,
-      isFallback: true,
-    };
+    // One client, shared with the Describe flow. The Edge Function holds the
+    // Gemini key, runs the emergency tripwire, answers only from the city's
+    // published documents, and writes every unanswered question to gap_log
+    // itself — there is no separate analytics call, and the client has no way
+    // to suppress the logging.
+    const result = await askAssistant(question);
 
     const botMsg = {
       id: nextId('bot'),
       role: "bot",
       text: result.answer,
       isEmergency: result.isEmergency,
-      matchedPhrase: result.matchedPhrase
+      matchedPhrase: result.matchedPhrase,
+      // Which published document the answer came from. Null means the
+      // assistant had nothing to stand on and said so rather than inventing
+      // something — that distinction is shown, not hidden.
+      source: result.source,
+      matchedDocId: result.matchedDocId,
+      unanswered: result.isFallback && !result.matchedDocId,
+      degraded: result.degraded,
     };
 
     setMessages((prev) => [...prev, botMsg]);
@@ -129,14 +124,12 @@ export default function AssistantScreen() {
 
       recognitionRef.current = recognition;
       recognition.start();
-    } else {
-      // Fallback voice dictation simulation
-      setIsRecording(true);
-      setTimeout(() => {
-        setInput("Ano ang emergency hotline ng CDRRMO?");
-        setIsRecording(false);
-      }, 1500);
     }
+    // No fallback. The old one faked dictation: after 1.5s it typed
+    // "Ano ang emergency hotline ng CDRRMO?" into the box as though the person
+    // had said it. On a browser without speech recognition that put words in
+    // somebody's mouth and then answered them. The mic button is simply hidden
+    // where the API is missing.
   };
 
   return (
@@ -160,6 +153,34 @@ export default function AssistantScreen() {
             >
               {msg.text}
             </div>
+
+            {/* Where the answer came from.
+             *
+             * A grounded assistant that does not show its grounding is just an
+             * assistant. Every answer is one of three things and each looks
+             * different: cited from a named city document, an honest refusal,
+             * or the service being unreachable. Nothing in between, and never
+             * an authoritative-sounding sentence with nothing behind it. */}
+            {msg.role === "bot" && msg.id !== "welcome" && !msg.isEmergency && (
+              <div className="mt-1.5 max-w-[85%]">
+                {msg.degraded ? (
+                  <span className="t-label flex items-center gap-1.5 text-ink-faint">
+                    <CloudOff width={11} height={11} aria-hidden="true" />
+                    Could not reach the city's documents
+                  </span>
+                ) : msg.unanswered ? (
+                  <span className="t-label flex items-center gap-1.5 text-alert">
+                    <HelpCircle width={11} height={11} aria-hidden="true" />
+                    Not in the city's published documents — logged for staff to answer
+                  </span>
+                ) : msg.source ? (
+                  <span className="t-label flex items-start gap-1.5 text-ink-faint">
+                    <FileText width={11} height={11} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    Source: {msg.source}
+                  </span>
+                ) : null}
+              </div>
+            )}
 
             {/* Emergency Hotline Alert overlay for active distress */}
             {msg.isEmergency && (

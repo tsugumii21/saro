@@ -234,15 +234,42 @@ export async function createReport(payload) {
   if (anonymous) {
     const deviceId = payload.device_fingerprint ?? payload.reporter_device_id ?? null;
     if (!deviceId) return fail("A device id is required to file anonymously.");
-    insert.reporter_device_id = deviceId;
-  } else {
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData?.user?.id;
-    if (!uid) {
-      return fail("Please sign in to file a standard report, or describe an emergency instead.");
-    }
-    insert.reporter_user_id = uid;
+
+    // An RPC, not a table insert, and this is load-bearing.
+    //
+    // anon has INSERT on reports but no SELECT — a blanket SELECT would expose
+    // every report in the city to anyone with the publishable key. But
+    // `.insert().select()` makes PostgREST ask for a representation, which
+    // needs exactly that privilege. The result was an insert that succeeded
+    // followed by a 42501 on the way back: the report was filed and the person
+    // was told it had failed, with no tracking code. See migration 14.
+    const { data: rpcData, error: rpcError } = await supabase.rpc("file_anonymous_report", {
+      p_category: insert.category,
+      p_description: insert.description,
+      p_lat: insert.lat,
+      p_lng: insert.lng,
+      p_device_id: deviceId,
+      p_barangay_id: insert.barangay_id ?? null,
+      p_callback_number: insert.callback_number,
+      p_is_proxy: insert.is_proxy_report,
+      p_photo_url: insert.photo_url,
+    });
+
+    if (rpcError) return fail(rpcError.message);
+    const created = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    if (!created) return fail("The report was not accepted. Please try again.");
+    return { data: created, error: null };
   }
+
+  // Signed-in path. A resident DOES have a real SELECT policy
+  // (reporter_user_id = auth.uid()), so the ordinary insert-and-return works
+  // here and there is no reason to route it through a definer function.
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData?.user?.id;
+  if (!uid) {
+    return fail("Please sign in to file a standard report, or describe an emergency instead.");
+  }
+  insert.reporter_user_id = uid;
 
   const { data, error } = await supabase
     .from("reports")
@@ -342,6 +369,21 @@ export async function updateReportStatus(reportId, newStatus, note) {
     .eq("id", reportId)
     .select("id, status, resolved_at, updated_at")
     .single();
+
+  if (!error && data) {
+    // Notify the resident. Fire and forget, and deliberately not awaited: a
+    // push service being slow or down must never make a dispatcher think their
+    // status update failed. The update is already committed by this point.
+    //
+    // This is why push is driven from here rather than from a database
+    // trigger — a trigger would need a service-role key inside Postgres, and
+    // in this project secrets live only as Supabase secrets. The trade is
+    // explicit: a status changed by raw SQL or through the Supabase dashboard
+    // sends nothing.
+    supabase.functions
+      .invoke("push-dispatch", { body: { report_id: reportId, status: newStatus } })
+      .catch(() => {});
+  }
 
   if (error) {
     // RLS returns an empty result rather than an explicit denial.
@@ -620,6 +662,61 @@ export async function registerPanicFlag(deviceToken) {
   if (!deviceToken) return fail("Device token is required");
   const { data, error } = await supabase.rpc("register_panic_flag", { token: deviceToken });
   if (error) return fail(error.message);
+  return { data: Array.isArray(data) ? data[0] : data, error: null };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Resident closure actions — Confirm and Dispute
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Close a resolved report as confirmed.
+ *
+ * The tracking code is the credential; no account is needed. Both RPCs answer
+ * an unknown code and a wrong-status code with the same generic error, so
+ * neither can be used to discover which codes exist.
+ *
+ * @param {string} trackingCode
+ */
+export async function confirmReport(trackingCode) {
+  if (!trackingCode) return fail("A tracking code is required.");
+  const { data, error } = await supabase.rpc("confirm_report_resolution", {
+    code: trackingCode.trim().toUpperCase(),
+  });
+  if (error) {
+    return fail(
+      error.message === "not confirmable"
+        ? "This report can't be confirmed — it may already be closed. Check the code and try again."
+        : error.message
+    );
+  }
+  return { data: Array.isArray(data) ? data[0] : data, error: null };
+}
+
+/**
+ * Reject a resolution.
+ *
+ * Server-side this writes resolved → reopened → in_progress: two transitions,
+ * both kept, so the record shows the work was called done and the resident said
+ * otherwise. The pipeline is not restarted — the report keeps its original
+ * created_at, so the clock still runs from when help was first asked for.
+ *
+ * @param {string} trackingCode
+ * @param {string} [reason] Optional, capped at 500 characters server-side.
+ */
+export async function disputeReport(trackingCode, reason) {
+  if (!trackingCode) return fail("A tracking code is required.");
+  const { data, error } = await supabase.rpc("dispute_report_resolution", {
+    code: trackingCode.trim().toUpperCase(),
+    reason: reason?.trim() || null,
+  });
+  if (error) {
+    return fail(
+      error.message === "not disputable"
+        ? "This report can't be disputed right now — it isn't awaiting your confirmation."
+        : error.message
+    );
+  }
   return { data: Array.isArray(data) ? data[0] : data, error: null };
 }
 

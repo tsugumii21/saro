@@ -1,9 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, NavLink } from "react-router-dom";
-import { Map, PlusCircle, List, Bot, Home, User, LogOut, X, ChevronRight, ShieldCheck } from "lucide-react";
+import {
+  Map, PlusCircle, List, Bot, Home, User, LogOut, X, ChevronRight, ShieldCheck,
+  Bell, BellOff, FileText,
+} from "lucide-react";
 import { Wordmark } from "@saro/ui";
 import ConnectionIndicator from "../common/ConnectionIndicator";
-import { CLIENT_STORAGE_KEYS, useAuth } from "@saro/shared";
+import {
+  CLIENT_STORAGE_KEYS, useAuth,
+  startOutboxSync, pushSupported, pushPermission,
+  subscribeToPush, unsubscribeFromPush, currentPushSubscription,
+} from "@saro/shared";
+import ConsentNotice from "./ConsentNotice";
 import CitizenLandingScreen from "./CitizenLandingScreen";
 import PublicMapScreen from "./PublicMapScreen";
 import ReportFormScreen from "./ReportFormScreen";
@@ -34,7 +42,34 @@ const TABS = [
 export default function CitizenShell() {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState("");
   const { profile, isResident, signOut } = useAuth();
+
+  // The queue drains from here rather than from a screen, because a queued
+  // report must keep trying no matter which tab the person is looking at — or
+  // whether they ever return to the one they filed from.
+  useEffect(() => startOutboxSync(), []);
+
+  useEffect(() => {
+    currentPushSubscription().then((subscription) => setPushOn(Boolean(subscription)));
+  }, []);
+
+  const togglePush = async () => {
+    setPushBusy(true);
+    setPushError("");
+    if (pushOn) {
+      await unsubscribeFromPush();
+      setPushOn(false);
+    } else {
+      const { error } = await subscribeToPush();
+      if (error) setPushError(error);
+      else setPushOn(true);
+    }
+    setPushBusy(false);
+  };
 
   const handleForgetDevice = () => {
     localStorage.removeItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
@@ -52,6 +87,17 @@ export default function CitizenShell() {
       <div className="relative flex h-screen w-full flex-col overflow-hidden bg-surface sm:h-full">
         <ConnectionIndicator />
         <ResidentAuthScreen onCancel={() => setShowAuth(false)} onSignedIn={() => setShowAuth(false)} />
+      </div>
+    );
+  }
+
+  if (showPrivacy) {
+    return (
+      <div className="relative flex h-screen w-full flex-col overflow-hidden bg-canvas sm:h-full">
+        <ConnectionIndicator />
+        <div className="mx-auto w-full max-w-md flex-1 overflow-y-auto p-4">
+          <ConsentNotice dismissible onAcknowledge={() => setShowPrivacy(false)} />
+        </div>
       </div>
     );
   }
@@ -133,6 +179,48 @@ export default function CitizenShell() {
                   <ChevronRight width={16} height={16} className="shrink-0 text-brand" aria-hidden="true" />
                 </button>
               )}
+
+              {/* Opt-in, and only here. Never prompted on app open: a
+                  permission dialog someone did not ask for is one tap from
+                  "Block", and a blocked resident cannot be told their report
+                  was resolved. */}
+              {pushSupported() && (
+                <button
+                  onClick={togglePush}
+                  disabled={pushBusy}
+                  aria-pressed={pushOn}
+                  className="flex items-center gap-3 border border-line px-4 py-3 text-left hover:bg-raised"
+                >
+                  {pushOn
+                    ? <Bell width={16} height={16} className="shrink-0 text-brand" aria-hidden="true" />
+                    : <BellOff width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="t-subhead block">
+                      {pushOn ? "Notifications are on" : "Tell me when my report changes"}
+                    </span>
+                    <span className="t-body-sm block text-ink-muted">
+                      {pushError
+                        ? pushError
+                        : pushPermission() === "denied"
+                        ? "Blocked in your browser settings"
+                        : "No phone number needed. Status changes only."}
+                    </span>
+                  </span>
+                </button>
+              )}
+
+              <button
+                onClick={() => { setShowAccountMenu(false); setShowPrivacy(true); }}
+                className="flex items-center gap-3 border border-line px-4 py-3 text-left hover:bg-raised"
+              >
+                <FileText width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />
+                <span>
+                  <span className="t-subhead block">Privacy notice</span>
+                  <span className="t-body-sm block text-ink-muted">
+                    What is collected, who sees it, how long it is kept
+                  </span>
+                </span>
+              </button>
 
               <button
                 onClick={isResident ? handleSignOut : handleForgetDevice}

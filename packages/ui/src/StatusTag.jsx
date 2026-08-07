@@ -1,4 +1,7 @@
-import { CircleDashed, ArrowRightCircle, Activity, Check, Archive, RotateCcw } from "lucide-react";
+import {
+  CircleDashed, ArrowRightCircle, Activity, Check,
+  CheckCheck, Archive, RotateCcw,
+} from "lucide-react";
 
 /**
  * The pipeline's index tab.
@@ -14,13 +17,26 @@ import { CircleDashed, ArrowRightCircle, Activity, Check, Archive, RotateCcw } f
  * panic vermilion, which is reserved and never appears in this component.
  */
 
+/**
+ * Closure is two states, not one, and they are drawn as two.
+ *
+ * closed_confirmed carries the resolved green and a double check: a resident
+ * looked at the work and said it was done. closed_unconfirmed carries the
+ * neutral archive grey: the city says it is finished and nobody corroborated
+ * that. Collapsing both into one "Closed" tag would let an office's record read
+ * identically whether residents were satisfied or simply never heard from,
+ * which is exactly the fact this pair exists to keep visible.
+ */
 export const STATUS_META = {
-  received:    { label: "Received",    Icon: CircleDashed,      key: "received" },
-  assigned:    { label: "Assigned",    Icon: ArrowRightCircle,  key: "assigned" },
-  in_progress: { label: "In Progress", Icon: Activity,          key: "progress" },
-  resolved:    { label: "Resolved",    Icon: Check,             key: "resolved" },
-  closed:      { label: "Closed",      Icon: Archive,           key: "closed" },
-  reopened:    { label: "Reopened",    Icon: RotateCcw,         key: "reopened" },
+  received:           { label: "Received",            Icon: CircleDashed,     key: "received" },
+  assigned:           { label: "Assigned",            Icon: ArrowRightCircle, key: "assigned" },
+  in_progress:        { label: "In Progress",         Icon: Activity,         key: "progress" },
+  resolved:           { label: "Resolved",            Icon: Check,            key: "resolved" },
+  closed_confirmed:   { label: "Closed · Confirmed",  Icon: CheckCheck,       key: "resolved" },
+  closed_unconfirmed: { label: "Closed · No reply",   Icon: Archive,          key: "closed" },
+  reopened:           { label: "Reopened",            Icon: RotateCcw,        key: "reopened" },
+  // Retained so a row written before migration 10 still renders.
+  closed:             { label: "Closed",              Icon: Archive,          key: "closed" },
 };
 
 export function statusTab(status) {

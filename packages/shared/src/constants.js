@@ -148,3 +148,31 @@ export const POST_RESOLUTION_STATUSES = [...CLOSED_STATUSES, "reopened"];
 
 /** Days a resolved report waits for the resident before closing unconfirmed. */
 export const AUTO_CLOSE_DAYS = 7;
+
+/* ── Closure proof ───────────────────────────────────────────────────────── */
+
+/**
+ * Why a non-photographable report was closed.
+ *
+ * Mirrors the `resolution_reason` enum in migration 16. These exist so closures
+ * are countable across offices — "how many medical calls ended in
+ * 'could not locate' last quarter?" is a question the city should be able to
+ * answer, and free text can never answer it. A reference note is required
+ * alongside the code, because a code alone loses every specific.
+ */
+export const RESOLUTION_REASONS = [
+  { value: "turned_over_to_unit", label: "Turned over to responding unit" },
+  { value: "referred_to_office", label: "Referred to another office" },
+  { value: "patient_transported", label: "Patient transported" },
+  { value: "attended_no_action", label: "Attended, no further action needed" },
+  { value: "could_not_locate", label: "Could not locate / no one at scene" },
+  { value: "false_alarm", label: "False alarm — nothing found" },
+  { value: "duplicate", label: "Duplicate of another report" },
+];
+
+export const RESOLUTION_REASON_LABELS = Object.fromEntries(
+  RESOLUTION_REASONS.map((r) => [r.value, r.label])
+);
+
+/** Statuses an official may set. The rest belong to the resident and the timer. */
+export const OFFICIAL_SETTABLE_STATUSES = ["received", "assigned", "in_progress", "resolved"];

@@ -310,7 +310,25 @@ export async function getMyReports({ limit = 100 } = {}) {
   return { data: (data ?? []).map(adaptReport), error: null };
 }
 
-/** Barangay officials' File on Behalf. Requires an authenticated session. */
+/**
+ * File on Behalf, for barangay officials and admins.
+ *
+ * `reporter_user_id` is set to the OFFICIAL, not to the walk-in resident, who
+ * by definition has no account. Two reasons, and both are load-bearing:
+ *
+ *   The reports table has a CHECK requiring exactly one of reporter_device_id
+ *   or reporter_user_id. A desk-filed report has no device, so the user column
+ *   is the only one left — omitting both fails the constraint outright.
+ *
+ *   The barangay insert policy demands `filed_by = auth.uid()` AND
+ *   `reporter_user_id = auth.uid()`. Setting only filed_by, which is what this
+ *   function used to do, satisfied neither the policy nor the constraint, so
+ *   every File on Behalf attempt was rejected with a bare RLS violation.
+ *
+ * It also makes the report attributable: a named official vouched for it and
+ * can be asked what they were told, which is exactly what `filed_by_verified`
+ * should mean on a proxy report.
+ */
 export async function createReportOnBehalf(payload) {
   const { data: sessionData } = await supabase.auth.getUser();
   const uid = sessionData?.user?.id;
@@ -327,6 +345,7 @@ export async function createReportOnBehalf(payload) {
       callback_number: payload.callback_number || null,
       is_proxy_report: true,
       filed_by: uid,
+      reporter_user_id: uid,
     })
     .select("id, tracking_code, status, created_at")
     .single();
@@ -343,29 +362,66 @@ export async function createReportOnBehalf(payload) {
  * Now the identity comes from the JWT and the office check is an RLS policy, so
  * a mismatch fails in the database.
  */
-export async function updateReportStatus(reportId, newStatus, note) {
+/**
+ * Move a report along the pipeline.
+ *
+ * Closure proof is enforced by a trigger (migration 16), not here. This keeps
+ * a pre-check anyway, purely so the person gets a sentence explaining what is
+ * missing before they lose what they typed — but the trigger is the rule. A
+ * check that lives only in a client is not a rule, it is a suggestion, and this
+ * one guards whether an office can claim work it did not do.
+ *
+ * @param {string} reportId
+ * @param {string} newStatus
+ * @param {{ reason?: string, reference?: string }} [proof]
+ */
+export async function updateReportStatus(reportId, newStatus, proof = {}) {
   if (!reportId || !newStatus) return fail("Report id and status are required");
 
-  // Resolution requires photographic evidence. Enforced here for a clear
-  // message; a future migration should also assert it as a constraint so the
-  // rule holds for any client.
-  if (newStatus === "resolved") {
-    const { data: media, error: mediaError } = await supabase
-      .from("report_media")
-      .select("id")
-      .eq("report_id", reportId)
-      .eq("kind", "resolution")
-      .limit(1);
+  if (["closed_confirmed", "closed_unconfirmed", "reopened"].includes(newStatus)) {
+    return fail(
+      "Confirmation and reopening belong to the resident. Officials cannot set these."
+    );
+  }
 
-    if (mediaError) return fail(mediaError.message);
-    if (!media?.length) {
-      return fail("Resolution photo required: attach one before marking this report resolved.");
+  const patch = { status: newStatus };
+
+  if (newStatus === "resolved") {
+    const { data: report, error: reportError } = await supabase
+      .from("reports")
+      .select("category, routing_table:category ( resolution_proof )")
+      .eq("id", reportId)
+      .maybeSingle();
+
+    if (reportError) return fail(reportError.message);
+
+    const required = report?.routing_table?.resolution_proof ?? "photo";
+
+    if (required === "photo") {
+      const { data: media, error: mediaError } = await supabase
+        .from("report_media")
+        .select("id")
+        .eq("report_id", reportId)
+        .eq("kind", "resolution")
+        .limit(1);
+
+      if (mediaError) return fail(mediaError.message);
+      if (!media?.length) {
+        return fail("A resolution photo is required before this report can be resolved.");
+      }
+    } else {
+      if (!proof.reason) return fail("Choose the reason code that matches what happened.");
+      if ((proof.reference ?? "").trim().length < 4) {
+        return fail("Add the dispatch number, blotter entry, or receiving unit.");
+      }
+      patch.resolution_reason = proof.reason;
+      patch.resolution_reference = proof.reference.trim();
     }
   }
 
   const { data, error } = await supabase
     .from("reports")
-    .update({ status: newStatus })
+    .update(patch)
     .eq("id", reportId)
     .select("id, status, resolved_at, updated_at")
     .single();
@@ -394,16 +450,12 @@ export async function updateReportStatus(reportId, newStatus, note) {
     );
   }
 
-  if (note) {
-    const { data: userData } = await supabase.auth.getUser();
-    await supabase.from("report_status_history").insert({
-      report_id: reportId,
-      status: newStatus,
-      note,
-      changed_by: userData?.user?.id ?? null,
-    });
-  }
-
+  // No history insert here. `record_status_change` is an AFTER/BEFORE trigger on
+  // reports and has already written the transition — with the actor, the
+  // from-status, and the resolution detail. The block that used to sit here
+  // wrote a SECOND row for the same change, so every advance appeared twice in
+  // the resident's timeline and in the audit trail. The trigger is the single
+  // writer; nothing else should append to that table.
   return { data, error: null };
 }
 
@@ -437,6 +489,12 @@ export async function updateCategory(category, updates) {
   if (officeId !== undefined) patch.responsible_office_id = officeId;
   if (updates.sla_hours !== undefined) patch.sla_hours = Number(updates.sla_hours);
   if (updates.is_emergency !== undefined) patch.is_emergency = Boolean(updates.is_emergency);
+  if (updates.label !== undefined) patch.label = String(updates.label).trim();
+  if (updates.label_bikol !== undefined) patch.label_bikol = updates.label_bikol?.trim() || null;
+  if (updates.label_tagalog !== undefined) patch.label_tagalog = updates.label_tagalog?.trim() || null;
+  if (updates.resolution_proof !== undefined) {
+    patch.resolution_proof = updates.resolution_proof === "reference" ? "reference" : "photo";
+  }
   if (Object.keys(patch).length === 0) return fail("Nothing to update");
 
   const { data: userData } = await supabase.auth.getUser();
@@ -663,6 +721,256 @@ export async function registerPanicFlag(deviceToken) {
   const { data, error } = await supabase.rpc("register_panic_flag", { token: deviceToken });
   if (error) return fail(error.message);
   return { data: Array.isArray(data) ? data[0] : data, error: null };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Routing table — CRUD, deliberately not AI-driven
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Create a routing rule.
+ *
+ * `category` is the primary key and is a stable slug stored on every report
+ * that ever used it, so it is set once here and never editable afterwards —
+ * renaming it would orphan history. The label is what changes.
+ */
+export async function createRoutingRule(rule) {
+  const category = String(rule.category ?? "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!category) return fail("A category key is required.");
+  if (!rule.label?.trim()) return fail("A label is required.");
+
+  const { data: userData } = await supabase.auth.getUser();
+
+  return wrap(
+    await supabase
+      .from("routing_table")
+      .insert({
+        category,
+        label: rule.label.trim(),
+        label_bikol: rule.label_bikol?.trim() || null,
+        label_tagalog: rule.label_tagalog?.trim() || null,
+        responsible_office_id: rule.responsible_office_id || null,
+        is_emergency: Boolean(rule.is_emergency),
+        sla_hours: Number(rule.sla_hours) || 24,
+        resolution_proof: rule.resolution_proof === "reference" ? "reference" : "photo",
+        updated_by: userData?.user?.id ?? null,
+      })
+      .select("*")
+      .single()
+  );
+}
+
+/**
+ * Delete a routing rule.
+ *
+ * Refused when any report still uses the category. A rule is not a label on a
+ * list — it is the thing that decides where a report goes, and deleting one out
+ * from under existing reports would leave them pointing at nothing and break
+ * every historical query about that hazard. Retiring a category means routing
+ * it somewhere sensible, not erasing it.
+ */
+export async function deleteRoutingRule(category) {
+  if (!category) return fail("Category is required");
+
+  const { count, error: countError } = await supabase
+    .from("reports")
+    .select("id", { count: "exact", head: true })
+    .eq("category", category);
+
+  if (countError) return fail(countError.message);
+  if (count > 0) {
+    return fail(
+      `${count} report${count === 1 ? "" : "s"} still use this category. ` +
+      `Point it at a different office instead of deleting it.`
+    );
+  }
+
+  return wrap(await supabase.from("routing_table").delete().eq("category", category).select("*").single());
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Clusters
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Clusters with their member reports attached, newest first. */
+export async function getClustersWithReports() {
+  const { data: clusters, error } = await supabase
+    .from("clusters")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return fail(error.message);
+  if (!clusters?.length) return { data: [], error: null };
+
+  const { data: links, error: linkError } = await supabase
+    .from("cluster_reports")
+    .select(
+      `cluster_id,
+       reports:report_id (
+         id, tracking_code, category, description, status, lat, lng, created_at,
+         assigned_office_id, barangay_id,
+         offices:assigned_office_id ( short_name ),
+         barangays:barangay_id ( name ),
+         routing_table:category ( label )
+       )`
+    )
+    .in("cluster_id", clusters.map((c) => c.id));
+
+  if (linkError) return fail(linkError.message);
+
+  const byCluster = new Map();
+  for (const link of links ?? []) {
+    if (!link.reports) continue;
+    if (!byCluster.has(link.cluster_id)) byCluster.set(link.cluster_id, []);
+    byCluster.get(link.cluster_id).push(adaptReport(link.reports));
+  }
+
+  return {
+    data: clusters.map((cluster) => {
+      const members = byCluster.get(cluster.id) ?? [];
+      return {
+        ...cluster,
+        reports: members,
+        report_count: members.length,
+        // Confidence is how strongly these look like one incident rather than
+        // several. More independent reports of the same thing in the same place
+        // in the same hour is the strongest signal a dispatcher has that it is
+        // real, so it rises with the count and saturates — the difference
+        // between five reports and six is not meaningful.
+        confidence: Math.min(0.35 + members.length * 0.15, 0.98),
+      };
+    }),
+    error: null,
+  };
+}
+
+/**
+ * Take one report out of a cluster.
+ *
+ * Splitting removes the link, never the report. A cluster left with a single
+ * member is deleted, because "a cluster of one" is not a duplicate group and
+ * showing it as one would be a lie about what the system detected.
+ */
+export async function splitFromCluster(clusterId, reportId) {
+  if (!clusterId || !reportId) return fail("Cluster id and report id are required");
+
+  const { error } = await supabase
+    .from("cluster_reports")
+    .delete()
+    .eq("cluster_id", clusterId)
+    .eq("report_id", reportId);
+
+  if (error) return fail(error.message);
+
+  await supabase.from("reports").update({ cluster_id: null }).eq("id", reportId);
+
+  const { count } = await supabase
+    .from("cluster_reports")
+    .select("report_id", { count: "exact", head: true })
+    .eq("cluster_id", clusterId);
+
+  if ((count ?? 0) <= 1) {
+    const { data: remaining } = await supabase
+      .from("cluster_reports")
+      .select("report_id")
+      .eq("cluster_id", clusterId);
+
+    for (const row of remaining ?? []) {
+      await supabase.from("reports").update({ cluster_id: null }).eq("id", row.report_id);
+    }
+    await supabase.from("cluster_reports").delete().eq("cluster_id", clusterId);
+    await supabase.from("clusters").delete().eq("id", clusterId);
+    return { data: { dissolved: true }, error: null };
+  }
+
+  return { data: { dissolved: false }, error: null };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Panic abuse review — read only, never a block
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Devices that have pressed Panic repeatedly.
+ *
+ * For review by a person, and nothing else. Nothing in SARO acts on this: a
+ * device pressing Panic five times is more likely to be somebody whose first
+ * alert brought nobody than an abuser, and a system that decides which of those
+ * it is has chosen the wrong side of the error.
+ */
+export async function getPanicFlags({ limit = 100 } = {}) {
+  return wrap(
+    await supabase
+      .from("panic_flags")
+      .select("*")
+      .order("flag_count", { ascending: false })
+      .order("last_flagged_at", { ascending: false })
+      .limit(limit)
+  );
+}
+
+/** The reports a flagged device actually filed, so a reviewer can judge. */
+export async function getReportsForDevice(deviceToken) {
+  if (!deviceToken) return { data: [], error: null };
+  const { data, error } = await supabase
+    .from("reports")
+    .select(
+      `id, tracking_code, category, description, status, lat, lng, created_at,
+       routing_table:category ( label )`
+    )
+    .eq("reporter_device_id", deviceToken)
+    .order("created_at", { ascending: false });
+
+  if (error) return fail(error.message);
+  return { data: (data ?? []).map(adaptReport), error: null };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Per-location evidence
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Every report within `radiusMeters` of a point, with its photos.
+ *
+ * Filtered client-side on an already-RLS-scoped result rather than with a
+ * PostGIS query, which is deliberate: an office running this must see the same
+ * set they can see everywhere else in the app. Pushing it into a SECURITY
+ * DEFINER function for the distance maths would quietly widen that.
+ */
+export async function getReportsNearPoint({ lat, lng, radiusMeters = 150 }) {
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    return fail("A latitude and longitude are required.");
+  }
+
+  const { data, error } = await supabase
+    .from("reports")
+    .select(
+      `id, tracking_code, category, description, status, lat, lng, created_at,
+       resolved_at, resolution_reason, resolution_reference,
+       offices:assigned_office_id ( short_name, full_name ),
+       barangays:barangay_id ( name ),
+       routing_table:category ( label )`
+    )
+    .order("created_at", { ascending: true });
+
+  if (error) return fail(error.message);
+
+  // Equirectangular approximation. Over a 150m radius at Legazpi's latitude the
+  // error is centimetres, and it avoids a round trip for something the browser
+  // can do instantly.
+  const EARTH_R = 6_371_000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+
+  const near = (data ?? [])
+    .map((row) => {
+      const x = toRad(row.lng - lng) * Math.cos(toRad((lat + row.lat) / 2));
+      const y = toRad(row.lat - lat);
+      return { ...adaptReport(row), distance_m: Math.round(Math.sqrt(x * x + y * y) * EARTH_R) };
+    })
+    .filter((row) => row.distance_m <= radiusMeters)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  return { data: near, error: null };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

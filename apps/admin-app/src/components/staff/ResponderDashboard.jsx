@@ -8,6 +8,7 @@ import {
   getReports, getCategories, getBarangays, getOffices,
   updateReportStatus, addReportMedia, markFalseReport, saroEvents,
   useAuth, LEGAZPI_CENTER, STATUS_PIPELINE,
+  RESOLUTION_REASONS, RESOLUTION_REASON_LABELS,
 } from "@saro/shared";
 import { StatusTag, TrackingCode, statusTab } from "@saro/ui";
 import QueueTable from "./QueueTable";
@@ -87,6 +88,125 @@ function Count({ label, value, tone }) {
   );
 }
 
+/** States an official can no longer act on. */
+function isTerminal(status) {
+  return ["resolved", "closed_confirmed", "closed_unconfirmed", "reopened"].includes(status);
+}
+
+/**
+ * The closure gate.
+ *
+ * Which proof is demanded comes from the category's `resolution_proof`, set in
+ * the routing table. Physical hazards need a photograph — it is timestamped, it
+ * shows the actual place, and the resident disputing the closure sees the same
+ * frame the office did. Medical, crime and referral cases cannot be
+ * photographed: the ambulance has gone, and photographing someone on the worst
+ * day of their life to satisfy a form would be indefensible. Those need a
+ * countable reason code AND a reference, because a code alone loses every
+ * specific and free text alone can never be counted.
+ *
+ * A trigger in Postgres enforces the same rule. This panel exists so the person
+ * finds out what is missing before they lose what they typed.
+ */
+function ResolvePanel({ report, proofKind, busy, onResolve }) {
+  const fileRef = useRef(null);
+  const [photo, setPhoto] = useState(null);
+  const [reason, setReason] = useState("");
+  const [reference, setReference] = useState("");
+
+  const ready = proofKind === "photo"
+    ? Boolean(photo)
+    : Boolean(reason) && reference.trim().length >= 4;
+
+  if (proofKind === "photo") {
+    return (
+      <>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="sr-only"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (f) setPhoto(await compressPhoto(f));
+          }}
+        />
+        {photo ? (
+          <img src={photo} alt="Resolution evidence" className="h-28 w-full border border-line object-cover" />
+        ) : (
+          <button onClick={() => fileRef.current?.click()} className="saro-btn saro-btn-secondary saro-btn-block">
+            <Upload width={15} height={15} />
+            Attach resolution photo
+          </button>
+        )}
+        <p className="t-body-sm text-ink-muted">
+          A photo of the completed work is required before this can be resolved.
+        </p>
+        <button
+          onClick={() => onResolve({ photo, asFalse: false })}
+          disabled={!ready || busy}
+          className="saro-btn saro-btn-primary saro-btn-block"
+        >
+          <Check width={15} height={15} />
+          Mark resolved
+        </button>
+        <button
+          onClick={() => onResolve({ photo, asFalse: true })}
+          disabled={!ready || busy}
+          className="saro-btn saro-btn-ghost saro-btn-block"
+        >
+          <Flag width={15} height={15} />
+          Resolve as false report
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p className="t-body-sm text-ink-muted">
+        {report.category_label ?? "This category"} cannot be closed with a photo. Record what
+        happened instead.
+      </p>
+
+      <label className="block">
+        <span className="t-label text-ink-faint">Reason code *</span>
+        <select
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className="saro-field mt-1.5 w-full"
+        >
+          <option value="">Choose one…</option>
+          {RESOLUTION_REASONS.map((r) => (
+            <option key={r.value} value={r.value}>{r.label}</option>
+          ))}
+        </select>
+      </label>
+
+      <label className="block">
+        <span className="t-label text-ink-faint">Reference number or note *</span>
+        <textarea
+          rows={2}
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder="BFP dispatch #2026-0814, endorsed to Ambulance 2 at 14:20"
+          className="saro-field mt-1.5 w-full resize-none"
+        />
+      </label>
+
+      <button
+        onClick={() => onResolve({ reason, reference, asFalse: reason === "false_alarm" })}
+        disabled={!ready || busy}
+        className="saro-btn saro-btn-primary saro-btn-block"
+      >
+        <Check width={15} height={15} />
+        Mark resolved
+      </button>
+    </>
+  );
+}
+
 export default function ResponderDashboard() {
   const { officeName, isAdmin, isBarangayOfficial, barangayName } = useAuth();
 
@@ -98,10 +218,8 @@ export default function ResponderDashboard() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
-  const [resolvePhoto, setResolvePhoto] = useState(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
-  const fileRef = useRef(null);
 
   const loadData = useCallback(async () => {
     const [r, c, b, o] = await Promise.all([
@@ -158,7 +276,9 @@ export default function ResponderDashboard() {
   }, []);
 
   const counts = useMemo(() => {
-    const open = reports.filter((r) => r.status !== "resolved" && r.status !== "closed");
+    // "Open" means still owed work. Reopened counts — a resident said the last
+    // resolution did not hold, so it is back on the office.
+    const open = reports.filter((r) => !isTerminal(r.status) || r.status === "reopened");
     const overdue = open.filter((r) => {
       const sla = catBy[r.category_id ?? r.category]?.sla_hours || 24;
       return (now - new Date(r.created_at).getTime()) / 3_600_000 > sla;
@@ -175,25 +295,37 @@ export default function ResponderDashboard() {
     const next = STATUS_PIPELINE[STATUS_PIPELINE.indexOf(report.status) + 1];
     if (!next) return;
     setBusy(true); setActionError("");
-    const { error } = await updateReportStatus(report.id, next, `Advanced to ${next}.`);
+    const { error } = await updateReportStatus(report.id, next);
     setBusy(false);
     if (error) return setActionError(error);
     await loadData();
     setSelected((s) => (s ? { ...s, status: next } : s));
   };
 
-  const resolve = async (report, asFalse) => {
-    if (!resolvePhoto) return setActionError("Attach a resolution photo first.");
+  /**
+   * Resolve, with whatever proof this category requires.
+   *
+   * The photo is uploaded BEFORE the status update, because the trigger that
+   * enforces the rule counts resolution media on the row. Reversing the order
+   * would make every photo-backed resolution fail.
+   */
+  const resolve = async ({ photo, reason, reference, asFalse }) => {
+    const report = sel;
+    if (!report) return;
+
     setBusy(true); setActionError("");
-    await addReportMedia(report.id, resolvePhoto, "resolution");
+
+    if (photo) {
+      const { error: mediaError } = await addReportMedia(report.id, photo, "resolution");
+      if (mediaError) { setBusy(false); return setActionError(mediaError); }
+    }
+
     if (asFalse) await markFalseReport(report.id, true);
-    const { error } = await updateReportStatus(
-      report.id, "resolved",
-      asFalse ? "Resolved as false report." : "Resolved with photographic evidence."
-    );
+
+    const { error } = await updateReportStatus(report.id, "resolved", { reason, reference });
     setBusy(false);
     if (error) return setActionError(error);
-    setResolvePhoto(null);
+
     setSelected(null);
     await loadData();
   };
@@ -272,7 +404,9 @@ export default function ResponderDashboard() {
             categories={categories}
             barangays={barangays}
             selectedId={sel?.id}
-            onSelect={(r) => { setSelected(r); setResolvePhoto(null); setActionError(""); }}
+            // key on ResolvePanel below remounts it per report, so a photo or
+            // reason typed for one card can never be submitted against another.
+            onSelect={(r) => { setSelected(r); setActionError(""); }}
           />
         </div>
 
@@ -373,41 +507,16 @@ export default function ResponderDashboard() {
             </div>
 
             {/* Actions: never more than the one thing that moves this card on. */}
-            {!isBarangayOfficial && sel.status !== "resolved" && sel.status !== "closed" && (
+            {!isBarangayOfficial && !isTerminal(sel.status) && (
               <div className="flex flex-col gap-2 border-t border-line p-4">
                 {sel.status === "in_progress" ? (
-                  <>
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="sr-only"
-                      onChange={async (e) => {
-                        const f = e.target.files?.[0];
-                        if (f) setResolvePhoto(await compressPhoto(f));
-                      }}
-                    />
-                    {resolvePhoto ? (
-                      <img src={resolvePhoto} alt="Resolution evidence" className="h-28 w-full border border-line object-cover" />
-                    ) : (
-                      <button onClick={() => fileRef.current?.click()} className="saro-btn saro-btn-secondary saro-btn-block">
-                        <Upload width={15} height={15} />
-                        Attach resolution photo
-                      </button>
-                    )}
-                    <p className="t-body-sm text-ink-muted">
-                      A photo is required before this can be marked resolved.
-                    </p>
-                    <button onClick={() => resolve(sel, false)} disabled={!resolvePhoto || busy} className="saro-btn saro-btn-primary saro-btn-block">
-                      <Check width={15} height={15} />
-                      Mark resolved
-                    </button>
-                    <button onClick={() => resolve(sel, true)} disabled={!resolvePhoto || busy} className="saro-btn saro-btn-ghost saro-btn-block">
-                      <Flag width={15} height={15} />
-                      Resolve as false report
-                    </button>
-                  </>
+                  <ResolvePanel
+                    key={sel.id}
+                    report={sel}
+                    proofKind={catBy[sel.category_id ?? sel.category]?.resolution_proof ?? "photo"}
+                    busy={busy}
+                    onResolve={resolve}
+                  />
                 ) : (
                   <button onClick={() => advance(sel)} disabled={busy} className="saro-btn saro-btn-primary saro-btn-block capitalize">
                     Move to {STATUS_PIPELINE[STATUS_PIPELINE.indexOf(sel.status) + 1]?.replace("_", " ")}
@@ -416,10 +525,38 @@ export default function ResponderDashboard() {
               </div>
             )}
 
+            {/* Terminal states are shown, never offered. closed_confirmed,
+                closed_unconfirmed and reopened belong to the resident and to
+                the auto-close timer — an office that could set them itself
+                could manufacture a satisfied resident, which is the one thing
+                the confirmed/unconfirmed split exists to prevent. A trigger
+                refuses it too; this is only the explanation. */}
+            {!isBarangayOfficial && isTerminal(sel.status) && (
+              <div className="border-t border-line p-4">
+                <span className="t-label text-ink-faint">Closed</span>
+                <p className="t-body-sm mt-1.5 text-ink-muted">
+                  {sel.status === "resolved" &&
+                    "Waiting for the resident to confirm. It closes itself after 7 days if they do not answer."}
+                  {sel.status === "closed_confirmed" &&
+                    "The resident confirmed the work was done. Nothing further to do."}
+                  {sel.status === "closed_unconfirmed" &&
+                    "Closed automatically with no answer from the resident. They can still reopen it."}
+                  {sel.status === "reopened" &&
+                    "The resident said this was not fixed."}
+                </p>
+                {sel.resolution_reason && (
+                  <p className="t-body-sm mt-2 text-ink-muted">
+                    <span className="t-label text-ink-faint">Closed as </span>
+                    {RESOLUTION_REASON_LABELS[sel.resolution_reason]} · {sel.resolution_reference}
+                  </p>
+                )}
+              </div>
+            )}
+
             {isBarangayOfficial && (
               <p className="t-body-sm border-t border-line p-4 text-ink-muted">
                 You have read access to reports in {barangayName}. Status changes are made by the
-                office handling the report.
+                office handling the report — this is enforced by the database, not just hidden here.
               </p>
             )}
           </aside>

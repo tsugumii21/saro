@@ -103,6 +103,15 @@ function Provenance({ verified }) {
   );
 }
 
+/**
+ * Statuses that sink to the bottom of the rack.
+ *
+ * 'reopened' is deliberately absent. A resident saying the work did not hold is
+ * live, urgent, and owed to the office that already called it done — sorting it
+ * with the finished work is how a disputed report gets ignored twice.
+ */
+const SETTLED = new Set(["resolved", "closed_confirmed", "closed_unconfirmed"]);
+
 export default function QueueTable({
   reports,
   categories,
@@ -120,12 +129,13 @@ export default function QueueTable({
   );
 
   // Triage order: unresolved first, then by how far through its SLA it is.
+  //
   // This is the screen's single most important behaviour — the top row should
   // always be the row a dispatcher should touch next.
   const ordered = useMemo(() => {
     return [...(reports ?? [])].sort((a, b) => {
-      const aDone = a.status === "resolved" || a.status === "closed";
-      const bDone = b.status === "resolved" || b.status === "closed";
+      const aDone = SETTLED.has(a.status);
+      const bDone = SETTLED.has(b.status);
       if (aDone !== bDone) return aDone ? 1 : -1;
       const aSla = catBy[a.category_id ?? a.category]?.sla_hours || 24;
       const bSla = catBy[b.category_id ?? b.category]?.sla_hours || 24;
@@ -161,7 +171,7 @@ export default function QueueTable({
           {ordered.map((r) => {
             const cat = catBy[r.category_id ?? r.category];
             const brgy = brgyBy[r.barangay_id];
-            const done = r.status === "resolved" || r.status === "closed";
+            const done = SETTLED.has(r.status);
             const selected = r.id === selectedId;
             const clustered = r.cluster_id && (r.confidence_score ?? 1) > 1;
 

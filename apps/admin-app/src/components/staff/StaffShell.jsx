@@ -1,7 +1,15 @@
 import { useState } from "react";
-import { Mail, Lock, LogOut, LayoutDashboard, Building2, ArrowRight, ArrowLeft } from "lucide-react";
+import {
+  Mail, Lock, LogOut, LayoutDashboard, Building2, ArrowRight, ArrowLeft,
+  Layers, Siren, FileDown, UserPlus,
+} from "lucide-react";
 import ResponderDashboard from "./ResponderDashboard.jsx";
 import AdminDashboard from "./AdminDashboard.jsx";
+import RoutingEditor from "./RoutingEditor.jsx";
+import ClusterReview from "./ClusterReview.jsx";
+import PanicReview from "./PanicReview.jsx";
+import EvidenceExport from "./EvidenceExport.jsx";
+import FileOnBehalf from "./FileOnBehalf.jsx";
 import { Wordmark } from "@saro/ui";
 import { useAuth, STAFF_ROLES } from "@saro/shared";
 
@@ -21,6 +29,25 @@ import { useAuth, STAFF_ROLES } from "@saro/shared";
 
 const RESIDENT_APP_URL = import.meta.env.VITE_RESIDENT_APP_URL || "";
 
+/**
+ * Which sections a role can reach.
+ *
+ * This list controls navigation and nothing else. Every screen behind it is
+ * also protected by RLS and, where it writes, by a policy or a trigger — an
+ * office role that reached /routing by any means still cannot change a routing
+ * rule, because the permission lives in Postgres. Hiding a tab is a courtesy to
+ * the user, not a security boundary, and treating it as one is how admin panels
+ * end up one URL away from a breach.
+ */
+const SECTIONS = [
+  { id: "dispatch", Icon: LayoutDashboard, label: "Dispatch",  roles: ["admin", "office", "barangay_official"] },
+  { id: "clusters", Icon: Layers,          label: "Duplicates", roles: ["admin", "office", "barangay_official"] },
+  { id: "evidence", Icon: FileDown,        label: "Evidence",   roles: ["admin", "office", "barangay_official"] },
+  { id: "behalf",   Icon: UserPlus,        label: "File for a resident", roles: ["admin", "barangay_official"] },
+  { id: "routing",  Icon: Building2,       label: "Routing & data", roles: ["admin"] },
+  { id: "panic",    Icon: Siren,           label: "Panic review",   roles: ["admin"] },
+];
+
 export default function StaffShell() {
   const { profile, role, isAdmin, officeName, barangayName, loading, signOut } = useAuth();
   const [tab, setTab] = useState("dispatch");
@@ -37,6 +64,11 @@ export default function StaffShell() {
   if (!profile || !STAFF_ROLES.includes(role)) return <StaffLogin />;
 
   const scope = officeName || barangayName || "City-wide";
+  const visibleSections = SECTIONS.filter((s) => s.roles.includes(role));
+
+  // A tab the current role cannot see falls back to Dispatch rather than
+  // rendering nothing — reachable only if the stored tab outlives a role change.
+  const active = visibleSections.some((s) => s.id === tab) ? tab : "dispatch";
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
@@ -52,28 +84,23 @@ export default function StaffShell() {
             </span>
           </div>
 
-          {isAdmin && (
-            <nav className="flex items-center gap-px border border-line bg-line" aria-label="Sections">
-              {[
-                { id: "dispatch", Icon: LayoutDashboard, label: "Dispatch" },
-                { id: "admin", Icon: Building2, label: "Routing & data" },
-              ].map(({ id, Icon, label }) => (
-                <button
-                  key={id}
-                  onClick={() => setTab(id)}
-                  aria-current={tab === id ? "page" : undefined}
-                  className="saro-btn saro-btn-sm"
-                  style={{
-                    background: tab === id ? "var(--color-brand)" : "var(--color-surface)",
-                    color: tab === id ? "#fff" : "var(--color-ink-muted)",
-                  }}
-                >
-                  <Icon width={14} height={14} />
-                  {label}
-                </button>
-              ))}
-            </nav>
-          )}
+          <nav className="flex flex-wrap items-center gap-px border border-line bg-line" aria-label="Sections">
+            {visibleSections.map(({ id, Icon, label }) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                aria-current={tab === id ? "page" : undefined}
+                className="saro-btn saro-btn-sm"
+                style={{
+                  background: tab === id ? "var(--color-brand)" : "var(--color-surface)",
+                  color: tab === id ? "#fff" : "var(--color-ink-muted)",
+                }}
+              >
+                <Icon width={14} height={14} />
+                {label}
+              </button>
+            ))}
+          </nav>
 
           <div className="flex items-center gap-3">
             <span className="hidden text-right md:block">
@@ -89,7 +116,20 @@ export default function StaffShell() {
       </header>
 
       <main className="flex-1 p-5">
-        {tab === "admin" && isAdmin ? <AdminDashboard /> : <ResponderDashboard />}
+        {active === "dispatch" && <ResponderDashboard />}
+        {active === "clusters" && <ClusterReview />}
+        {active === "evidence" && <EvidenceExport />}
+        {active === "behalf"   && <FileOnBehalf />}
+        {active === "panic"    && <PanicReview />}
+        {active === "routing" && isAdmin && (
+          <div className="flex flex-col gap-8">
+            <RoutingEditor />
+            {/* City-wide SLA rollup, gap log and per-office aging. Kept below
+                routing because a routing change is usually what these numbers
+                send you here to make. */}
+            <AdminDashboard />
+          </div>
+        )}
       </main>
     </div>
   );

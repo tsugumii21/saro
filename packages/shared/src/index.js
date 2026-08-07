@@ -30,7 +30,17 @@ export {
   updateReportStatus,
   markFalseReport,
   updateCategory,
+  createRoutingRule,
+  deleteRoutingRule,
   getRoutingChangelog,
+  // clusters
+  getClustersWithReports,
+  splitFromCluster,
+  // panic abuse review
+  getPanicFlags,
+  getReportsForDevice,
+  // per-location evidence
+  getReportsNearPoint,
   // photos
   uploadReportPhoto,
   addReportMedia,

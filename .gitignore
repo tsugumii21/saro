@@ -31,3 +31,9 @@ supabase/.temp
 # impeccable local cache / machine-specific config
 .impeccable/hook.cache.json
 .impeccable/config.local.json
+
+# Intermediate hazard GeoJSON (~55 MB). Regenerate with
+# `node tools/hazard/fetch-hazards.mjs`. The committed, versioned asset is the
+# PMTiles archive in each app's public/hazard/ — the GeoJSON is only the
+# staging format between the upstream services and the tiler.
+packages/shared/assets/hazard/*.geojson

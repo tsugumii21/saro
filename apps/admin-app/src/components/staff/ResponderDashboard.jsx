@@ -1,16 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
-import L from "leaflet";
 import {
   X, Upload, Flag, Search, Check, MapPin, Phone, Clock, ShieldCheck, UserRound, Layers,
 } from "lucide-react";
 import {
   getReports, getCategories, getBarangays, getOffices,
   updateReportStatus, addReportMedia, markFalseReport, saroEvents,
-  useAuth, LEGAZPI_CENTER, STATUS_PIPELINE,
+  useAuth, STATUS_PIPELINE,
   RESOLUTION_REASONS, RESOLUTION_REASON_LABELS,
 } from "@saro/shared";
-import { StatusTag, TrackingCode, statusTab } from "@saro/ui";
+import { StatusTag, TrackingCode, statusTab, HazardMap } from "@saro/ui";
 import QueueTable from "./QueueTable";
 
 /**
@@ -56,24 +54,6 @@ function compressPhoto(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-}
-
-const pin = (color) =>
-  L.divIcon({
-    className: "saro-marker",
-    html: `<div style="width:16px;height:16px;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(16,23,37,.4)"></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-  });
-
-function Recenter({ lat, lng }) {
-  const map = useMap();
-  useEffect(() => {
-    if (lat && lng) map.setView([lat, lng], 16, { animate: false });
-    const t = setTimeout(() => map.invalidateSize(), 80);
-    return () => clearTimeout(t);
-  }, [lat, lng, map]);
-  return null;
 }
 
 /** One number and its noun. Four of these replace the old eight-tile KPI grid. */
@@ -434,17 +414,15 @@ export default function ResponderDashboard() {
 
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="h-44 border-b border-line">
-                <MapContainer
-                  center={sel.lat && sel.lng ? [sel.lat, sel.lng] : LEGAZPI_CENTER}
+                <HazardMap
+                  className="h-full w-full"
+                  center={[sel.lng, sel.lat]}
                   zoom={16}
-                  zoomControl={false}
-                  attributionControl={false}
-                  style={{ height: "100%", width: "100%" }}
-                >
-                  <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-                  {sel.lat && sel.lng && <Marker position={[sel.lat, sel.lng]} icon={pin(statusTab(sel.status))} />}
-                  <Recenter lat={sel.lat} lng={sel.lng} />
-                </MapContainer>
+                  showToggles={false}
+                  hidden={["rain"]}
+                  reports={[{ id: sel.id, lat: sel.lat, lng: sel.lng,
+                              priority: sel.priority, color: statusTab(sel.status) }]}
+                />
               </div>
 
               <div className="flex flex-col gap-4 p-4">

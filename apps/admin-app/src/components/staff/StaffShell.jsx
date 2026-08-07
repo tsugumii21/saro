@@ -9,6 +9,7 @@ import RoutingEditor from "./RoutingEditor.jsx";
 import ClusterReview from "./ClusterReview.jsx";
 import PanicReview from "./PanicReview.jsx";
 import EvidenceExport from "./EvidenceExport.jsx";
+import AlertLevelEditor from "./AlertLevelEditor.jsx";
 import { Wordmark } from "@saro/ui";
 import { useAuth, STAFF_ROLES } from "@saro/shared";
 
@@ -120,6 +121,7 @@ export default function StaffShell() {
         {active === "panic"    && <PanicReview />}
         {active === "routing" && isAdmin && (
           <div className="flex flex-col gap-8">
+            <AlertLevelEditor />
             <RoutingEditor />
             {/* City-wide SLA rollup, gap log and per-office aging. Kept below
                 routing because a routing change is usually what these numbers

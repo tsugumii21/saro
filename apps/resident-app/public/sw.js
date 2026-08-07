@@ -18,12 +18,20 @@
  * next open the app. The page drains those (see offline/sync.js).
  */
 
-const CACHE = "saro-shell-v1";
+const CACHE = "saro-shell-v2";
 
 /* The shell, not the app. Enough to open SARO offline and reach Panic; the
  * hashed JS/CSS bundles are added opportunistically as they are fetched, since
  * their filenames change every build and cannot be listed here. */
-const SHELL = ["/", "/index.html", "/manifest.json", "/icon.svg", "/favicon.svg"];
+const SHELL = [
+  "/", "/index.html", "/manifest.json", "/icon.svg", "/favicon.svg",
+  // The hazard archive. ~0.9 MB for every Mayon danger zone and Legazpi's
+  // flood extents — precached on install so the map still shows where the
+  // danger is when the network is gone, which is exactly when it matters.
+  // MapLibre fetches it with Range requests; the cached Response satisfies
+  // them because the whole body is present.
+  "/hazard/legazpi-hazards.pmtiles",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -139,29 +147,35 @@ async function drainOutbox() {
     // Signed-in reports are left for the page, which has the session.
     if (!deviceId) continue;
 
-    const insert = {
-      category: payload.category,
-      description: (payload.description || "").trim(),
-      lat: Number(payload.lat),
-      lng: Number(payload.lng),
-      callback_number: payload.callback_number || null,
-      is_proxy_report: Boolean(payload.is_proxy_report),
-      photo_url: payload.photo_url || null,
-      reporter_device_id: deviceId,
+    // The RPC, not a table insert.
+    //
+    // anon has INSERT on reports but no SELECT, so POSTing to /rest/v1/reports
+    // with `Prefer: return=representation` writes the row and then fails with
+    // 42501 on the way back — the report would be delivered and this worker
+    // would treat it as a permanent 4xx failure, leaving a duplicate in the
+    // outbox forever. Same trap the page client hit; see migration 14.
+    const args = {
+      p_category: payload.category,
+      p_description: (payload.description || "").trim(),
+      p_lat: Number(payload.lat),
+      p_lng: Number(payload.lng),
+      p_device_id: deviceId,
+      p_barangay_id: payload.barangay_id || null,
+      p_callback_number: payload.callback_number || null,
+      p_is_proxy: Boolean(payload.is_proxy_report),
+      p_photo_url: payload.photo_url || null,
     };
-    if (payload.barangay_id) insert.barangay_id = payload.barangay_id;
 
     let response;
     try {
-      response = await fetch(`${config.url}/rest/v1/reports`, {
+      response = await fetch(`${config.url}/rest/v1/rpc/file_anonymous_report`, {
         method: "POST",
         headers: {
           apikey: config.anonKey,
           Authorization: `Bearer ${config.anonKey}`,
           "Content-Type": "application/json",
-          Prefer: "return=representation",
         },
-        body: JSON.stringify(insert),
+        body: JSON.stringify(args),
       });
     } catch {
       // Still offline. Throwing rejects the sync event, which asks the browser
@@ -170,7 +184,8 @@ async function drainOutbox() {
     }
 
     if (response.ok) {
-      const [created] = await response.json();
+      const body = await response.json();
+      const created = Array.isArray(body) ? body[0] : body;
       await txAll(db, "outbox", "readwrite", (s) => s.delete(row.id), null);
 
       if (created?.tracking_code) {

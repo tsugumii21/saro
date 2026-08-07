@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
-import L from "leaflet";
 import {
   AlertTriangle, MapPin, Navigation, Camera, Mic, MicOff,
   Send, ChevronDown, Phone, Users, CheckCircle2, X, Plus, WifiOff, Search, Check,
@@ -15,8 +13,12 @@ import {
   structureDescription, detectEmergencyInDescription,
   enqueueReport, removeFromOutbox, rememberReport, requestBackgroundSync,
 } from "@saro/shared";
+import { HazardMap } from "@saro/ui";
 import ResidentAuthScreen from "./ResidentAuthScreen";
 import ReportTicket from "./ReportTicket";
+
+/** MapLibre takes [lng, lat]. */
+const LEGAZPI_CENTER_LNGLAT = [LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]];
 
 const LEGAZPI_BOUNDS = { minLat: 13.10, maxLat: 13.20, minLng: 123.70, maxLng: 123.78 };
 
@@ -78,30 +80,6 @@ function getCategoryIcon(cat) {
   if (id.includes("water")) return Droplets;
   if (id.includes("coastal")) return Anchor;
   return AlertTriangle;
-}
-
-const pinIcon = L.divIcon({
-  className: "saro-pin",
-  html: `<div style="width:20px;height:20px;background:#1B2E6B;border:2px solid #fff;box-shadow:0 1px 4px rgba(16,23,37,.4);"></div>`,
-  iconSize: [20, 20],
-  iconAnchor: [10, 10]
-});
-
-function MapClickHandler({ onSelect }) {
-  useMapEvents({
-    click(e) {
-      onSelect({ lat: e.latlng.lat, lng: e.latlng.lng });
-    }
-  });
-  return null;
-}
-
-function FlyTo({ position }) {
-  const map = useMap();
-  useEffect(() => {
-    if (position) map.flyTo([position.lat, position.lng], 16, { duration: 0.8 });
-  }, [position, map]);
-  return null;
 }
 
 // The localStorage offline queue that used to live here is gone. It could not
@@ -962,24 +940,20 @@ export default function ReportFormScreen() {
           )}
 
           <div className="h-44 rounded-xs overflow-hidden border border-line relative">
-            <MapContainer
-              center={LEGAZPI_CENTER}
-              zoom={14}
-              scrollWheelZoom={true}
-              className="w-full h-full"
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              />
-              <MapClickHandler onSelect={handleMapSelect} />
-              {coords && (
-                <>
-                  <Marker position={[coords.lat, coords.lng]} icon={pinIcon} />
-                  <FlyTo position={coords} />
-                </>
-              )}
-            </MapContainer>
+            {/* Hazard layers are on while picking a location, deliberately.
+                Somebody reporting a blocked drain can see they are inside the
+                5-year flood extent, which is context the office would otherwise
+                have to add later. Toggles are hidden here — this map's job is
+                picking a point, not exploring. */}
+            <HazardMap
+              className="h-full w-full"
+              center={coords ? [coords.lng, coords.lat] : LEGAZPI_CENTER_LNGLAT}
+              zoom={coords ? 16 : 13}
+              onPick={handleMapSelect}
+              picked={coords}
+              showToggles={false}
+              hidden={["rain", "reports"]}
+            />
           </div>
 
           {coords && (

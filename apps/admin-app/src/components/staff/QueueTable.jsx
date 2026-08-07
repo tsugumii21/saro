@@ -194,6 +194,18 @@ export default function QueueTable({
                   <span className="flex items-center gap-1.5">
                     <TrackingCode code={r.tracking_code} />
                     <Provenance verified={r.filed_by_verified} />
+                    {r.priority === "high" && (
+                      <span
+                        className="t-micro ml-1.5 inline-flex items-center gap-1 border px-1.5 py-0.5"
+                        style={{
+                          borderColor: "var(--color-alert)",
+                          color: "var(--color-alert)",
+                        }}
+                        title={r.priority_reason ?? "Inside an active hazard zone"}
+                      >
+                        IN HAZARD ZONE
+                      </span>
+                    )}
                     {clustered && (
                       <span
                         className="t-data-sm inline-flex items-center gap-0.5 px-1"

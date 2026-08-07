@@ -14,3 +14,5 @@ export { default as Logo, CARD_PATH, DOOR_PATH } from "./Logo.jsx";
 export { default as Wordmark } from "./Wordmark.jsx";
 export { default as StatusTag, STATUS_META, statusTab } from "./StatusTag.jsx";
 export { default as TrackingCode } from "./TrackingCode.jsx";
+export { default as HazardMap, HAZARD_LAYERS } from "./HazardMap.jsx";
+export { default as AlertLevelBadge, ALERT_LEVELS } from "./AlertLevelBadge.jsx";

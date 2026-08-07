@@ -1,15 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
-import L from "leaflet";
 import {Shield, AlertTriangle, ArrowRight, Phone, Clock, MapPin, Radio, Flame, Waves, Construction, Activity, HeartPulse, Droplet, Anchor, Share2, X} from "lucide-react";
-import { Wordmark, StatusTag } from "@saro/ui";
+import { Wordmark, StatusTag, HazardMap } from "@saro/ui";
 import { getPublicMapReports, getCategories, LEGAZPI_CENTER } from "@saro/shared";
-import { saroEvents } from "@saro/shared";
 
-const LEGAZPI_BOUNDS = [
-  [13.10, 123.70],
-  [13.20, 123.78]
-];
+/** MapLibre takes [lng, lat]. */
+const LEGAZPI_CENTER_LNGLAT = [LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]];
+import { saroEvents } from "@saro/shared";
 
 
 const STATUS_COLORS = {
@@ -18,31 +14,6 @@ const STATUS_COLORS = {
   in_progress: "#0060A9",
   resolved: "#22C55E"
 };
-
-function makeMapMarkerIcon(color, isResolved, clusterCount) {
-  const opacity = isResolved ? 0.45 : 1;
-  const size = clusterCount > 1 ? 26 : 18;
-  const ring = clusterCount > 1 ? `box-shadow:0 0 0 4px ${color}35;` : `box-shadow:0 1px 4px rgba(0,0,0,.4);`;
-
-  return L.divIcon({
-    className: "saro-marker",
-    html: `<div style="position:relative;width:${size}px;height:${size}px;opacity:${opacity};">
-      <div style="background:${color};width:100%;height:100%;border-radius:50%;border:2px solid #fff;${ring}"></div>
-      ${clusterCount > 1 ? `<span style="position:absolute;top:-6px;right:-6px;background:#0F172A;color:#fff;font-size:9px;font-weight:800;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;">${clusterCount}</span>` : ""}
-    </div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2]
-  });
-}
-
-function BoundsController() {
-  const map = useMap();
-  useEffect(() => {
-    map.setMaxBounds(L.latLngBounds(LEGAZPI_BOUNDS).pad(0.1));
-    map.setMinZoom(12);
-  }, [map]);
-  return null;
-}
 
 export default function LandingPage({ onSelectResident, onSelectOfficer }) {
   const [reports, setReports] = useState([]);
@@ -185,34 +156,17 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
 
                 {/* Dark CartoDB Leaflet Map */}
                 <div className="flex-1 relative w-full h-full">
-                  <MapContainer
-                    center={LEGAZPI_CENTER}
-                    zoom={13}
-                    zoomControl={false}
-                    scrollWheelZoom={false}
-                    className="w-full h-full"
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
-                      url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                    />
-                    <BoundsController />
-
-                    {displayReports.map(({ report: r, count }) => {
-                      const isResolved = r.status === "resolved";
-                      const color = STATUS_COLORS[r.status] || STATUS_COLORS.received;
-                      return (
-                        <Marker
-                          key={r.cluster_id || r.id}
-                          position={[r.lat, r.lng]}
-                          icon={makeMapMarkerIcon(color, isResolved, count)}
-                          eventHandlers={{
-                            click: () => setSelectedReport({ ...r, clusterCount: count })
-                          }}
-                        />
-                      );
-                    })}
-                  </MapContainer>
+                  <HazardMap
+                    className="h-full w-full"
+                    center={LEGAZPI_CENTER_LNGLAT}
+                    zoom={12}
+                    showToggles={false}
+                    hidden={["rain"]}
+                    reports={displayReports.map((r) => ({
+                      id: r.id, lat: r.lat, lng: r.lng, priority: r.priority,
+                      color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
+                    }))}
+                  />
 
                   {/* Selected Incident Floating Detail Card */}
                   {selectedReport ? (

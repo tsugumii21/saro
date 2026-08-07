@@ -1,8 +1,6 @@
 import { useState, useCallback } from "react";
-import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
-import L from "leaflet";
 import { FileDown, Table, Crosshair, Loader2 } from "lucide-react";
-import { StatusTag, TrackingCode } from "@saro/ui";
+import { StatusTag, TrackingCode, HazardMap } from "@saro/ui";
 import {
   getReportsNearPoint, getReportMedia, useAuth,
   LEGAZPI_CENTER, RESOLUTION_REASON_LABELS, STATUS_LABELS,
@@ -33,18 +31,6 @@ import {
  * The query runs against an already-RLS-scoped read, so an office exports what
  * an office can see. Nothing here widens anyone's access.
  */
-
-const pin = L.divIcon({
-  className: "",
-  html: `<div style="width:18px;height:18px;background:#1B2E6B;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(16,23,37,.45)"></div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-});
-
-function PickPoint({ onPick }) {
-  useMapEvents({ click: (e) => onPick({ lat: e.latlng.lat, lng: e.latlng.lng }) });
-  return null;
-}
 
 const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) =>
@@ -158,23 +144,18 @@ export default function EvidenceExport() {
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="saro-card overflow-hidden">
           <div className="h-[420px]">
-            <MapContainer center={LEGAZPI_CENTER} zoom={13} scrollWheelZoom className="h-full w-full">
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              />
-              <PickPoint onPick={(p) => { setPoint(p); setSearched(false); }} />
-              {point && (
-                <>
-                  <Marker position={[point.lat, point.lng]} icon={pin} />
-                  <Circle
-                    center={[point.lat, point.lng]}
-                    radius={radius}
-                    pathOptions={{ color: "var(--color-brand)", fillOpacity: 0.08, weight: 1.5 }}
-                  />
-                </>
-              )}
-            </MapContainer>
+            <HazardMap
+              className="h-full w-full"
+              center={point ? [point.lng, point.lat] : [LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]]}
+              zoom={point ? 15 : 12}
+              onPick={(p) => { setPoint(p); setSearched(false); }}
+              picked={point}
+              hidden={["rain"]}
+              reports={rows.map((r) => ({
+                id: r.id, lat: r.lat, lng: r.lng, priority: r.priority,
+                color: "var(--color-brand)",
+              }))}
+            />
           </div>
         </div>
 

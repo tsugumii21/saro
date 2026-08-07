@@ -54,6 +54,11 @@ export {
   // resident closure actions
   confirmReport,
   disputeReport,
+  // hazard overlays
+  getHazardZones,
+  getVolcanicAlert,
+  setVolcanicAlert,
+  getRainfall,
   // profiles
   getProfile,
 } from "./api/index.js";

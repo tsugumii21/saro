@@ -143,3 +143,13 @@ verify_jwt = false
 # key a push channel to every device that ever subscribed. Only a signed-in
 # staff session can trigger a send.
 verify_jwt = true
+
+[functions.rainfall-poll]
+# Called by pg_cron every 15 minutes with nothing but the publishable key.
+#
+# No JWT, on purpose: the alternative is storing a service-role key inside
+# Postgres for pg_net to send, and in this project secrets live only as Supabase
+# secrets. The function is safe to leave open because it has no inputs — it
+# fetches weather from Open-Meteo and caches it. An unauthorised call costs one
+# upstream request and cannot write anything the caller controls.
+verify_jwt = false

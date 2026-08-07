@@ -1,16 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
-import L from "leaflet";
-import { PlusCircle, Clock, MapPin, Layers, X, Plus, Minus } from "lucide-react";
-import { StatusTag } from "@saro/ui";
-import { getPublicMapReports, getCategories, getBarangays, LEGAZPI_CENTER } from "@saro/shared";
-import { saroEvents } from "@saro/shared";
+import { PlusCircle, Clock, MapPin, Layers, X } from "lucide-react";
+import { StatusTag, HazardMap, AlertLevelBadge } from "@saro/ui";
+import {
+  getPublicMapReports, getCategories, getBarangays,
+  getRainfall, getVolcanicAlert, LEGAZPI_CENTER, saroEvents,
+} from "@saro/shared";
 
-const LEGAZPI_BOUNDS = [
-  [13.10, 123.70],
-  [13.20, 123.78]
-];
+/** MapLibre takes [lng, lat]; LEGAZPI_CENTER is [lat, lng] for historical reasons. */
+const LEGAZPI_CENTER_LNGLAT = [LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]];
 
 const STATUS_LABELS = {
   received: "Received",
@@ -28,57 +26,10 @@ const STATUS_COLORS = {
 
 const STATUS_ORDER = ["received", "assigned", "in_progress", "resolved"];
 
-// Build a Leaflet DivIcon marker from category color + status
-function makeMarkerIcon(color, isResolved, clusterCount) {
-  const opacity = isResolved ? 0.4 : 1;
-  const size = clusterCount > 1 ? 28 : 18;
-  const badge = clusterCount > 1
-    ? `<span style="position:absolute;top:-6px;right:-6px;background:#101725;color:#fff;font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;">${clusterCount}</span>`
-    : "";
-
-  return L.divIcon({
-    className: "saro-marker",
-    html: `<div style="position:relative;width:${size}px;height:${size}px;opacity:${opacity};">
-      <div style="background:${color};width:100%;height:100%;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);"></div>
-      ${badge}
-    </div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2]
-  });
-}
-
-// Fit map bounds on mount
-function BoundsController() {
-  const map = useMap();
-  useEffect(() => {
-    map.setMaxBounds(L.latLngBounds(LEGAZPI_BOUNDS).pad(0.1));
-    map.setMinZoom(13);
-  }, [map]);
-  return null;
-}
-
-// Custom map zoom controls component
-function MapZoomButtons() {
-  const map = useMap();
-  return (
-    <div className="absolute bottom-20 right-4 z-[500] flex flex-col gap-1 shadow-md">
-      <button
-        onClick={() => map.zoomIn()}
-        className="w-9 h-9 bg-white/95 backdrop-blur hover:bg-white text-ink border border-line rounded-t-lg flex items-center justify-center font-bold text-lg active:bg-sunken transition-colors"
-        aria-label="Zoom in"
-      >
-        <Plus className="w-4 h-4" />
-      </button>
-      <button
-        onClick={() => map.zoomOut()}
-        className="w-9 h-9 bg-white/95 backdrop-blur hover:bg-white text-ink border-x border-b border-line rounded-b-lg flex items-center justify-center font-bold text-lg active:bg-sunken transition-colors"
-        aria-label="Zoom out"
-      >
-        <Minus className="w-4 h-4" />
-      </button>
-    </div>
-  );
-}
+// The DivIcon builder, the bounds controller and the custom zoom buttons that
+// used to live here are gone with Leaflet. HazardMap owns marker rendering and
+// ships MapLibre's own NavigationControl, so there is one implementation of
+// each rather than one per screen.
 
 function timeSince(dateStr) {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -99,16 +50,24 @@ export default function PublicMapScreen() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [showLegend, setShowLegend] = useState(false);
   const [statusFilter, setStatusFilter] = useState(""); // "" = all
+  const [rainfall, setRainfall] = useState([]);
+  const [alert, setAlert] = useState(null);
 
   const loadData = useCallback(async () => {
-    const [rRes, cRes, bRes] = await Promise.all([
+    const [rRes, cRes, bRes, rainRes, alertRes] = await Promise.all([
       getPublicMapReports(),
       getCategories(),
-      getBarangays()
+      getBarangays(),
+      // Both come from cached tables, never from the upstream sources — see
+      // the rainfall-poll Edge Function and the volcanic_alert table.
+      getRainfall(),
+      getVolcanicAlert()
     ]);
     if (rRes.data) setReports(rRes.data);
     if (cRes.data) setCategories(cRes.data);
     if (bRes.data) setBarangays(bRes.data);
+    if (rainRes.data) setRainfall(rainRes.data);
+    if (alertRes.data) setAlert(alertRes.data);
   }, []);
 
   useEffect(() => {
@@ -153,40 +112,44 @@ export default function PublicMapScreen() {
     <div className="flex flex-col h-full w-full relative overflow-hidden">
       {/* Map Container */}
       <div className="flex-1 relative overflow-hidden border-b border-line">
-        <MapContainer
-          center={LEGAZPI_CENTER}
-          zoom={14}
-          zoomControl={false}
-          scrollWheelZoom={true}
-          className="w-full h-full"
+        {/* The public hazard map.
+         *
+         * Citizen reports sit on top of the official layers rather than beside
+         * them, which is the point of the overlay work: "three people reported
+         * flooding here" means something different once you can see the spot is
+         * inside the 5-year flood extent, and a report inside the Permanent
+         * Danger Zone is a different kind of report.
+         *
+         * Layers are toggleable because showing all of them at once turns
+         * Legazpi into a wash of translucent polygons and the reports vanish
+         * underneath. Rain is off by default for the same reason — it is the
+         * layer you turn on when it is raining. */}
+        <HazardMap
+          className="h-full w-full"
           style={{ minHeight: "300px" }}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          />
-          <BoundsController />
-          <MapZoomButtons />
+          center={LEGAZPI_CENTER_LNGLAT}
+          zoom={13}
+          rainfall={rainfall}
+          reports={displayReports.map(({ report: r, count }) => ({
+            id: r.cluster_id || r.id,
+            lat: r.lat,
+            lng: r.lng,
+            priority: r.priority,
+            color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
+            onSelect: () => setSelectedReport({ ...r, clusterCount: count }),
+          }))}
+        />
 
-          {displayReports.map(({ report: r, count }) => {
-            const isResolved = r.status === "resolved";
-            const color = STATUS_COLORS[r.status] || STATUS_COLORS.received;
-
-            return (
-              <Marker
-                key={r.cluster_id || r.id}
-                position={[r.lat, r.lng]}
-                icon={makeMarkerIcon(color, isResolved, count)}
-                eventHandlers={{
-                  click: () => setSelectedReport({ ...r, clusterCount: count })
-                }}
-              />
-            );
-          })}
-        </MapContainer>
+        {/* The alert level rides on the map itself, because that is where
+            somebody is when they need it — not behind a menu. */}
+        {alert && (
+          <div className="absolute bottom-3 left-3 z-[500] max-w-[260px]">
+            <AlertLevelBadge alert={alert} compact />
+          </div>
+        )}
 
         {/* Top Bar: Status Filter Chips with smooth horizontal scroll */}
-        <div className="absolute top-3 left-3 right-12 z-[500] overflow-x-auto no-scrollbar">
+        <div className="absolute right-12 top-3 z-[500] overflow-x-auto no-scrollbar" style={{ left: "13.5rem" }}>
           <div className="flex items-center gap-1.5 min-w-max pb-1">
             <button
               onClick={() => setStatusFilter("")}

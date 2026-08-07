@@ -993,3 +993,94 @@ export async function getProfile(userId) {
     await supabase.from("profiles_with_scope").select("*").eq("id", userId).maybeSingle()
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Hazard overlays
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Hazard zone metadata — provenance, not geometry.
+ *
+ * The `geom` column is deliberately not selected. The flood extent alone is
+ * ~6 MB of coordinates in Postgres, and no client needs it: the map draws from
+ * the PMTiles archive, and the point-in-polygon test happens server-side in the
+ * insert trigger. This read is for showing people where the data came from and
+ * when it was last refreshed.
+ */
+export async function getHazardZones() {
+  return wrap(
+    await supabase
+      .from("hazard_zones")
+      .select("id, kind, code, label, is_active, severity, source, source_url, retrieved_at, is_derived, notes")
+      .order("severity", { ascending: false })
+  );
+}
+
+/** The current Mayon alert level. Single row, set by hand by an admin. */
+export async function getVolcanicAlert() {
+  return wrap(await supabase.from("volcanic_alert").select("*").eq("id", true).maybeSingle());
+}
+
+/**
+ * Set the alert level.
+ *
+ * Admin only, enforced by RLS. `last_verified_at` is stamped here rather than
+ * accepted from the caller: the whole value of that field is that it records
+ * when a person actually looked at the bulletin, and letting the client choose
+ * it would let a stale reading be dressed up as fresh.
+ */
+export async function setVolcanicAlert({ alertLevel, summary, bulletinUrl }) {
+  const level = Number(alertLevel);
+  if (!Number.isInteger(level) || level < 0 || level > 5) {
+    return fail("Alert level must be a whole number from 0 to 5.");
+  }
+
+  const { data: userData } = await supabase.auth.getUser();
+
+  const patch = {
+    alert_level: level,
+    summary: summary?.trim() || null,
+    last_verified_at: new Date().toISOString(),
+    verified_by: userData?.user?.id ?? null,
+  };
+  if (bulletinUrl?.trim()) patch.bulletin_url = bulletinUrl.trim();
+
+  const { data, error } = await supabase
+    .from("volcanic_alert")
+    .update(patch)
+    .eq("id", true)
+    .select("*")
+    .single();
+
+  if (error) {
+    return fail(
+      error.code === "PGRST116"
+        ? "Only the city administrator can set the alert level."
+        : error.message
+    );
+  }
+  return { data, error: null };
+}
+
+/**
+ * Latest cached rainfall, one row per station.
+ *
+ * Reads the cache the scheduled Edge Function fills. Nothing in either app
+ * calls Open-Meteo directly, so a thousand phones during a storm are still one
+ * upstream request every fifteen minutes.
+ */
+export async function getRainfall() {
+  const { data, error } = await supabase
+    .from("rainfall_observations")
+    .select("*")
+    .order("observed_at", { ascending: false })
+    .limit(60);
+
+  if (error) return fail(error.message);
+
+  const latest = new Map();
+  for (const row of data ?? []) {
+    if (!latest.has(row.station_code)) latest.set(row.station_code, row);
+  }
+  return { data: [...latest.values()], error: null };
+}

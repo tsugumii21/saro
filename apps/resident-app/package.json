@@ -15,12 +15,12 @@
     "@saro/ui": "*",
     "@supabase/supabase-js": "^2.112.2",
     "@turf/turf": "^7.3.5",
-    "leaflet": "^1.9.4",
     "lucide-react": "^1.28.0",
+    "maplibre-gl": "^6.2.0",
+    "pmtiles": "^4.4.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.18.2"
   },
   "devDependencies": {

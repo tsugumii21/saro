@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import { Layers, Split, MapPin, Clock } from "lucide-react";
-import { StatusTag, TrackingCode } from "@saro/ui";
+import { StatusTag, TrackingCode, HazardMap } from "@saro/ui";
 import {
   getClustersWithReports, splitFromCluster, getReports, saroEvents, REALTIME_EVENTS,
   useAuth, LEGAZPI_CENTER, CLUSTER_RADIUS_METERS, CLUSTER_WINDOW_MINUTES,
@@ -58,36 +57,22 @@ function HotspotMap({ reports }) {
         </span>
       </div>
       <div className="h-[380px]">
-        <MapContainer center={LEGAZPI_CENTER} zoom={13} scrollWheelZoom className="h-full w-full">
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          />
-          {spots.map((spot) => (
-            <CircleMarker
-              key={`${spot.lat},${spot.lng}`}
-              center={[spot.lat, spot.lng]}
-              radius={Math.min(6 + spot.reports.length * 3, 26)}
-              pathOptions={{
-                color: "var(--color-brand)",
-                fillColor: "var(--color-brand-bright)",
-                fillOpacity: 0.35,
-                weight: 1.5,
-              }}
-            >
-              <Popup>
-                <span className="t-body-sm block font-bold">
-                  {spot.reports.length} report{spot.reports.length === 1 ? "" : "s"} here
-                </span>
-                {spot.reports.slice(0, 6).map((r) => (
-                  <span key={r.id} className="t-body-sm block text-ink-muted">
-                    {r.tracking_code} · {r.category_label ?? r.category}
-                  </span>
-                ))}
-              </Popup>
-            </CircleMarker>
-          ))}
-        </MapContainer>
+        <HazardMap
+          className="h-full w-full"
+          center={[LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]]}
+          zoom={12}
+          hidden={["rain"]}
+          reports={spots.map((spot) => ({
+            id: `${spot.lat},${spot.lng}`,
+            lat: spot.lat,
+            lng: spot.lng,
+            // A spot reported more than twice is drawn as high priority, which
+            // gives it the round marker — so recurrence reads as shape, not
+            // only as position.
+            priority: spot.reports.length > 2 ? "high" : "normal",
+            color: "var(--color-brand-bright)",
+          }))}
+        />
       </div>
     </div>
   );

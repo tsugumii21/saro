@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { AuthProvider, useAuth, CLIENT_STORAGE_KEYS } from "@saro/shared";
+import { CLIENT_STORAGE_KEYS } from "@saro/shared";
 import LandingPage from "./components/common/LandingPage";
 import CitizenShell from "./components/citizen/CitizenShell";
 
@@ -9,7 +9,7 @@ import CitizenShell from "./components/citizen/CitizenShell";
 const ADMIN_APP_URL = import.meta.env.VITE_ADMIN_APP_URL || "";
 
 function ResidentGateContent() {
-  const { profile } = useAuth();
+  // No auth here at all — this app never signs anyone in.
 
   // Viewport breakpoint (768px)
   const [isDesktop, setIsDesktop] = useState(() => {
@@ -109,12 +109,7 @@ function ResidentGateContent() {
     );
   }
 
-  // 2. Authenticated Resident -> CitizenShell
-  if (profile && profile.role === "resident") {
-    return <CitizenShell />;
-  }
-
-  // 3. Desktop Viewport (>= 768px): Landing Page only
+  // 2. Desktop Viewport (>= 768px): Landing Page only
   if (isDesktop) {
     return (
       <LandingPage
@@ -124,7 +119,7 @@ function ResidentGateContent() {
     );
   }
 
-  // 4. Mobile Viewport (< 768px): Resident App or Landing Page
+  // 3. Mobile Viewport (< 768px): Resident App or Landing Page
   if (unauthView === "resident") {
     return <CitizenShell />;
   }
@@ -138,9 +133,5 @@ function ResidentGateContent() {
 }
 
 export default function ResidentGate() {
-  return (
-    <AuthProvider>
-      <ResidentGateContent />
-    </AuthProvider>
-  );
+  return <ResidentGateContent />;
 }

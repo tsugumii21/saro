@@ -1,0 +1,4 @@
+# Supabase CLI local state — contains your linked project ref and local keys.
+.branches
+.temp
+.env

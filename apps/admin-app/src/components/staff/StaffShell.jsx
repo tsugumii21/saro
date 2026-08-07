@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Shield, User, Lock, LogOut, LayoutDashboard, Users,
   Building2, ArrowRight, ShieldAlert, CheckCircle2, PlusCircle
@@ -7,25 +7,36 @@ import {
 import ResponderDashboard from "./ResponderDashboard.jsx";
 import AdminDashboard from "./AdminDashboard.jsx";
 import { Wordmark } from "@saro/ui";
-import { useAuth } from "@saro/shared";
-import { SEED_PROFILES, SEED_OFFICES } from "@saro/shared";
+import { useAuth, STAFF_ROLES } from "@saro/shared";
 
 // The resident experience is a separate Vercel deployment.
 const RESIDENT_APP_URL = import.meta.env.VITE_RESIDENT_APP_URL || "";
 
 export default function StaffShell() {
-  const { profile, login, logout } = useAuth();
+  const { profile, role, isAdmin, officeName, barangayName, loading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard"); // 'dashboard' | 'admin'
 
-  // If user is authenticated as responder, check for coordinator status
-  const isCoordinator = Boolean(profile?.is_coordinator);
+  // The city-wide admin panel is admin-only. `is_coordinator` is gone: the
+  // distinction is now a role in Postgres that RLS also enforces, so hiding the
+  // tab is a convenience rather than the security boundary it used to be.
+  const isCoordinator = isAdmin;
 
-  // If not logged in as responder, render Staff Login Portal
-  if (!profile || profile.role !== "responder") {
-    return <StaffLoginPortal onLogin={login} />;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm font-sans">
+        Checking your session…
+      </div>
+    );
   }
 
-  const office = SEED_OFFICES.find((o) => o.id === profile.office_id);
+  // An authenticated user with no profile row has no role, and therefore no
+  // access — signing in is not the same as being authorized.
+  if (!profile || !STAFF_ROLES.includes(role)) {
+    return <StaffLoginPortal />;
+  }
+
+  const scopeLabel = officeName || barangayName || "Command Center";
+  const logout = signOut;
 
   return (
     <div className="min-h-screen bg-saro-mist flex flex-col font-sans">
@@ -38,10 +49,10 @@ export default function StaffShell() {
             <Wordmark variant="white" size="md" />
             <div className="hidden sm:flex items-center gap-2 border-l border-slate-800 pl-4">
               <span className="text-xs font-bold text-teal-400 uppercase tracking-wider">
-                {office?.short_name || "Command Center"}
+                {scopeLabel}
               </span>
               <span className="text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded font-mono">
-                {isCoordinator ? "COORDINATOR" : "RESPONDER"}
+                {role.replace("_", " ").toUpperCase()}
               </span>
             </div>
           </div>
@@ -109,62 +120,41 @@ export default function StaffShell() {
   );
 }
 
-function StaffLoginPortal({ onLogin }) {
+function StaffLoginPortal() {
+  const { signIn } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [showForgot, setShowForgot] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  // Real Supabase Auth. The prototype matched whatever you typed against a seed
+  // array and handed out a coordinator profile to anyone who typed "admin",
+  // which is exactly the class of client-side authorization this backend
+  // exists to remove. Role and scope now come from the profiles table, read
+  // through RLS, after the password check succeeds.
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
     if (!username.trim()) {
-      setError("Please enter your Email, Username, or Badge ID.");
+      setError("Please enter your work email.");
       return;
     }
     if (!password) {
-      setError("Please enter your access code / password.");
+      setError("Please enter your password.");
       return;
     }
 
     setLoading(true);
+    const { error: signInError } = await signIn(username, password);
+    setLoading(false);
 
-    try {
-      const uLower = username.trim().toLowerCase();
-      let targetProfile = SEED_PROFILES.find((p) =>
-        p.role === "responder" && (
-          (p.full_name && p.full_name.toLowerCase().includes(uLower)) ||
-          (p.id && p.id.toLowerCase().includes(uLower)) ||
-          (p.office_id && p.office_id.toLowerCase().includes(uLower))
-        )
-      );
-
-      if (!targetProfile) {
-        if (uLower.includes("admin") || uLower.includes("coord") || uLower.includes("director") || uLower.includes("arnel")) {
-          targetProfile = SEED_PROFILES.find((p) => p.is_coordinator) || SEED_PROFILES[0];
-        } else {
-          targetProfile = SEED_PROFILES.find((p) => p.role === "responder") || SEED_PROFILES[0];
-        }
-      }
-
-      const safeProfile = {
-        id: targetProfile.id,
-        full_name: targetProfile.full_name,
-        mobile_number: targetProfile.mobile_number,
-        role: "responder",
-        office_id: targetProfile.office_id || "off1_cdrrmo",
-        is_coordinator: Boolean(targetProfile.is_coordinator)
-      };
-
-      onLogin(safeProfile);
-    } catch (err) {
-      console.error("Login error:", err);
-      setError("Authentication failed. Please try again.");
-    } finally {
-      setLoading(false);
+    if (signInError) {
+      setError(signInError);
+      return;
     }
+    // On success the auth listener in AuthProvider swaps this screen out.
   };
 
   return (

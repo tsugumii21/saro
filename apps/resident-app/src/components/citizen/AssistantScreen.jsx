@@ -1,8 +1,17 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Send, AlertTriangle, PlusCircle, Phone, Bot, ArrowRight, Mic, MicOff } from "lucide-react";
-import { askFaq } from "../../lib/gemini.js";
-import { logAssistantQuestion } from "@saro/shared";
+import { askAssistant, CLIENT_STORAGE_KEYS } from "@saro/shared";
+
+/** Same browser-local id the report form uses, for rate limiting only. */
+function getDeviceId() {
+  let id = localStorage.getItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
+  if (!id) {
+    id = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT, id);
+  }
+  return id;
+}
 
 // Quick prompt chips
 const QUICK_PROMPTS = [
@@ -46,10 +55,21 @@ export default function AssistantScreen() {
     setInput("");
     setLoading(true);
 
-    const result = await askFaq(question);
+    // The Edge Function holds the Gemini key, runs the emergency tripwire and
+    // the knowledge-base fallback, and writes the gap log itself — so there is
+    // no separate analytics call here any more.
+    const { data, error: assistantError } = await askAssistant(question, {
+      deviceId: getDeviceId(),
+    });
 
-    // Log for admin analytics
-    await logAssistantQuestion(question, !!result.matchedDocId, result.matchedDocId);
+    const result = data ?? {
+      answer:
+        assistantError ||
+        "The assistant is unavailable right now. For an emergency, call Legazpi 911.",
+      isEmergency: false,
+      matchedDocId: null,
+      isFallback: true,
+    };
 
     const botMsg = {
       id: `bot_${Date.now()}`,

@@ -1,47 +1,55 @@
 // @saro/shared — the only module either app may import across the /apps boundary.
 //
-// Contains: the data-access client, auth context, domain constants, validation
-// schemas, i18n dictionaries, and JSDoc types. Design tokens ship as CSS at
-// "@saro/shared/styles/tokens.css".
+// Contains: the Supabase data client, auth context, domain constants,
+// validation schemas, i18n dictionaries, and JSDoc types. Design tokens ship as
+// CSS at "@saro/shared/styles/tokens.css".
 
-/* ── Data access client (mock layer; Supabase-shaped) ────────────────────── */
+/* ── Supabase client ─────────────────────────────────────────────────────── */
+export { supabase, REPORT_PHOTO_BUCKET } from "./supabase/client.js";
+
+/* ── Data access ─────────────────────────────────────────────────────────── */
 export {
-  resetMockData,
+  // reference data
   getOffices,
   getCategories,
   getBarangays,
-  getProfile,
-  getReports,
+  // resident reads (RPC only)
   getReportByTrackingCode,
-  createReport,
-  updateReportStatus,
-  logAssistantQuestion,
   getStatusHistory,
+  getReportsByDevice,
+  getPublicMapReports,
+  // staff reads (RLS scoped)
+  getReports,
+  getReportById,
+  getReportHistory,
+  getClusters,
+  // writes
+  createReport,
+  createReportOnBehalf,
+  updateReportStatus,
+  markFalseReport,
+  updateCategory,
+  getRoutingChangelog,
+  // photos
+  uploadReportPhoto,
   addReportMedia,
   getReportMedia,
-  updateCategory,
-  markFalseReport,
+  // assistant gap log
+  logAssistantQuestion,
   getAssistantLogs,
-  authenticateProfile,
-  getReportsByReporter,
-  addKnowledgeBaseEntry
+  addKnowledgeBaseEntry,
+  resolveGapLogEntry,
+  // panic
+  registerPanicFlag,
+  // profiles
+  getProfile,
 } from "./api/index.js";
 
-export { mockEvents } from "./api/events.js";
+/* ── Assistant (gemini-proxy Edge Function) ──────────────────────────────── */
+export { askAssistant, structureDescription } from "./api/assistant.js";
 
-/* ── Seed datasets ───────────────────────────────────────────────────────── */
-export {
-  SEED_OFFICES,
-  SEED_CATEGORIES,
-  SEED_BARANGAYS,
-  SEED_PROFILES,
-  SEED_REPORTS,
-  SEED_REPORT_MEDIA,
-  SEED_STATUS_HISTORY,
-  SEED_ASSISTANT_LOGS,
-  SEED_DEVICES,
-  SEED_KNOWLEDGE_BASE
-} from "./api/data.js";
+/* ── Realtime ────────────────────────────────────────────────────────────── */
+export { saroEvents, REALTIME_EVENTS } from "./api/events.js";
 
 /* ── Auth ────────────────────────────────────────────────────────────────── */
 export { AuthProvider, useAuth } from "./auth/AuthContext.jsx";

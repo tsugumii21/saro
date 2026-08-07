@@ -12,7 +12,6 @@ import {
   getCategories, getBarangays, getOffices, createReport, addReportMedia,
   validateReportDraft, LEGAZPI_CENTER, CLIENT_STORAGE_KEYS
 } from "@saro/shared";
-import { useAuth } from "@saro/shared";
 
 const LEGAZPI_BOUNDS = { minLat: 13.10, maxLat: 13.20, minLng: 123.70, maxLng: 123.78 };
 const OFFLINE_QUEUE_KEY = CLIENT_STORAGE_KEYS.OFFLINE_QUEUE;
@@ -118,8 +117,12 @@ export default function ReportFormScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
-  const { profile, role } = useAuth();
-  const isGuest = role === "guest";
+  // Residents are anonymous by design — the Supabase schema has no resident
+  // role, and RLS lets anyone INSERT a report. The prototype's "guests may only
+  // file emergencies" gate assumed resident accounts that now do not exist, so
+  // gating on it would block every non-urgent report. Kept as a constant rather
+  // than deleted, so the surrounding UI branch stays intact for a later phase.
+  const isGuest = false;
 
   const [categories, setCategories] = useState([]);
   const [barangays, setBarangays] = useState([]);
@@ -311,7 +314,6 @@ export default function ReportFormScreen() {
       lat: coords.lat,
       lng: coords.lng,
       barangay_id: barangayId || null,
-      reporter_id: profile?.id || null,
       callback_number: callbackNumber.trim() || null,
       device_fingerprint: getDeviceFingerprint(),
       is_proxy_report: isProxy

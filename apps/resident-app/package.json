@@ -13,6 +13,7 @@
     "@google/genai": "^2.15.0",
     "@saro/shared": "*",
     "@saro/ui": "*",
+    "@supabase/supabase-js": "^2.112.2",
     "@turf/turf": "^7.3.5",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.28.0",

@@ -9,7 +9,7 @@ import {
   getReports, getCategories, getBarangays, getOffices,
   updateReportStatus, addReportMedia, markFalseReport, LEGAZPI_CENTER
 } from "@saro/shared";
-import { mockEvents } from "@saro/shared";
+import { saroEvents } from "@saro/shared";
 import { useAuth } from "@saro/shared";
 
 const POLL_INTERVAL = 30000;
@@ -188,8 +188,8 @@ export default function ResponderDashboard() {
 
   useEffect(() => {
     loadData();
-    const u1 = mockEvents.on("report:created", loadData);
-    const u2 = mockEvents.on("report:updated", loadData);
+    const u1 = saroEvents.on("report:created", loadData);
+    const u2 = saroEvents.on("report:updated", loadData);
     return () => { u1(); u2(); };
   }, [loadData]);
 
@@ -277,7 +277,7 @@ export default function ResponderDashboard() {
     }
 
     setAdvancing(report.id);
-    await updateReportStatus(report.id, next, `Status advanced to ${next}`, profile.id);
+    await updateReportStatus(report.id, next, `Status advanced to ${next}`);
     setAdvancing(null);
   };
 
@@ -292,9 +292,9 @@ export default function ResponderDashboard() {
     setResolving(true);
     await addReportMedia(resolveTarget.id, resolutionPhoto, "resolution");
     if (isFalseReport) {
-      await markFalseReport(resolveTarget.id, profile.id, true);
+      await markFalseReport(resolveTarget.id, true);
     }
-    await updateReportStatus(resolveTarget.id, "resolved", isFalseReport ? "Resolved as false report." : "Resolved with evidence.", profile.id);
+    await updateReportStatus(resolveTarget.id, "resolved", isFalseReport ? "Resolved as false report." : "Resolved with evidence.");
     setResolving(false);
     setResolveTarget(null);
     setResolutionPhoto(null);

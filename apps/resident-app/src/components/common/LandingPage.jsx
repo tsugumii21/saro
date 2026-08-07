@@ -8,8 +8,8 @@ import {
   Droplet, Anchor, Share2, Sparkles, Check, X
 } from "lucide-react";
 import { Wordmark } from "@saro/ui";
-import { getReports, getCategories, getBarangays, LEGAZPI_CENTER } from "@saro/shared";
-import { mockEvents } from "@saro/shared";
+import { getPublicMapReports, getCategories, getBarangays, LEGAZPI_CENTER } from "@saro/shared";
+import { saroEvents } from "@saro/shared";
 
 const LEGAZPI_BOUNDS = [
   [13.10, 123.70],
@@ -63,7 +63,7 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
 
   const loadData = useCallback(async () => {
     const [rRes, cRes, bRes] = await Promise.all([
-      getReports(),
+      getPublicMapReports(),
       getCategories(),
       getBarangays()
     ]);
@@ -74,8 +74,8 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
 
   useEffect(() => {
     loadData();
-    const u1 = mockEvents.on("report:created", loadData);
-    const u2 = mockEvents.on("report:updated", loadData);
+    const u1 = saroEvents.on("report:created", loadData);
+    const u2 = saroEvents.on("report:updated", loadData);
     return () => { u1(); u2(); };
   }, [loadData]);
 

@@ -6,9 +6,9 @@ import {
 } from "lucide-react";
 import {
   getReportByTrackingCode, getStatusHistory, getCategories, getBarangays,
-  getOffices, getReportsByReporter
+  getOffices, getReportsByDevice, CLIENT_STORAGE_KEYS
 } from "@saro/shared";
-import { mockEvents } from "@saro/shared";
+import { saroEvents } from "@saro/shared";
 import { useAuth } from "@saro/shared";
 
 const STATUS_LABELS = {
@@ -67,15 +67,18 @@ export default function TrackScreen() {
     })();
   }, []);
 
-  // Load recent reports for signed-in residents
+  // "My Reports" is device-local. Residents have no account, so the list is
+  // keyed on the random id this browser generated for itself when it first
+  // filed something. Clear the browser storage and the list is gone — which is
+  // the privacy property we want.
   useEffect(() => {
-    if (profile?.id) {
-      (async () => {
-        const { data } = await getReportsByReporter(profile.id);
-        if (data) setRecentReports(data);
-      })();
-    }
-  }, [profile]);
+    const deviceId = localStorage.getItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
+    if (!deviceId) return;
+    (async () => {
+      const { data } = await getReportsByDevice(deviceId);
+      if (data) setRecentReports(data);
+    })();
+  }, []);
 
   const handleSearch = useCallback(async (code) => {
     const c = (code || trackingCode).trim().toUpperCase();
@@ -94,7 +97,9 @@ export default function TrackScreen() {
     }
     setReport(data);
 
-    const hRes = await getStatusHistory(data.id);
+    // The lookup RPC returns no row id — residents are given a tracking code,
+    // not a database key — so the timeline is fetched by the same code.
+    const hRes = await getStatusHistory(data.tracking_code);
     if (hRes.data) setHistory(hRes.data);
 
     setSearching(false);
@@ -108,7 +113,7 @@ export default function TrackScreen() {
   // Listen for updates
   useEffect(() => {
     if (!report) return;
-    const unsub = mockEvents.on("report:updated", ({ report: updated }) => {
+    const unsub = saroEvents.on("report:updated", ({ report: updated }) => {
       if (updated.id === report.id) {
         setReport(updated);
         getStatusHistory(updated.id).then((r) => { if (r.data) setHistory(r.data); });

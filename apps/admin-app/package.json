@@ -12,6 +12,7 @@
   "dependencies": {
     "@saro/shared": "*",
     "@saro/ui": "*",
+    "@supabase/supabase-js": "^2.112.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",

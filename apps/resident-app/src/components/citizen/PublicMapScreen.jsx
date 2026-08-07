@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import { PlusCircle, Clock, MapPin, Layers, X, Plus, Minus } from "lucide-react";
-import { getReports, getCategories, getBarangays, LEGAZPI_CENTER } from "@saro/shared";
-import { mockEvents } from "@saro/shared";
+import { getPublicMapReports, getCategories, getBarangays, LEGAZPI_CENTER } from "@saro/shared";
+import { saroEvents } from "@saro/shared";
 
 const LEGAZPI_BOUNDS = [
   [13.10, 123.70],
@@ -101,7 +101,7 @@ export default function PublicMapScreen() {
 
   const loadData = useCallback(async () => {
     const [rRes, cRes, bRes] = await Promise.all([
-      getReports(),
+      getPublicMapReports(),
       getCategories(),
       getBarangays()
     ]);
@@ -112,8 +112,8 @@ export default function PublicMapScreen() {
 
   useEffect(() => {
     loadData();
-    const unsub1 = mockEvents.on("report:created", loadData);
-    const unsub2 = mockEvents.on("report:updated", loadData);
+    const unsub1 = saroEvents.on("report:created", loadData);
+    const unsub2 = saroEvents.on("report:updated", loadData);
     return () => { unsub1(); unsub2(); };
   }, [loadData]);
 

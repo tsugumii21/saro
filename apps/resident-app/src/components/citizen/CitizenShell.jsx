@@ -1,64 +1,30 @@
-import { useState, useEffect } from "react";
-import { Routes, Route, Navigate, NavLink, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Routes, Route, Navigate, NavLink } from "react-router-dom";
 import { Map, PlusCircle, List, Bot, Home, User, LogOut, X, ChevronRight, ShieldCheck } from "lucide-react";
 import ConnectionIndicator from "../common/ConnectionIndicator";
-import { useAuth, CLIENT_STORAGE_KEYS } from "@saro/shared";
+import { CLIENT_STORAGE_KEYS } from "@saro/shared";
 import CitizenLandingScreen from "./CitizenLandingScreen";
 import PublicMapScreen from "./PublicMapScreen";
 import ReportFormScreen from "./ReportFormScreen";
 import TrackScreen from "./TrackScreen";
 import AssistantScreen from "./AssistantScreen";
-import CitizenLoginScreen from "./CitizenLoginScreen";
 
-const DEFAULT_RESIDENT_PROFILE = {
-  id: "prof_resident_demo",
-  full_name: "Verified Resident",
-  role: "resident",
-  office_id: null,
-  is_coordinator: false,
-  created_at: "2026-01-01T08:00:00.000Z"
-};
-
+// Residents do not sign in. The Supabase schema has three roles — admin,
+// office, barangay_official — and none of them is "resident": a report is tied
+// to a random device id held in this browser, never to a person. The
+// prototype's auto-login as a fake "Verified Resident" is gone; the account
+// sheet below now offers to forget this device instead, which is the only
+// identity there is to clear.
 export default function CitizenShell() {
-  const navigate = useNavigate();
-  const { profile, login, logout } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const [isLoggedOut, setIsLoggedOut] = useState(() => {
-    return sessionStorage.getItem(CLIENT_STORAGE_KEYS.RESIDENT_LOGGED_OUT) === "true";
-  });
 
-  // Auto-authenticate resident if not explicitly logged out
-  useEffect(() => {
-    if (!profile && !isLoggedOut) {
-      login(DEFAULT_RESIDENT_PROFILE);
-    }
-  }, [profile, isLoggedOut, login]);
-
-  const handleSignInSuccess = () => {
-    sessionStorage.removeItem(CLIENT_STORAGE_KEYS.RESIDENT_LOGGED_OUT);
-    setIsLoggedOut(false);
-    login(DEFAULT_RESIDENT_PROFILE);
-  };
-
-  const handleLogout = () => {
-    sessionStorage.setItem(CLIENT_STORAGE_KEYS.RESIDENT_LOGGED_OUT, "true");
-    setIsLoggedOut(true);
-    logout();
+  const handleForgetDevice = () => {
+    // Drops the device id, so "My Reports" empties and future reports are
+    // filed under a fresh id with no link to the old ones.
+    localStorage.removeItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
+    localStorage.removeItem(CLIENT_STORAGE_KEYS.OFFLINE_QUEUE);
     setShowAccountMenu(false);
   };
-
-  // Render Mobile Resident Sign-In Screen when logged out
-  if (isLoggedOut || !profile) {
-    return (
-      <div className="relative flex flex-col h-screen sm:h-full w-full overflow-hidden bg-slate-100 text-slate-900 font-sans">
-        <ConnectionIndicator />
-        <CitizenLoginScreen
-          onSignInSuccess={handleSignInSuccess}
-          onContinueGuest={handleSignInSuccess}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="relative flex flex-col h-screen sm:h-full w-full overflow-hidden bg-saro-surface text-saro-ink font-sans">
@@ -97,7 +63,7 @@ export default function CitizenShell() {
         </Routes>
       </main>
 
-      {/* Mobile Resident Account / Log Out Modal */}
+      {/* Device sheet. There is no account to manage — only this device. */}
       {showAccountMenu && (
         <div className="fixed inset-0 bg-slate-950/60 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-4 animate-slide-up">
@@ -107,8 +73,8 @@ export default function CitizenShell() {
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-900">Verified Resident</div>
-                  <div className="text-[11px] text-slate-500 font-mono">Legazpi Citizen Account</div>
+                  <div className="text-xs font-bold text-slate-900">Anonymous Reporter</div>
+                  <div className="text-[11px] text-slate-500 font-mono">No account required</div>
                 </div>
               </div>
               <button
@@ -120,19 +86,19 @@ export default function CitizenShell() {
             </div>
 
             <div className="space-y-2">
-              {/* Log Out & Return to Mobile Sign In Screen */}
+              {/* Clears the only identifier this app holds. */}
               <button
-                onClick={handleLogout}
+                onClick={handleForgetDevice}
                 className="w-full p-3.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-left transition-colors flex items-center justify-between group"
               >
                 <div className="flex items-center gap-3">
                   <LogOut className="w-4 h-4 text-red-600 shrink-0" />
                   <div>
                     <div className="text-xs font-bold text-red-900">
-                      Log Out & Return to Sign In Screen
+                      Forget This Device
                     </div>
                     <div className="text-[10px] text-red-700 font-medium mt-0.5">
-                      End current resident session
+                      Clears My Reports. Filed reports stay with the city.
                     </div>
                   </div>
                 </div>

@@ -9,7 +9,7 @@ import {
   getReports, getCategories, getOffices, getBarangays, getAssistantLogs, updateCategory,
   addKnowledgeBaseEntry
 } from "@saro/shared";
-import { mockEvents } from "@saro/shared";
+import { saroEvents } from "@saro/shared";
 import { useAuth } from "@saro/shared";
 
 function hoursElapsed(dateStr) {
@@ -104,9 +104,11 @@ function Sparkline({ data = [4, 6, 3, 7, 5, 8, 4], color = "#0F766E" }) {
 }
 
 export default function AdminDashboard() {
-  const { profile } = useAuth();
+  const { isAdmin } = useAuth();
 
-  if (!profile?.is_coordinator) {
+  // Convenience only. Even if someone renders this component directly, the
+  // routing-table writes and gap-log reads behind it are admin-gated by RLS.
+  if (!isAdmin) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -158,9 +160,9 @@ function AdminDashboardContent() {
 
   useEffect(() => {
     loadData();
-    const u1 = mockEvents.on("report:created", loadData);
-    const u2 = mockEvents.on("report:updated", loadData);
-    const u3 = mockEvents.on("category:updated", loadData);
+    const u1 = saroEvents.on("report:created", loadData);
+    const u2 = saroEvents.on("report:updated", loadData);
+    const u3 = saroEvents.on("category:updated", loadData);
     return () => { u1(); u2(); u3(); };
   }, [loadData]);
 

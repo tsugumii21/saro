@@ -2,29 +2,47 @@ import { useState } from "react";
 import { Routes, Route, Navigate, NavLink } from "react-router-dom";
 import { Map, PlusCircle, List, Bot, Home, User, LogOut, X, ChevronRight, ShieldCheck } from "lucide-react";
 import ConnectionIndicator from "../common/ConnectionIndicator";
-import { CLIENT_STORAGE_KEYS } from "@saro/shared";
+import { CLIENT_STORAGE_KEYS, useAuth } from "@saro/shared";
 import CitizenLandingScreen from "./CitizenLandingScreen";
 import PublicMapScreen from "./PublicMapScreen";
 import ReportFormScreen from "./ReportFormScreen";
 import TrackScreen from "./TrackScreen";
 import AssistantScreen from "./AssistantScreen";
+import ResidentAuthScreen from "./ResidentAuthScreen";
 
-// Residents do not sign in. The Supabase schema has three roles — admin,
-// office, barangay_official — and none of them is "resident": a report is tied
-// to a random device id held in this browser, never to a person. The
-// prototype's auto-login as a fake "Verified Resident" is gone; the account
-// sheet below now offers to forget this device instead, which is the only
-// identity there is to clear.
+// Two kinds of user share this shell: an anonymous guest, and a signed-in
+// resident. Neither is ever asked to sign in to get here — the account screen
+// opens only from the button below, or from the one submit path that needs it.
 export default function CitizenShell() {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const { profile, isResident, signOut } = useAuth();
 
   const handleForgetDevice = () => {
-    // Drops the device id, so "My Reports" empties and future reports are
-    // filed under a fresh id with no link to the old ones.
+    // Drops the device id, so a guest's "My Reports" empties and future reports
+    // are filed under a fresh id with no link to the old ones.
     localStorage.removeItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
     localStorage.removeItem(CLIENT_STORAGE_KEYS.OFFLINE_QUEUE);
     setShowAccountMenu(false);
   };
+
+  const handleSignOut = async () => {
+    await signOut();
+    setShowAccountMenu(false);
+  };
+
+  // Full-screen, but only ever on demand. Never on app open.
+  if (showAuth) {
+    return (
+      <div className="relative flex flex-col h-screen sm:h-full w-full overflow-hidden bg-white">
+        <ConnectionIndicator />
+        <ResidentAuthScreen
+          onCancel={() => setShowAuth(false)}
+          onSignedIn={() => setShowAuth(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex flex-col h-screen sm:h-full w-full overflow-hidden bg-saro-surface text-saro-ink font-sans">
@@ -63,7 +81,8 @@ export default function CitizenShell() {
         </Routes>
       </main>
 
-      {/* Device sheet. There is no account to manage — only this device. */}
+      {/* Account sheet. Shows an account when there is one, and this device
+          when there is not. */}
       {showAccountMenu && (
         <div className="fixed inset-0 bg-slate-950/60 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-4 animate-slide-up">
@@ -73,37 +92,79 @@ export default function CitizenShell() {
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-900">Anonymous Reporter</div>
-                  <div className="text-[11px] text-slate-500 font-mono">No account required</div>
+                  <div className="text-xs font-bold text-slate-900">
+                    {isResident ? profile?.full_name || "Resident" : "Anonymous Reporter"}
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    {isResident ? "Verified account" : "No account required"}
+                  </div>
                 </div>
               </div>
               <button
                 onClick={() => setShowAccountMenu(false)}
                 className="text-slate-400 hover:text-slate-800 p-1"
+                aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-2">
-              {/* Clears the only identifier this app holds. */}
-              <button
-                onClick={handleForgetDevice}
-                className="w-full p-3.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-left transition-colors flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-3">
-                  <LogOut className="w-4 h-4 text-red-600 shrink-0" />
-                  <div>
-                    <div className="text-xs font-bold text-red-900">
-                      Forget This Device
-                    </div>
-                    <div className="text-[10px] text-red-700 font-medium mt-0.5">
-                      Clears My Reports. Filed reports stay with the city.
+              {!isResident && (
+                <button
+                  onClick={() => {
+                    setShowAccountMenu(false);
+                    setShowAuth(true);
+                  }}
+                  className="w-full p-3.5 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl text-left transition-colors flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <User className="w-4 h-4 text-teal-700 shrink-0" />
+                    <div>
+                      <div className="text-xs font-bold text-teal-900">Sign in or create an account</div>
+                      <div className="text-[10px] text-teal-800 font-medium mt-0.5">
+                        Keeps your report history if you lose this phone
+                      </div>
                     </div>
                   </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-red-600 shrink-0" />
-              </button>
+                  <ChevronRight className="w-4 h-4 text-teal-700 shrink-0" />
+                </button>
+              )}
+
+              {isResident ? (
+                <button
+                  onClick={handleSignOut}
+                  className="w-full p-3.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-left transition-colors flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <LogOut className="w-4 h-4 text-red-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-bold text-red-900">Sign Out</div>
+                      <div className="text-[10px] text-red-700 font-medium mt-0.5">
+                        Your reports stay on your account
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-red-600 shrink-0" />
+                </button>
+              ) : (
+                /* Clears the only identifier a guest has. */
+                <button
+                  onClick={handleForgetDevice}
+                  className="w-full p-3.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-left transition-colors flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <LogOut className="w-4 h-4 text-red-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-bold text-red-900">Forget This Device</div>
+                      <div className="text-[10px] text-red-700 font-medium mt-0.5">
+                        Clears My Reports. Filed reports stay with the city.
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-red-600 shrink-0" />
+                </button>
+              )}
             </div>
 
             <button

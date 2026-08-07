@@ -10,8 +10,9 @@ import {
 import { booleanPointInPolygon, point } from "@turf/turf";
 import {
   getCategories, getBarangays, getOffices, createReport, addReportMedia,
-  validateReportDraft, LEGAZPI_CENTER, CLIENT_STORAGE_KEYS
+  validateReportDraft, LEGAZPI_CENTER, CLIENT_STORAGE_KEYS, useAuth
 } from "@saro/shared";
+import ResidentAuthScreen from "./ResidentAuthScreen";
 
 const LEGAZPI_BOUNDS = { minLat: 13.10, maxLat: 13.20, minLng: 123.70, maxLng: 123.78 };
 const OFFLINE_QUEUE_KEY = CLIENT_STORAGE_KEYS.OFFLINE_QUEUE;
@@ -117,12 +118,22 @@ export default function ReportFormScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
-  // Residents are anonymous by design — the Supabase schema has no resident
-  // role, and RLS lets anyone INSERT a report. The prototype's "guests may only
-  // file emergencies" gate assumed resident accounts that now do not exist, so
-  // gating on it would block every non-urgent report. Kept as a constant rather
-  // than deleted, so the surrounding UI branch stays intact for a later phase.
-  const isGuest = false;
+  const { isResident } = useAuth();
+
+  // The login wall, and the rules around it.
+  //
+  // A guest may always file an EMERGENCY report anonymously — that is the whole
+  // reason Describe exists as a second channel next to Panic, and putting a
+  // signup form in front of someone watching a fire would defeat it.
+  //
+  // Only a STANDARD, non-urgent report asks for an account, and only at the
+  // moment of submit. Never on app open, never on category select, never while
+  // typing.
+  const [showAuthWall, setShowAuthWall] = useState(false);
+
+  // Replaces the prototype's `guestBlock`, which showed a dead-end "verified
+  // accounts arrive in a later phase" notice. The accounts exist now.
+  const isGuest = !isResident;
 
   const [categories, setCategories] = useState([]);
   const [barangays, setBarangays] = useState([]);
@@ -144,7 +155,6 @@ export default function ReportFormScreen() {
   const [isProxy, setIsProxy] = useState(false);
 
   const [boundsError, setBoundsError] = useState("");
-  const [guestBlock, setGuestBlock] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
@@ -188,13 +198,16 @@ export default function ReportFormScreen() {
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
 
-  useEffect(() => {
-    if (isGuest && selectedCategory && !selectedCategory.is_emergency) {
-      setGuestBlock(true);
-    } else {
-      setGuestBlock(false);
-    }
-  }, [isGuest, selectedCategory]);
+  // An emergency category is filed anonymously by anyone, always. Note this is
+  // computed, not stored in state and not asserted anywhere in the UI while the
+  // form is being filled — the guest only ever meets it at submit.
+  const isEmergencyReport = Boolean(selectedCategory?.is_emergency);
+
+  // Guests must sign in for standard reports only.
+  const needsAccount = isGuest && Boolean(selectedCategory) && !isEmergencyReport;
+
+  // Emergencies go in under a device id; everything else under the account.
+  const fileAnonymously = isEmergencyReport || isGuest;
 
   // Auto-detect barangay
   useEffect(() => {
@@ -304,7 +317,14 @@ export default function ReportFormScreen() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    if (guestBlock) return;
+
+    // The only login prompt in the app, and it fires here — after the form is
+    // filled and valid, never before. An emergency category walks straight
+    // past it.
+    if (needsAccount) {
+      setShowAuthWall(true);
+      return;
+    }
 
     setSubmitting(true);
 
@@ -315,8 +335,11 @@ export default function ReportFormScreen() {
       lng: coords.lng,
       barangay_id: barangayId || null,
       callback_number: callbackNumber.trim() || null,
-      device_fingerprint: getDeviceFingerprint(),
-      is_proxy_report: isProxy
+      is_proxy_report: isProxy,
+      // Urgent reports stay anonymous even for signed-in residents: filing
+      // fast should never mean attaching your name.
+      anonymous: fileAnonymously,
+      device_fingerprint: getDeviceFingerprint()
     };
 
     // Offline queuing
@@ -352,6 +375,21 @@ export default function ReportFormScreen() {
   };
 
   // Offline queued confirmation
+  // The login wall. Reached only from handleSubmit, only for a standard report
+  // filed by a guest. Everything typed so far stays in state, so signing in
+  // returns straight to a filled form rather than an empty one — and
+  // "Continue without an account" backs out to the same place.
+  if (showAuthWall) {
+    return (
+      <ResidentAuthScreen
+        mode="sign-up"
+        reason="Standard reports need an account so the office can follow up with you. Emergencies never do — pick an emergency category and you can file straight away, anonymously."
+        onCancel={() => setShowAuthWall(false)}
+        onSignedIn={() => setShowAuthWall(false)}
+      />
+    );
+  }
+
   if (offlineQueued) {
     return (
       <div className="px-4 py-6 max-w-md mx-auto">
@@ -620,21 +658,10 @@ export default function ReportFormScreen() {
           )}
         </div>
 
-        {/* Guest-Emergency Gating */}
-        {guestBlock && (
-          <div className="bg-saro-amber/10 border border-saro-amber/40 rounded-lg p-3.5">
-            <p className="text-xs text-saro-ink font-medium mb-2">
-              Non-emergency reports require a verified resident account for follow-up. Full resident accounts will arrive in a later phase.
-            </p>
-            <button
-              type="button"
-              onClick={() => setIsProxy(true)}
-              className="saro-btn-primary w-full text-xs"
-            >
-              Report for someone else (Proxy Report)
-            </button>
-          </div>
-        )}
+        {/* Nothing gates the form here on purpose. The prototype showed a
+            dead-end notice the moment a guest picked a non-emergency category,
+            which is a login prompt in all but name. The account is asked for at
+            submit instead, once the person has decided what they are reporting. */}
 
         {/* Location Section */}
         <div>
@@ -854,7 +881,7 @@ export default function ReportFormScreen() {
             )}
             <button
               type="submit"
-              disabled={submitting || guestBlock}
+              disabled={submitting}
               className="saro-btn-primary w-full"
             >
               <Send className="w-4 h-4" aria-hidden="true" />

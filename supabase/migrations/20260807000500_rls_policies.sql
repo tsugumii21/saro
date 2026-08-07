@@ -66,14 +66,28 @@ as $$
   select coalesce(public.auth_role() = 'admin', false);
 $$;
 
+-- A signed-in member of the public. Note this is NOT the same as "not staff":
+-- an anonymous guest is neither, and returns false here.
+create or replace function public.is_resident()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public, extensions
+as $$
+  select coalesce(public.auth_role() = 'resident', false);
+$$;
+
 revoke all on function public.auth_role()        from public;
 revoke all on function public.auth_office_id()   from public;
 revoke all on function public.auth_barangay_id() from public;
 revoke all on function public.is_admin()            from public;
+revoke all on function public.is_resident()         from public;
 grant execute on function public.auth_role()        to authenticated;
 grant execute on function public.auth_office_id()   to authenticated;
 grant execute on function public.auth_barangay_id() to authenticated;
 grant execute on function public.is_admin()            to authenticated;
+grant execute on function public.is_resident()         to authenticated;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Enable RLS everywhere
@@ -91,6 +105,7 @@ alter table public.clusters                enable row level security;
 alter table public.cluster_reports         enable row level security;
 alter table public.gap_log                 enable row level security;
 alter table public.panic_flags             enable row level security;
+alter table public.push_subscriptions      enable row level security;
 
 -- Belt and braces. Supabase grants anon/authenticated broad table privileges by
 -- default; RLS is the real gate, but a table anon has no business touching
@@ -105,10 +120,12 @@ revoke all on public.profiles              from anon;
 revoke all on public.routing_table_changelog from anon;
 revoke all on public.panic_flags           from anon, authenticated;
 revoke all on public.gap_log               from anon;
+revoke all on public.push_subscriptions    from anon;
 
 grant insert on public.reports      to anon;
 grant insert on public.report_media to anon;
 grant insert on public.gap_log      to anon;
+grant insert on public.push_subscriptions to anon;   -- guest device opt-in
 grant select on public.offices, public.barangays, public.routing_table to anon;
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -185,29 +202,85 @@ create policy "admins manage profiles"
   to authenticated
   using (public.is_admin())
   with check (public.is_admin());
--- Only an admin can set or change a role. A user cannot promote themselves,
--- because there is no self-update policy at all — not even for your own row.
+
+create policy "you can edit your own profile"
+  on public.profiles for update
+  to authenticated
+  using (id = auth.uid())
+  with check (id = auth.uid());
+-- Residents need to fix their own name and mobile number, which requires an
+-- UPDATE policy on their own row — and an UPDATE policy on a table containing
+-- a `role` column is exactly where privilege escalation lives.
+--
+-- RLS alone cannot close this: WITH CHECK only sees the row being written, so
+-- it cannot tell that `role` just changed from 'resident' to 'admin'. The
+-- profiles_pin_privileged_columns BEFORE UPDATE trigger (migration 02) does
+-- the work instead, restoring role, office_id, barangay_id and is_active to
+-- their previous values for any non-admin writer. A resident may send
+-- role='admin'; it will not stick.
+--
+-- No INSERT policy: profile rows are created only by the handle_new_user
+-- trigger on signup, which hard-codes role='resident'.
+-- No DELETE policy: deleting a profile would orphan the reports it filed.
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- reports — the sensitive one
 -- ═══════════════════════════════════════════════════════════════════════════
 
-create policy "anyone may file a report"
+create policy "guests may file a report anonymously"
   on public.reports for insert
   to anon, authenticated
   with check (
-    status = 'received'
+    reporter_device_id is not null
+    and reporter_user_id is null
+    and status = 'received'
     and not is_false_report
     and cluster_id is null
     and resolved_at is null
     and filed_by is null
-    and assigned_office_id is null    -- routing decides this, not the caller
   );
--- Anonymous submission is the whole point of the product. The check clamps
--- what a caller may assert: you can file a report, you cannot file one that is
--- already resolved, already assigned to an office of your choosing, already
--- clustered, or pre-marked as genuine. There is NO anonymous SELECT policy,
--- so an anonymous caller can write a row and then never read it back.
+-- Anonymous submission is the whole point of the product, and this policy is
+-- what keeps Panic and the emergency Describe fast-track working with no
+-- account and no login prompt. It is granted to `authenticated` as well, so a
+-- signed-in resident hitting the Panic button still files anonymously rather
+-- than being forced to attach their name to it.
+--
+-- The check clamps what a caller may assert: you can file a report, you cannot
+-- file one that is already resolved, already assigned to an office of your
+-- choosing, already clustered, or pre-marked as genuine. There is NO anonymous
+-- SELECT policy, so an anonymous caller writes a row and can never read it back
+-- except through the tracking-code RPC.
+
+create policy "residents may file under their own account"
+  on public.reports for insert
+  to authenticated
+  with check (
+    public.is_resident()
+    and reporter_user_id = auth.uid()
+    and reporter_device_id is null
+    and status = 'received'
+    and not is_false_report
+    and cluster_id is null
+    and resolved_at is null
+    and filed_by is null
+  );
+-- The standard, non-emergency path. `reporter_user_id = auth.uid()` is the
+-- whole guarantee: a resident cannot file a report in someone else's name, so
+-- the verified badge staff see actually means something.
+
+create policy "residents read their own reports"
+  on public.reports for select
+  to authenticated
+  using (
+    public.is_resident()
+    and reporter_user_id = auth.uid()
+  );
+-- Cross-device history, and nothing more. Every status, every age, but only
+-- rows this account filed. A resident cannot see another resident's report, or
+-- a guest report, or anything filed from a device they no longer hold.
+--
+-- Residents have no UPDATE policy, so they cannot change a status, reassign an
+-- office, or withdraw a report. Closed by default, like every other role.
 
 create policy "admins see every report"
   on public.reports for select
@@ -267,6 +340,8 @@ create policy "barangay officials file on behalf of residents"
     public.auth_role() = 'barangay_official'
     and barangay_id = public.auth_barangay_id()
     and filed_by = auth.uid()
+    and reporter_user_id = auth.uid()
+    and reporter_device_id is null
     and status = 'received'
     and is_proxy_report
   );
@@ -274,6 +349,12 @@ create policy "barangay officials file on behalf of residents"
 -- The official may only file inside their own barangay, must be recorded as
 -- the filer, and the row is flagged as a proxy report. They have no UPDATE
 -- policy, so this is their only write — they still cannot change a status.
+--
+-- reporter_user_id is the OFFICIAL, not the walk-in resident, who by definition
+-- has no account. That satisfies the exactly-one-reporter constraint and makes
+-- the report attributable to someone who can be asked what they were told.
+-- It also means the report shows as verified, which is accurate: a named city
+-- official vouched for it.
 
 -- No DELETE policy exists on reports for any role. Reports are closed, marked
 -- false, or superseded; they are never removed.
@@ -319,16 +400,36 @@ create policy "admins and offices annotate history"
 -- report_media — photos
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- SECURITY DEFINER for the same reason as generate_tracking_code: the policy
+-- below is evaluated as the caller, and an anonymous guest has no SELECT on
+-- reports. An inline EXISTS would fail with "permission denied for table
+-- reports" and block every guest photo upload.
+--
+-- It answers one boolean and leaks nothing: given a report id you already hold,
+-- is it recent enough to attach evidence to.
+create or replace function public.report_accepts_evidence(p_report_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public, extensions
+as $$
+  select exists (
+    select 1 from public.reports r
+    where r.id = p_report_id
+      and r.created_at > now() - interval '10 minutes'
+  );
+$$;
+
+revoke all on function public.report_accepts_evidence(uuid) from public;
+grant execute on function public.report_accepts_evidence(uuid) to anon, authenticated;
+
 create policy "reporters attach photos to a report they just filed"
   on public.report_media for insert
   to anon, authenticated
   with check (
     kind = 'evidence'
-    and exists (
-      select 1 from public.reports r
-      where r.id = report_id
-        and r.created_at > now() - interval '10 minutes'
-    )
+    and public.report_accepts_evidence(report_id)
   );
 -- A photo upload is a second round trip after the report insert, so it cannot
 -- be one statement. The 10 minute window is the compromise: long enough for a
@@ -412,3 +513,52 @@ create policy "admins resolve gap log entries"
 -- goes through register_panic_flag(), a SECURITY DEFINER function. A client
 -- can increment its own counter and cannot read anyone else's, cannot reset
 -- its own, and cannot enumerate device tokens.
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- push_subscriptions — Web Push endpoints
+-- ═══════════════════════════════════════════════════════════════════════════
+
+create policy "guests register a device subscription"
+  on public.push_subscriptions for insert
+  to anon, authenticated
+  with check (
+    subscriber_device_id is not null
+    and subscriber_user_id is null
+  );
+-- The guest opt-in. Tied to this browser only; if the phone is lost, so is the
+-- subscription, because a device id is the only thing a guest has.
+
+create policy "residents register an account subscription"
+  on public.push_subscriptions for insert
+  to authenticated
+  with check (
+    subscriber_user_id = auth.uid()
+    and subscriber_device_id is null
+  );
+-- The account opt-in. Signing in on a replacement phone re-registers against
+-- the same account, so notifications survive the device.
+
+create policy "residents manage their own subscriptions"
+  on public.push_subscriptions for select
+  to authenticated
+  using (subscriber_user_id = auth.uid());
+
+create policy "residents deactivate their own subscriptions"
+  on public.push_subscriptions for update
+  to authenticated
+  using (subscriber_user_id = auth.uid())
+  with check (subscriber_user_id = auth.uid());
+
+create policy "residents delete their own subscriptions"
+  on public.push_subscriptions for delete
+  to authenticated
+  using (subscriber_user_id = auth.uid());
+-- Turning notifications off has to be possible from the account that turned
+-- them on. Guests cannot SELECT or DELETE their device rows — an anonymous id
+-- is a bearer token, and letting it read the table would let a guessed id
+-- enumerate other people's endpoints. Guest opt-out clears the browser
+-- registration instead, and the send path skips endpoints the push service
+-- reports as gone.
+
+-- There is no read policy for staff. Nobody in the city needs to browse the
+-- list of who has notifications on; the send path runs as the service role.

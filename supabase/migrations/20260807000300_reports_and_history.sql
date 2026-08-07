@@ -26,23 +26,50 @@ create table public.reports (
   status             public.report_status not null default 'received',
   assigned_office_id uuid references public.offices(id) on delete restrict,
 
-  -- Anonymous reporters are identified only by a random device id held in the
-  -- browser. It is not an account and never links to a person.
+  -- Exactly one of these two identifies the reporter.
+  --
+  -- reporter_device_id: an anonymous guest. A random value held in the browser.
+  -- It is not an account and never links to a person. This is the Panic path
+  -- and the emergency Describe path, and it must stay open to everyone.
+  --
+  -- reporter_user_id: a signed-in resident. Standard non-emergency reports go
+  -- here, which is what buys residents cross-device history.
   reporter_device_id text,
+  reporter_user_id   uuid references auth.users(id) on delete set null,
+
   -- Set when a barangay official files on someone else's behalf.
   filed_by           uuid references auth.users(id) on delete set null,
   callback_number    text,
   is_proxy_report    boolean not null default false,
+
+  -- Did this come from a confirmed identity? Generated, so it can never drift
+  -- from the column it describes and no client can assert it.
+  filed_by_verified  boolean generated always as (reporter_user_id is not null) stored,
 
   cluster_id         uuid,          -- FK added in the clusters section below
   is_false_report    boolean not null default false,
   resolved_at        timestamptz,
 
   created_at         timestamptz not null default now(),
-  updated_at         timestamptz not null default now()
+  updated_at         timestamptz not null default now(),
+
+  -- Exactly one reporter identity. Never both, never neither.
+  --
+  -- Note for File on Behalf: when a barangay official files for a walk-in
+  -- resident who has neither an account nor the app, reporter_user_id is set
+  -- to the OFFICIAL's id. They are the reporter of record — the person who can
+  -- be asked what they saw — and the report is additionally flagged
+  -- is_proxy_report with filed_by naming them. Leaving both null would be more
+  -- literal but would break this invariant and leave the report unattributable.
+  constraint reports_exactly_one_reporter check (
+    (reporter_device_id is null) <> (reporter_user_id is null)
+  )
 );
 
 create index reports_status_idx        on public.reports (status, created_at desc);
+create index reports_reporter_user_idx on public.reports (reporter_user_id, created_at desc)
+  where reporter_user_id is not null;
+create index reports_verified_idx      on public.reports (filed_by_verified, created_at desc);
 create index reports_office_idx        on public.reports (assigned_office_id, created_at desc);
 create index reports_barangay_idx      on public.reports (barangay_id, created_at desc);
 create index reports_device_idx        on public.reports (reporter_device_id, created_at desc)
@@ -69,20 +96,24 @@ as $$
 declare
   target_office uuid;
 begin
-  if new.assigned_office_id is null then
+  -- Routing is decided here on EVERY insert, and whatever the caller sent in
+  -- assigned_office_id is discarded. That is what stops a reporter choosing
+  -- which office receives their report, and it is why the insert policies do
+  -- not try to assert `assigned_office_id is null` — WITH CHECK is evaluated
+  -- after BEFORE triggers, so such a clause would test this trigger's output
+  -- and reject every insert.
+  select responsible_office_id into target_office
+  from public.routing_table
+  where category = new.category;
+
+  if target_office is null then
     select responsible_office_id into target_office
     from public.routing_table
-    where category = new.category;
-
-    if target_office is null then
-      select responsible_office_id into target_office
-      from public.routing_table
-      where is_fallback
-      limit 1;
-    end if;
-
-    new.assigned_office_id := target_office;
+    where is_fallback
+    limit 1;
   end if;
+
+  new.assigned_office_id := target_office;
 
   if new.barangay_id is null then
     select b.id into new.barangay_id
@@ -253,3 +284,43 @@ create table public.panic_flags (
 create index panic_flags_recent_idx on public.panic_flags (last_flagged_at desc);
 
 comment on table public.panic_flags is 'Per-device panic-button rate limiting. device_token is a random browser-local value, not an identity.';
+
+-- ── Push subscriptions ──────────────────────────────────────────────────────
+--
+-- Schema only. The service worker, the VAPID keys and the send path are not
+-- built yet — this exists so the resident/guest distinction is settled in the
+-- data model rather than retrofitted later.
+--
+-- The distinction is the point:
+--   subscriber_user_id set  -> tied to the ACCOUNT. Survives a lost phone: sign
+--                              in on the replacement and updates resume.
+--   subscriber_device_id set -> tied to ONE browser. Lose the device and the
+--                              subscription is gone, because there is nothing
+--                              else it could have been attached to.
+create table public.push_subscriptions (
+  id                   uuid primary key default extensions.gen_random_uuid(),
+  subscriber_user_id   uuid references auth.users(id) on delete cascade,
+  subscriber_device_id text,
+
+  endpoint             text not null unique,
+  p256dh               text not null,
+  auth_key             text not null,
+  user_agent           text,
+
+  is_active            boolean not null default true,
+  created_at           timestamptz not null default now(),
+  last_seen_at         timestamptz not null default now(),
+
+  -- Same exactly-one rule as reports, for the same reason.
+  constraint push_subscriptions_exactly_one_subscriber check (
+    (subscriber_device_id is null) <> (subscriber_user_id is null)
+  )
+);
+
+create index push_subscriptions_user_idx on public.push_subscriptions (subscriber_user_id)
+  where subscriber_user_id is not null;
+create index push_subscriptions_device_idx on public.push_subscriptions (subscriber_device_id)
+  where subscriber_device_id is not null;
+
+comment on table public.push_subscriptions is
+  'Web Push endpoints. Account-tied subscriptions survive a device change; device-tied ones do not, by design.';

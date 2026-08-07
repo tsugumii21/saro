@@ -46,7 +46,11 @@ const STAFF = [
   { email: "engineering@saro.legazpi.gov.ph", fullName: "Engr. Ruel Bautista", role: "office", office: "City Engineering" },
   { email: "bfp@saro.legazpi.gov.ph",       fullName: "SFO2 Danilo Perez",     role: "office", office: "BFP Legazpi" },
   { email: "bitano@saro.legazpi.gov.ph",    fullName: "Kap. Elena Sarmiento",  role: "barangay_official", barangay: "Bitano" },
-  { email: "rawis@saro.legazpi.gov.ph",     fullName: "Kap. Noel Mercado",     role: "barangay_official", barangay: "Rawis" }
+  { email: "rawis@saro.legazpi.gov.ph",     fullName: "Kap. Noel Mercado",     role: "barangay_official", barangay: "Rawis" },
+  // A demo resident, so the admin queue shows both verified and guest reports.
+  // Residents normally arrive through public signup; this one is provisioned
+  // pre-confirmed so there is something to sign in as immediately.
+  { email: "resident@example.com",          fullName: "Liza Fernandez",        role: "resident", demoResident: true }
 ];
 
 function generatePassword() {
@@ -74,6 +78,39 @@ async function findExistingUser(email) {
   const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
   if (error) throw new Error(`Could not list users: ${error.message}`);
   return data.users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || null;
+}
+
+/**
+ * Move two seeded guest reports onto the demo resident's account.
+ *
+ * reporter_device_id has to be cleared in the same statement as
+ * reporter_user_id is set — the reports_exactly_one_reporter constraint
+ * rejects a row carrying both.
+ */
+async function claimSeedReportsForResident(userId) {
+  const { data: candidates, error } = await admin
+    .from("reports")
+    .select("id")
+    .like("reporter_device_id", "dev_seed_%")
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  if (error) {
+    console.error(`  could not read seed reports: ${error.message}`);
+    return;
+  }
+  if (!candidates?.length) return;
+
+  const { error: updateError } = await admin
+    .from("reports")
+    .update({ reporter_user_id: userId, reporter_device_id: null })
+    .in("id", candidates.map((r) => r.id));
+
+  if (updateError) {
+    console.error(`  could not attach seed reports to the demo resident: ${updateError.message}`);
+    return;
+  }
+  console.log(`  attached ${candidates.length} seeded reports to the demo resident`);
 }
 
 async function main() {
@@ -136,6 +173,12 @@ async function main() {
     }
 
     created.push({ email: person.email, role: person.role, password });
+
+    // Give the demo resident a couple of the seeded reports, so the admin
+    // queue has verified rows next to guest rows and the badge is visible.
+    if (person.demoResident) {
+      await claimSeedReportsForResident(user.id);
+    }
   }
 
   console.log("\nStaff accounts ready:\n");

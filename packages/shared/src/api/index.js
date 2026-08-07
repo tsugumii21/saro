@@ -139,6 +139,7 @@ export async function getReports({ status, category, barangayId, limit = 500 } =
     .select(
       `id, tracking_code, category, description, lat, lng, status,
        assigned_office_id, barangay_id, photo_url, reporter_device_id,
+       reporter_user_id, filed_by_verified,
        callback_number, is_proxy_report, is_false_report, cluster_id,
        filed_by, created_at, updated_at, resolved_at,
        offices:assigned_office_id ( id, short_name, full_name ),
@@ -194,19 +195,35 @@ export async function getClusters() {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * File a report. Anonymous callers are allowed to INSERT and nothing else.
+ * File a report.
+ *
+ * Exactly one reporter identity is attached, and which one is a product
+ * decision, not an implementation detail:
+ *
+ *   anonymous: true  → reporter_device_id. Panic, and any Describe submission
+ *                      the emergency check flagged as urgent. No account, no
+ *                      login prompt, works signed out. Also used when a
+ *                      signed-in resident presses Panic — filing urgently
+ *                      should not force your name onto the record.
+ *
+ *   anonymous: false → reporter_user_id = the signed-in resident. The standard
+ *                      non-emergency path. Buys cross-device history and the
+ *                      verified badge staff see.
+ *
+ * The database enforces the exclusivity either way; this just picks a side.
  *
  * Fields the caller may not set are omitted rather than sent as null: status,
  * assigned office, cluster and the false-report flag are all decided server
  * side, and the RLS check rejects the insert outright if a caller asserts them.
  */
 export async function createReport(payload) {
+  const anonymous = payload.anonymous !== false;
+
   const insert = {
     category: payload.category ?? payload.category_id,
     description: (payload.description ?? "").trim(),
     lat: Number(payload.lat),
     lng: Number(payload.lng),
-    reporter_device_id: payload.device_fingerprint ?? payload.reporter_device_id ?? null,
     callback_number: payload.callback_number || null,
     is_proxy_report: Boolean(payload.is_proxy_report),
     photo_url: payload.photo_url ?? null,
@@ -214,14 +231,56 @@ export async function createReport(payload) {
 
   if (payload.barangay_id) insert.barangay_id = payload.barangay_id;
 
+  if (anonymous) {
+    const deviceId = payload.device_fingerprint ?? payload.reporter_device_id ?? null;
+    if (!deviceId) return fail("A device id is required to file anonymously.");
+    insert.reporter_device_id = deviceId;
+  } else {
+    const { data: userData } = await supabase.auth.getUser();
+    const uid = userData?.user?.id;
+    if (!uid) {
+      return fail("Please sign in to file a standard report, or describe an emergency instead.");
+    }
+    insert.reporter_user_id = uid;
+  }
+
   const { data, error } = await supabase
     .from("reports")
     .insert(insert)
-    .select("id, tracking_code, category, status, created_at")
+    .select("id, tracking_code, category, status, filed_by_verified, created_at")
     .single();
 
   if (error) return fail(error.message);
   return { data, error: null };
+}
+
+/**
+ * A signed-in resident's own reports, across every status.
+ *
+ * This is a direct table SELECT, not an RPC: residents have a real RLS policy
+ * (`reporter_user_id = auth.uid()`), so Postgres does the filtering. Nothing
+ * here restricts the query — remove the `.eq()` and the result would be
+ * identical, because the policy is the boundary.
+ */
+export async function getMyReports({ limit = 100 } = {}) {
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData?.user?.id;
+  if (!uid) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from("reports")
+    .select(
+      `id, tracking_code, category, description, status, lat, lng,
+       filed_by_verified, created_at, updated_at, resolved_at,
+       offices:assigned_office_id ( short_name, full_name ),
+       routing_table:category ( label )`
+    )
+    .eq("reporter_user_id", uid)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) return fail(error.message);
+  return { data: (data ?? []).map(adaptReport), error: null };
 }
 
 /** Barangay officials' File on Behalf. Requires an authenticated session. */

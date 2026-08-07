@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CLIENT_STORAGE_KEYS } from "@saro/shared";
+import { AuthProvider, CLIENT_STORAGE_KEYS } from "@saro/shared";
 import LandingPage from "./components/common/LandingPage";
 import CitizenShell from "./components/citizen/CitizenShell";
 
@@ -9,7 +9,11 @@ import CitizenShell from "./components/citizen/CitizenShell";
 const ADMIN_APP_URL = import.meta.env.VITE_ADMIN_APP_URL || "";
 
 function ResidentGateContent() {
-  // No auth here at all — this app never signs anyone in.
+  // Note what this component does NOT read: it never checks whether anyone is
+  // signed in. Which screen you land on depends only on viewport and choice,
+  // so an account can never become a precondition for reaching Panic or
+  // Describe. Session state is consumed further in, by the account sheet and
+  // by the one submit path that needs it.
 
   // Viewport breakpoint (768px)
   const [isDesktop, setIsDesktop] = useState(() => {
@@ -133,5 +137,12 @@ function ResidentGateContent() {
 }
 
 export default function ResidentGate() {
-  return <ResidentGateContent />;
+  // AuthProvider wraps the app so a signed-in resident is recognised, but it
+  // gates nothing: with no session it simply reports a guest and every screen
+  // stays reachable.
+  return (
+    <AuthProvider>
+      <ResidentGateContent />
+    </AuthProvider>
+  );
 }

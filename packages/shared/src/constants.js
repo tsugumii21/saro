@@ -31,13 +31,15 @@ export const RESOLUTION_MEDIA_REQUIRED_STATUS = "resolved";
 
 /* ── Roles ───────────────────────────────────────────────────────────────── */
 
-// Residents are never authenticated — "guest" is a client-side label, not a
-// value stored anywhere. The three real roles match the user_role enum.
+// "guest" is a client-side label for nobody being signed in — it is not a value
+// stored anywhere. The four real roles match the user_role enum.
 export const ROLE_GUEST = "guest";
+export const ROLE_RESIDENT = "resident";
 export const ROLE_ADMIN = "admin";
 export const ROLE_OFFICE = "office";
 export const ROLE_BARANGAY_OFFICIAL = "barangay_official";
 
+/** Roles that may sign in to admin-app. Deliberately excludes resident. */
 export const STAFF_ROLES = [ROLE_ADMIN, ROLE_OFFICE, ROLE_BARANGAY_OFFICIAL];
 
 /* ── Clustering (Turf.js duplicate detection) ────────────────────────────── */

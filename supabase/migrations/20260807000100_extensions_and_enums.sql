@@ -21,10 +21,15 @@ create type public.report_status as enum (
 );
 
 -- Who a person is. Scope (which office, which barangay) lives on profiles.
+--   resident          self-registered member of the public; sees only their own
+--                     reports. The only role obtainable through public signup.
 --   admin             city-wide, read and write everything
 --   office            one municipal office, its own queue only
 --   barangay_official one barangay, read-only, plus File on Behalf
+--
+-- Order matters for readability only; RLS never compares these by ordinality.
 create type public.user_role as enum (
+  'resident',
   'admin',
   'office',
   'barangay_official'
@@ -39,10 +44,17 @@ create type public.media_kind as enum (
 
 -- Human-shareable, read-aloud-safe report handle: "SR-8F2K".
 -- The alphabet excludes 0/O/1/I because these get dictated over the phone.
+-- SECURITY DEFINER is load-bearing, not decoration. This runs as the DEFAULT
+-- for reports.tracking_code, so it executes as whoever is inserting — and an
+-- anonymous guest has no SELECT on reports by design. Without this the
+-- uniqueness probe below fails with "permission denied for table reports" and
+-- every guest report is rejected, which is the one path that must never break.
 create or replace function public.generate_tracking_code()
 returns text
 language plpgsql
 volatile
+security definer
+set search_path = public, extensions
 as $$
 declare
   alphabet constant text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';

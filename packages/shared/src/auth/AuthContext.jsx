@@ -2,22 +2,28 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { supabase } from "../supabase/client.js";
 import { ROLE_GUEST } from "../constants.js";
 
-// Staff authentication, backed by Supabase Auth.
+// Authentication for both apps, backed by Supabase Auth. Email + password
+// throughout, but arrived at from two opposite directions:
 //
-// Method: email + password, with self-signup disabled and accounts provisioned
-// by an administrator (supabase/scripts/create-staff-users.mjs).
+//   Residents  self-register through the public signup flow and must confirm
+//              their email. Signup can only ever produce role='resident' — the
+//              handle_new_user trigger hard-codes it and ignores user_metadata,
+//              so the form cannot be used to mint an admin.
 //
-// Why not magic links: dispatch staff sign in during the incident, often on a
-// shared operations terminal, sometimes on the connection that the storm is
-// already degrading. A magic link makes every login depend on a mail round trip
-// completing first, which is the wrong dependency to add to an emergency
-// system. Password login also works on a shared terminal where nobody wants to
-// hand over their inbox. Trade-off accepted: passwords need rotation and can be
-// shared, so accounts are admin-issued rather than self-registered.
+//   Staff      are provisioned by an administrator
+//              (supabase/scripts/create-staff-users.mjs). Their role is set
+//              through the service role, never through a signup form.
 //
-// Residents never authenticate at all. They are anonymous by design — the
-// schema has no resident role, and a report is tied to a random device id that
-// identifies a browser rather than a person.
+// Why not magic links for staff: dispatch staff sign in during the incident,
+// often on a shared operations terminal, sometimes on the connection the storm
+// is already degrading. A magic link makes every login depend on a mail round
+// trip completing first, which is the wrong dependency to add to an emergency
+// system. Trade-off accepted: passwords need rotation, so staff accounts are
+// admin-issued rather than self-registered.
+//
+// Guests remain first-class. Panic and the emergency Describe path never touch
+// this provider — a report can always be filed against a browser-local device
+// id with nobody signed in.
 
 const AuthContext = createContext(null);
 
@@ -88,6 +94,39 @@ export function AuthProvider({ children }) {
     return { data: data.user, error: null };
   }, []);
 
+  /**
+   * Resident self-registration.
+   *
+   * Whatever is passed here, the account comes out as a resident: the role is
+   * assigned by a database trigger, not by this call. `full_name` goes into
+   * user_metadata purely so the profile row has a name to show.
+   */
+  const signUp = useCallback(async (email, password, fullName) => {
+    setError(null);
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: { data: { full_name: (fullName ?? "").trim() } },
+    });
+
+    if (signUpError) {
+      setError(signUpError.message);
+      return { data: null, error: signUpError.message, needsConfirmation: false };
+    }
+
+    // With email confirmation on, Supabase returns a user but no session.
+    const needsConfirmation = Boolean(data.user) && !data.session;
+    return { data: data.user, error: null, needsConfirmation };
+  }, []);
+
+  const resendConfirmation = useCallback(async (email) => {
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim(),
+    });
+    return { error: resendError ? resendError.message : null };
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setProfile(null);
@@ -101,6 +140,10 @@ export function AuthProvider({ children }) {
       session,
       profile,
       role,
+      // A guest is not a resident. Both are "not staff", but only a resident
+      // has an account, so only a resident gets cross-device history.
+      isGuest: !session,
+      isResident: role === "resident",
       isAdmin: role === "admin",
       isOffice: role === "office",
       isBarangayOfficial: role === "barangay_official",
@@ -111,9 +154,11 @@ export function AuthProvider({ children }) {
       loading,
       error,
       signIn,
+      signUp,
+      resendConfirmation,
       signOut,
     };
-  }, [session, profile, loading, error, signIn, signOut]);
+  }, [session, profile, loading, error, signIn, signUp, resendConfirmation, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

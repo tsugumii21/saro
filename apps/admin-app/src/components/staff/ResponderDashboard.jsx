@@ -3,7 +3,8 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import {
   Clock, AlertTriangle, MapPin, X, Upload, Flag, Search, Timer,
-  Columns, Table as TableIcon, Map as MapIcon, Rows, Target, BarChart2, CheckCircle2
+  Columns, Table as TableIcon, Map as MapIcon, Rows, Target, BarChart2, CheckCircle2,
+  ShieldCheck, UserRound
 } from "lucide-react";
 import {
   getReports, getCategories, getBarangays, getOffices,
@@ -63,6 +64,40 @@ function formatCountdown(hoursRemaining) {
 function slaProgress(created, slaHours) {
   const elapsed = hoursElapsed(created);
   return Math.min((elapsed / slaHours) * 100, 100);
+}
+
+/**
+ * Did this report come from a confirmed identity?
+ *
+ * Reads `reports.filed_by_verified`, a generated column that is true exactly
+ * when reporter_user_id is set. It is not a truth rating: a guest report is not
+ * less real, it is less traceable. Staff use it to decide how much weight a
+ * lone uncorroborated report carries, and whether there is anyone to call back.
+ *
+ * Deliberately quiet. A loud green tick next to verified rows would read as
+ * "trust this one, distrust that one", which is not what it means.
+ */
+function VerifiedBadge({ verified, showLabel = false }) {
+  if (verified) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded"
+        title="Filed from a confirmed resident account"
+      >
+        <ShieldCheck className="w-3 h-3" aria-hidden="true" />
+        {showLabel ? "Verified account" : <span className="sr-only">Verified account</span>}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded"
+      title="Filed anonymously from a device, with no account"
+    >
+      <UserRound className="w-3 h-3" aria-hidden="true" />
+      {showLabel ? "Guest report" : <span className="sr-only">Guest report</span>}
+    </span>
+  );
 }
 
 function makeMapIcon(color, isResolved, isSelected) {
@@ -487,6 +522,7 @@ export default function ResponderDashboard() {
                     <td className="px-4 py-3 font-mono font-bold text-slate-900 text-sm whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         {r.tracking_code}
+                        <VerifiedBadge verified={r.filed_by_verified} />
                         {r.cluster_id && r.confidence_score > 1 && (
                           <span className="text-xs bg-teal-100 text-teal-800 font-bold px-1.5 py-0.5 rounded">
                             ×{r.confidence_score}
@@ -689,7 +725,10 @@ export default function ResponderDashboard() {
             {selectedReport && (
               <div className="absolute bottom-14 left-3 right-3 bg-white/98 border-2 border-teal-700/30 rounded-2xl p-4 sm:p-5 z-[501] shadow-2xl">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-sm font-extrabold text-slate-900">{selectedReport.tracking_code}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-extrabold text-slate-900">{selectedReport.tracking_code}</span>
+                    <VerifiedBadge verified={selectedReport.filed_by_verified} showLabel />
+                  </span>
                   <button onClick={() => setSelectedReport(null)} className="text-slate-400 hover:text-slate-900 p-1">
                     <X className="w-4 h-4" />
                   </button>

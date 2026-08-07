@@ -14,7 +14,7 @@ max_rows = 1000
 [db]
 port = 54322
 shadow_port = 54320
-major_version = 15
+major_version = 17
 
 [db.pooler]
 enabled = false
@@ -26,7 +26,7 @@ enabled = true
 enabled = true
 port = 54323
 
-[inbucket]
+[local_smtp]
 enabled = true
 port = 54324
 
@@ -37,18 +37,25 @@ file_size_limit = "10MiB"
 
 [auth]
 enabled = true
-site_url = "http://localhost:5174"
+# Residents are the public-facing signup, so confirmation mail returns there.
+site_url = "http://localhost:5173"
 additional_redirect_urls = ["http://localhost:5173", "http://localhost:5174"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 
-# Staff accounts are provisioned by an administrator, never self-registered.
-enable_signup = false
+# Public signup is ON, and it can only ever produce a resident: the
+# handle_new_user trigger hard-codes role='resident' and ignores whatever the
+# client sent in user_metadata. Staff roles are assignable only by an admin or
+# by supabase/scripts/create-staff-users.mjs, both of which go through the
+# service role. See migration 02.
+enable_signup = true
 
 [auth.email]
-enable_signup = false
+enable_signup = true
 double_confirm_changes = true
+# Residents must confirm their address before the account works. Without this,
+# anyone could register someone else's email and receive their report updates.
 enable_confirmations = true
 
 [analytics]

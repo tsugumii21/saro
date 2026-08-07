@@ -17,6 +17,7 @@ export {
   getReportByTrackingCode,
   getStatusHistory,
   getReportsByDevice,
+  getMyReports,
   getPublicMapReports,
   // staff reads (RLS scoped)
   getReports,

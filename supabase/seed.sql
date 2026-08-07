@@ -141,11 +141,16 @@ begin
   end loop;
 
   -- One report filed at the barangay hall on a resident's behalf.
-  insert into public.reports (category, description, lat, lng, is_proxy_report, callback_number, created_at)
+  --
+  -- Seeded with a device id rather than a user id because no staff accounts
+  -- exist yet when this file runs. A real File on Behalf sets reporter_user_id
+  -- to the barangay official, which is what the RLS policy requires and what
+  -- makes it show as verified.
+  insert into public.reports (category, description, lat, lng, is_proxy_report, callback_number, reporter_device_id, created_at)
   values (
     'open_drain',
     'Reported in person at the barangay hall: broken drain cover on the corner, resident has no phone.',
-    13.1362, 123.7332, true, '09170001234', now() - interval '5 hours'
+    13.1362, 123.7332, true, '09170001234', 'dev_seed_brgyhall0001', now() - interval '5 hours'
   );
 
   -- One report an office has since verified as false.

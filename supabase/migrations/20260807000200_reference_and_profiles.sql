@@ -121,8 +121,9 @@ create trigger routing_table_changelog_trg
 
 -- ── Profiles ────────────────────────────────────────────────────────────────
 
--- One row per authenticated staff member. Residents and anonymous reporters
--- have no profile at all — they never authenticate.
+-- One row per authenticated user: residents who signed up themselves, and
+-- staff provisioned by an administrator. Anonymous guests have no profile at
+-- all — they never authenticate, and that stays a first-class path.
 --
 -- Scope is held as foreign keys, not as free text. The request asked for
 -- office_name / barangay_name columns; those are exposed by the
@@ -132,7 +133,7 @@ create trigger routing_table_changelog_trg
 create table public.profiles (
   id           uuid primary key references auth.users(id) on delete cascade,
   full_name    text not null,
-  role         public.user_role not null,
+  role         public.user_role not null default 'resident',
   office_id    uuid references public.offices(id) on delete restrict,
   barangay_id  uuid references public.barangays(id) on delete restrict,
   mobile_number text,
@@ -140,9 +141,13 @@ create table public.profiles (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
 
-  -- A role is only meaningful with the scope it implies.
+  -- A role is only meaningful with the scope it implies. A resident holds no
+  -- municipal scope whatsoever, which is what makes the signup default safe:
+  -- even if a row were forced to role='resident' with an office attached, the
+  -- constraint rejects it.
   constraint profiles_scope_matches_role check (
-    (role = 'admin'             and office_id is null     and barangay_id is null)
+    (role = 'resident'          and office_id is null     and barangay_id is null)
+    or (role = 'admin'             and office_id is null     and barangay_id is null)
     or (role = 'office'            and office_id is not null and barangay_id is null)
     or (role = 'barangay_official' and barangay_id is not null and office_id is null)
   )
@@ -155,7 +160,72 @@ create trigger profiles_touch_updated_at
   before update on public.profiles
   for each row execute function public.touch_updated_at();
 
-comment on table public.profiles is 'Staff accounts. role + office_id/barangay_id are the only inputs to report visibility.';
+comment on table public.profiles is 'Resident and staff accounts. role + office_id/barangay_id are the only inputs to report visibility.';
+
+-- ── Public signup always produces a resident ────────────────────────────────
+--
+-- Every account created through Supabase Auth gets a profile automatically.
+-- The role is hard-coded here, NOT read from user_metadata: a client controls
+-- its own metadata at signup, so trusting it would let anyone register as an
+-- admin. full_name is the only thing taken from the signup payload, and it is
+-- text with no authority attached.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  insert into public.profiles (id, full_name, role, office_id, barangay_id)
+  values (
+    new.id,
+    coalesce(nullif(btrim(new.raw_user_meta_data ->> 'full_name'), ''), split_part(new.email, '@', 1)),
+    'resident',      -- deliberately not configurable from the client
+    null,
+    null
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ── Role and scope are not self-service ─────────────────────────────────────
+--
+-- Residents need to edit their own name and mobile number, which means they
+-- need an UPDATE policy on their own row. RLS cannot express "you may change
+-- these columns but not those" — WITH CHECK sees only the new row, so it
+-- cannot tell that `role` just changed from 'resident' to 'admin'.
+--
+-- This trigger closes that. Any non-admin update silently restores the
+-- privileged columns to their previous values, so a resident editing their
+-- profile can send role='admin' all day and it will not stick.
+create or replace function public.pin_privileged_profile_columns()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  -- Admins (and the service role, whose auth.uid() is null) may set anything.
+  if auth.uid() is null or coalesce(public.is_admin(), false) then
+    return new;
+  end if;
+
+  new.role        := old.role;
+  new.office_id   := old.office_id;
+  new.barangay_id := old.barangay_id;
+  new.is_active   := old.is_active;
+  return new;
+end;
+$$;
+
+create trigger profiles_pin_privileged_columns
+  before update on public.profiles
+  for each row execute function public.pin_privileged_profile_columns();
 
 -- security_invoker: the view must be filtered by the *caller's* RLS on
 -- profiles, not by the view owner's privileges. Without this a view over an

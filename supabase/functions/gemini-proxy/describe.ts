@@ -8,13 +8,18 @@
 // confirms the category; nothing is auto-filed.
 
 import { generate } from "./gemini.ts";
+import { detectEmergencyInDescription } from "./emergency.ts";
 
 export interface DescribeResult {
   mode: "describe";
   category: string | null;
   categoryLabel: string | null;
   summary: string;
+  /** True when this may be filed anonymously with no login prompt. */
   isEmergency: boolean;
+  /** Which signal decided it, for the client to explain itself to the user. */
+  emergencySource: "keyword" | "category" | null;
+  matchedPhrase: string | null;
   confidence: "high" | "low";
   isFallback: boolean;
 }
@@ -57,13 +62,21 @@ export async function structureDescription(
   description: string,
   categories: CategoryRow[],
 ): Promise<DescribeResult> {
+  // Decided BEFORE Gemini is consulted, and independently of it. Whether a
+  // guest hits a login wall must never depend on a network call to a third
+  // party succeeding — if Gemini is down or rate-limited during a typhoon,
+  // "may sunog" still fast-tracks.
+  const keywordHit = detectEmergencyInDescription(description);
+
   const fallback: DescribeResult = {
     mode: "describe",
     category: null,
     categoryLabel: null,
     // Trim rather than invent: the resident's own words are always safe.
     summary: description.trim().slice(0, 140),
-    isEmergency: false,
+    isEmergency: Boolean(keywordHit),
+    emergencySource: keywordHit ? "keyword" : null,
+    matchedPhrase: keywordHit?.matchedPhrase ?? null,
     confidence: "low",
     isFallback: true,
   };
@@ -88,12 +101,21 @@ export async function structureDescription(
       : undefined;
 
     // A category the model made up is treated as no category at all.
+    //
+    // Emergency is the OR of two signals: the resident's own words, and the
+    // category the model landed on. Either one alone opens the anonymous path.
+    // The keyword hit is checked first because it does not depend on the model
+    // having classified correctly.
+    const categoryIsEmergency = match?.is_emergency ?? false;
+
     return {
       mode: "describe",
       category: match?.category ?? null,
       categoryLabel: match?.label ?? null,
       summary: (parsed.summary ?? "").trim().slice(0, 140) || fallback.summary,
-      isEmergency: match?.is_emergency ?? false,
+      isEmergency: Boolean(keywordHit) || categoryIsEmergency,
+      emergencySource: keywordHit ? "keyword" : categoryIsEmergency ? "category" : null,
+      matchedPhrase: keywordHit?.matchedPhrase ?? null,
       confidence: match ? "high" : "low",
       isFallback: false,
     };

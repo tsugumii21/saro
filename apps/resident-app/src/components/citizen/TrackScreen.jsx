@@ -6,10 +6,9 @@ import {
 } from "lucide-react";
 import {
   getReportByTrackingCode, getStatusHistory, getCategories, getBarangays,
-  getOffices, getReportsByDevice, CLIENT_STORAGE_KEYS
+  getOffices, getReportsByDevice, getMyReports, CLIENT_STORAGE_KEYS, useAuth
 } from "@saro/shared";
 import { saroEvents } from "@saro/shared";
-import { useAuth } from "@saro/shared";
 
 const STATUS_LABELS = {
   received: "Received",
@@ -42,7 +41,7 @@ function timeSince(dateStr) {
 
 export default function TrackScreen() {
   const [searchParams] = useSearchParams();
-  const { profile } = useAuth();
+  const { isResident } = useAuth();
   const preCode = searchParams.get("code") || "";
 
   const [trackingCode, setTrackingCode] = useState(preCode);
@@ -67,18 +66,27 @@ export default function TrackScreen() {
     })();
   }, []);
 
-  // "My Reports" is device-local. Residents have no account, so the list is
-  // keyed on the random id this browser generated for itself when it first
-  // filed something. Clear the browser storage and the list is gone — which is
-  // the privacy property we want.
+  // "My Reports" has two sources, and which one you get is the practical
+  // difference an account makes.
+  //
+  // Signed in  → the account's reports, from any device, for as long as the
+  //              account exists. Filtered by RLS on reporter_user_id.
+  // Guest      → this browser's reports only, keyed on the random device id it
+  //              generated for itself. Clear the browser and the list is gone,
+  //              which is the privacy property guests are trading for.
   useEffect(() => {
-    const deviceId = localStorage.getItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
-    if (!deviceId) return;
     (async () => {
+      if (isResident) {
+        const { data } = await getMyReports();
+        if (data) setRecentReports(data);
+        return;
+      }
+      const deviceId = localStorage.getItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
+      if (!deviceId) return;
       const { data } = await getReportsByDevice(deviceId);
       if (data) setRecentReports(data);
     })();
-  }, []);
+  }, [isResident]);
 
   const handleSearch = useCallback(async (code) => {
     const c = (code || trackingCode).trim().toUpperCase();

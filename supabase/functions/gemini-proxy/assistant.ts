@@ -9,6 +9,9 @@
 
 import knowledgeBase from "./knowledge-base.json" with { type: "json" };
 import { generate, GeminiError } from "./gemini.ts";
+import { checkEmergencyTripwire } from "./emergency.ts";
+
+export { checkEmergencyTripwire };
 
 interface KnowledgeEntry {
   id: string;
@@ -20,12 +23,9 @@ interface KnowledgeEntry {
 
 const KB = knowledgeBase as KnowledgeEntry[];
 
-// Trip-wire emergency keywords (triggers the immediate hotline call to action)
-const EMERGENCY_KEYWORDS = [
-  "sunog", "apoy", "baha", "dugo", "patay", "nahulog", "disgrasya", "aksidente",
-  "krimen", "baril", "kutsilyo", "salud", "ospital", "ambulansya", "emergency",
-  "suicide", "fire", "flood", "accident", "bleeding", "unconscious", "stroke", "heart attack",
-];
+// Emergency keywords and the tripwire itself now live in emergency.ts, so the
+// describe mode can share the keyword list without inheriting the question
+// suppression rule.
 
 // Stop words for score matching
 const STOP_WORDS = new Set([
@@ -33,14 +33,6 @@ const STOP_WORDS = new Set([
   "dito", "doon", "ano", "paano", "saan", "kailan", "bakit", "sino", "the", "a", "an", "in",
   "on", "at", "to", "for", "of", "with", "is", "are", "was", "were", "be", "what", "how", "where",
 ]);
-
-// Informational / FAQ indicators that negate the emergency tripwire, so that
-// "Ano ang emergency hotline ng CDRRMO?" is answered instead of alarming.
-const FAQ_QUERY_INDICATORS = [
-  "ano", "paano", "saan", "kailan", "bakit", "sino", "what", "how", "where", "when", "why", "who",
-  "hotline", "number", "numero", "contact", "tel", "phone", "lista", "listahan", "gabay", "faq",
-  "info", "tanggapan",
-];
 
 export interface AssistantResult {
   mode: "assistant";
@@ -51,27 +43,6 @@ export interface AssistantResult {
   source: string | null;
   isFallback: boolean;
   topicCluster: string | null;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-export function checkEmergencyTripwire(question: string): { matchedPhrase: string } | null {
-  if (!question || typeof question !== "string") return null;
-  const qLower = question.toLowerCase().trim();
-
-  const isFaqQuestion = FAQ_QUERY_INDICATORS.some((word) =>
-    new RegExp(`\\b${escapeRegExp(word)}\\b`, "i").test(qLower)
-  );
-  if (isFaqQuestion) return null;
-
-  for (const kw of EMERGENCY_KEYWORDS) {
-    if (new RegExp(`\\b${escapeRegExp(kw)}\\b`, "i").test(qLower)) {
-      return { matchedPhrase: kw };
-    }
-  }
-  return null;
 }
 
 /** Deterministic local match. Runs when Gemini is unavailable or errors. */

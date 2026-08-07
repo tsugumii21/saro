@@ -1,0 +1,15 @@
+{
+  "short_name": "SARO",
+  "name": "SARO - Legazpi City Civic Hazard Reporting",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "32x32 192x192 512x512"
+    }
+  ],
+  "start_url": ".",
+  "background_color": "#F4F7F6",
+  "theme_color": "#0B6E6E",
+  "display": "standalone"
+}

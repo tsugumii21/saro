@@ -1,0 +1,128 @@
+[
+  {
+    "id": "doc_evacuation_bitano",
+    "question": "Saan ang pinakamalapit na evacuation center sa Bitano?",
+    "answer": "Ang pinakamalapit na evacuation center sa Barangay Bitano ay ang Bitano Elementary School Multipurpose Hall. Ito ay ginagamit bilang primary evacuation shelter kapag may baha o bagyo.",
+    "source": "CDRRMO Evacuation Directory 2026",
+    "category": "Evacuation Centers"
+  },
+  {
+    "id": "doc_evacuation_rawis",
+    "question": "Open ba ang evacuation center sa Rawis elementary?",
+    "answer": "Oo, ang Rawis Elementary School Evacuation Hub ay laging nakahanda at binubuksan kapag naglabas ang CDRRMO ng Signal No. 1 o warning para sa storm surge at pagbaha sa coastal barangays.",
+    "source": "CDRRMO Evacuation Directory 2026",
+    "category": "Evacuation Centers"
+  },
+  {
+    "id": "doc_evacuation_gogon",
+    "question": "Sino ang assigned coordinator sa Gogon evacuation hub?",
+    "answer": "Ang assigned coordinator sa Gogon Evacuation Center ay ang Barangay Disaster Risk Reduction Officer (BDRRO) sa tulong ng CDRRMO Liaison Officer. Pwedeng makipag-ugnayan sa Gogon Barangay Hall.",
+    "source": "CDRRMO Evacuation Directory 2026",
+    "category": "Evacuation Centers"
+  },
+  {
+    "id": "doc_evacuation_taysan",
+    "question": "May relief goods ba sa Taysan evacuation center?",
+    "answer": "Oo, ang City Social Welfare and Development Office (CSWDO) at CDRRMO ay nag-iipon ng relief food packs at hygiene kits sa Taysan Resettlement Evacuation Center bago at panahon ng kalamidad.",
+    "source": "CSWDO & CDRRMO Relief Operations",
+    "category": "Evacuation Centers"
+  },
+  {
+    "id": "doc_evacuation_puro",
+    "question": "Paano pumunta sa evacuation center mula sa Puro?",
+    "answer": "Mula sa Barangay Puro, ang pinakamabilis na ruta papuntang evacuation center ay patungo sa Oro Site High School Evacuation Center sa kahabaan ng Legazpi City Boulevard road network.",
+    "source": "Legazpi Emergency Route Map 2026",
+    "category": "Evacuation Centers"
+  },
+  {
+    "id": "doc_evacuation_hotline",
+    "question": "Ano ang hotline ng evacuation center management?",
+    "answer": "Ang evacuation center management at coordination sa buong Legazpi City ay pinamamahalaan ng CDRRMO hotline: (052) 742-1234 o mobile 0917-555-9111, at Legazpi 911.",
+    "source": "CDRRMO Hotlines",
+    "category": "Evacuation Centers"
+  },
+  {
+    "id": "doc_cdrrmo_hotline",
+    "question": "Ano ang emergency hotline ng CDRRMO at alin ang pinamamahalaan nilang sakuna?",
+    "answer": "Ang City Disaster Risk Reduction and Management Office (CDRRMO) hotline ay (052) 742-1234 at 0917-555-9111. Sila ang namamahala sa pagbaha (flooding), landslide, bagyo (typhoon debris), at evacuation operations.",
+    "source": "Legazpi Emergency Directory",
+    "category": "Emergency Offices"
+  },
+  {
+    "id": "doc_911_info",
+    "question": "Ano ang contact number ng Legazpi 911?",
+    "answer": "Ang Legazpi 911 Emergency Command Center ay pwedeng matawagan sa 911 o (052) 480-9111. Sila ang nakatutok sa medical emergencies, rescue operations, at vehicular collisions.",
+    "source": "Legazpi 911 Command Center",
+    "category": "Emergency Offices"
+  },
+  {
+    "id": "doc_bfp_hotline",
+    "question": "Sino ang tatawagin kapag may sunog o gas leak?",
+    "answer": "Tumawag agad sa Bureau of Fire Protection (BFP) Legazpi Station sa hotline 160 o (052) 480-2222 para sa sunog (fire outbreak), gas leak, at chemical spills.",
+    "source": "BFP Legazpi Station",
+    "category": "Emergency Offices"
+  },
+  {
+    "id": "doc_ceo_info",
+    "question": "Sino ang namamahala sa mga sirang kalsada, lubak, at open canal?",
+    "answer": "Ang City Engineering Office (CEO) ang namamahala sa road potholes, open drains, sirang manhole, at pinsala sa tulay at seawall. Contact: (052) 742-3344.",
+    "source": "City Engineering Office",
+    "category": "Infrastructure"
+  },
+  {
+    "id": "doc_pso_info",
+    "question": "Sino ang namamahala sa traffic lights at road obstructions?",
+    "answer": "Ang Public Safety Office (PSO) ang tumutugon sa road obstructions at sirang traffic lights. Contact: (052) 742-8899.",
+    "source": "Public Safety Office",
+    "category": "Public Safety"
+  },
+  {
+    "id": "doc_pnp_info",
+    "question": "Sino ang tatawagin para sa krimen o gulo sa kalsada?",
+    "answer": "Ang Philippine National Police (PNP) Legazpi Station ay matawagan sa hotline 117 o (052) 480-7248 para sa public order, krimen, at seguridad.",
+    "source": "PNP Legazpi",
+    "category": "Law Enforcement"
+  },
+  {
+    "id": "doc_cho_contact",
+    "question": "Paano makipag-ugnayan sa City Health Office para sa maduming tubig o health hazards?",
+    "answer": "Ang City Health Office (CHO) ay tumutugon sa water contamination at public health hazards. Contact: (052) 742-5678.",
+    "source": "City Health Office",
+    "category": "Health & Sanitation"
+  },
+  {
+    "id": "doc_coastguard_hours",
+    "question": "Ano ang contact ng Coast Guard para sa coastal emergency?",
+    "answer": "Ang Philippine Coast Guard - Legazpi Sub-Station ay may 24/7 duty. Contact: (052) 742-9900 o 0917-888-2444 para sa storm surge at coastal hazards.",
+    "source": "PCG Legazpi",
+    "category": "Maritime & Coastal"
+  },
+  {
+    "id": "doc_reporting_guide",
+    "question": "Paano mag-report ng sakuna o hazard sa SARO app?",
+    "answer": "Pumunta sa Report tab, pumili ng category, ilagay ang lokasyon gamit ang map pin o GPS, magbigay ng maikling paglalarawan, at i-click ang Submit. Makakakuha ka ng short tracking code (halimbawa: SR-8F2K).",
+    "source": "SARO User Guide",
+    "category": "Reporting Procedure"
+  },
+  {
+    "id": "doc_tracking_guide",
+    "question": "Paano malalaman ang status ng report ko?",
+    "answer": "Pumunta sa Track tab at i-enter ang iyong tracking code (SR-XXXX). Makikita mo ang real-time progress mula Received -> Assigned -> In Progress -> Resolved, kasama ang status history at resolution photo kung meron.",
+    "source": "SARO User Guide",
+    "category": "Reporting Procedure"
+  },
+  {
+    "id": "doc_proxy_reporting",
+    "question": "Pwede ba akong mag-report para sa ibang tao?",
+    "answer": "Oo! Sa Report form, i-check ang 'Reporting for someone else' (Proxy Report). Kailangan lang maglagay ng callback number ng taong tinutulungan mo para matawagan ng responder.",
+    "source": "SARO User Guide",
+    "category": "Reporting Procedure"
+  },
+  {
+    "id": "doc_about_saro",
+    "question": "Ano ang SARO app at ano ang ibig sabihin ng pangalan nito?",
+    "answer": "Ang SARO ay ang nag-iisang reporting front door para sa Legazpi City na awtomatikong nagr-route ng hazard reports sa tamang tanggapan. Ang 'Saro' ay salitang Bikol na nangangahulugang 'isa' (one).",
+    "source": "SARO Project Overview",
+    "category": "General Info"
+  }
+]

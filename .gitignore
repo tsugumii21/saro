@@ -1,0 +1,33 @@
+# Environment variables
+.env
+.env.local
+.env*.local
+
+# Node modules & build outputs
+node_modules
+dist
+dist-ssr
+
+# Deployment & Platform tooling
+.vercel
+.supabase
+supabase/.branches
+supabase/.temp
+
+# IDE & OS files
+.DS_Store
+*.log
+
+# Vendored AI agent skill installs — ~868 files, all mirrors of the same
+# upstream skills. Reinstallable, not project source. Remove a line here if you
+# want that tool's config tracked.
+.agents/
+.claude/
+.cursor/
+.gemini/
+.kiro/
+.opencode/
+
+# impeccable local cache / machine-specific config
+.impeccable/hook.cache.json
+.impeccable/config.local.json

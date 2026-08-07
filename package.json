@@ -1,0 +1,26 @@
+{
+  "name": "saro-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:resident": "npm run dev --workspace @saro/resident-app",
+    "dev:admin": "npm run dev --workspace @saro/admin-app",
+    "build": "npm run build --workspaces --if-present",
+    "build:resident": "npm run build --workspace @saro/resident-app",
+    "build:admin": "npm run build --workspace @saro/admin-app",
+    "lint": "eslint .",
+    "test:shared": "npm run test --workspace @saro/shared"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0"
+  }
+}

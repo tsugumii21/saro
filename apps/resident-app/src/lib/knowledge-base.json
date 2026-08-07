@@ -1,0 +1,72 @@
+[
+  {
+    "id": "doc_about_saro",
+    "category": "General",
+    "question": "Ano ang SARO app / What is SARO?",
+    "answer": "Ang SARO (salitang Bikol na nangangahulugang 'isa' o 'one') ay ang nag-iisang reporting front door para sa Lungsod ng Legazpi. Ito ay awtomatikong nagre-route ng mga hazard report sa kaukulang tanggapan katulad ng CDRRMO, Legazpi 911, City Engineering Office, BFP, PNP, at CHO.",
+    "source": "City Disaster Risk Reduction and Management Office"
+  },
+  {
+    "id": "doc_cdrrmo_hotline",
+    "category": "Emergency Hotlines",
+    "question": "Ano ang emergency hotline ng CDRRMO?",
+    "answer": "Ang emergency hotline ng City Disaster Risk Reduction and Management Office (CDRRMO) Legazpi ay (052) 742-1234 o 0917-854-3210. Maaari ding tumawag agad sa Legazpi 911 sa pamamagitan ng pagpindot sa Call 911 button.",
+    "source": "CDRRMO Operations"
+  },
+  {
+    "id": "doc_bfp_hotline",
+    "category": "Emergency Hotlines",
+    "question": "Ano ang hotline ng Bureau of Fire Protection (BFP Legazpi)?",
+    "answer": "Ang emergency hotlines ng BFP Legazpi City Fire Station ay (052) 480-1193 at 0928-500-1193 para sa anumang sunog, gas leak, o structural emergency.",
+    "source": "BFP Legazpi Command Center"
+  },
+  {
+    "id": "doc_pnp_hotline",
+    "category": "Emergency Hotlines",
+    "question": "Ano ang contact number ng PNP Legazpi?",
+    "answer": "Ang Philippine National Police (PNP Legazpi City Station) emergency hotline ay (052) 480-2222 o 0998-598-6012 para sa public safety at peace and order incidents.",
+    "source": "PNP Legazpi"
+  },
+  {
+    "id": "doc_cho_contact",
+    "category": "Health & Medical",
+    "question": "Ano ang contact ng City Health Office (CHO)?",
+    "answer": "Ang City Health Office (CHO) Legazpi hotline ay (052) 742-5555. Para sa mga agarang sakuna o medical emergency, irekomenda ang pagtawag sa Legazpi 911.",
+    "source": "City Health Office"
+  },
+  {
+    "id": "doc_how_to_report",
+    "category": "Reporting Procedure",
+    "question": "Paano mag-report ng hazard sa SARO?",
+    "answer": "Pindutin lamang ang 'Report' tab sa ibaba, pumili ng tamang kategorya (Flooding, Pothole, Fire, Medical, atbp.), ilagay ang lokasyon o barangay, at mag-attach ng larawan kung mayroon. Pwede ring mag-submit bilang Guest nang hindi kinakailangang mag-login.",
+    "source": "SARO System Guide"
+  },
+  {
+    "id": "doc_track_report",
+    "category": "Report Tracking",
+    "question": "Paano mag-track ng report gamit ang tracking code?",
+    "answer": "Pumunta sa 'Track' tab sa ibaba ng app at i-enter ang iyong 7-character Tracking Code (halimbawa: SR-8F2K). Makikita mo ang live SLA status, assigned office, at dispatch timeline.",
+    "source": "SARO System Guide"
+  },
+  {
+    "id": "doc_evacuation_centers",
+    "category": "Disaster Preparedness",
+    "question": "Saan ang mga evacuation center sa Legazpi City?",
+    "answer": "Ang mga pangunahing evacuation centers sa Legazpi ay matatagpuan sa Ibalong Centrum for Recreation (Bitano), Legazpi City High School (Rawis), at mga designated Barangay Multipurpose Halls sa bawat barangay. Makipag-ugnayan sa CDRRMO o sa inyong Punong Barangay kapag may advisory.",
+    "source": "CDRRMO Disaster Response Division"
+  },
+  {
+    "id": "doc_coast_guard",
+    "category": "Coastal & Marine Safety",
+    "question": "May duty ba ang Coast Guard sa gabi?",
+    "answer": "Oo, ang Coast Guard Station Legazpi ay may 24/7 continuous operations team para sa coastal surge monitoring, sea rescue, at marine incidents. Emergency hotline: 0917-800-4567.",
+    "source": "PCG Station Legazpi"
+  },
+  {
+    "id": "doc_gas_leak_safety",
+    "category": "Public Safety",
+    "question": "Ano ang gagawin kapag may gas leak?",
+    "answer": "1. Huwag magbukas ng anumang ilaw o kuryente. 2. Buksan ang mga bintana at pinto para magpahangin. 3. Lumabas agad sa gusali o bahay. 4. Tumawag sa BFP Legazpi hotline ((052) 480-1193) o mag-report sa SARO.",
+    "source": "BFP Safety Protocol"
+  }
+]

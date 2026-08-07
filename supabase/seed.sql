@@ -140,17 +140,20 @@ begin
     end if;
   end loop;
 
-  -- One report filed at the barangay hall on a resident's behalf.
+  -- One report a resident filed for a neighbour.
   --
-  -- Seeded with a device id rather than a user id because no staff accounts
-  -- exist yet when this file runs. A real File on Behalf sets reporter_user_id
-  -- to the barangay official, which is what the RLS policy requires and what
-  -- makes it show as verified.
+  -- This is the resident app's "reporting for someone else" toggle, which sets
+  -- is_proxy_report and makes a callback number mandatory — the person who
+  -- actually has the problem has no phone in the app, so the office needs a way
+  -- to reach somebody.
+  --
+  -- It is NOT the removed File on Behalf feature, which had an official file
+  -- from the admin app. That is gone (migration 17); this is not.
   insert into public.reports (category, description, lat, lng, is_proxy_report, callback_number, reporter_device_id, created_at)
   values (
     'open_drain',
-    'Reported in person at the barangay hall: broken drain cover on the corner, resident has no phone.',
-    13.1362, 123.7332, true, '09170001234', 'dev_seed_brgyhall0001', now() - interval '5 hours'
+    'Reporting for my neighbour: broken drain cover on the corner, she has no phone.',
+    13.1362, 123.7332, true, '09170001234', 'dev_seed_neighbour001', now() - interval '5 hours'
   );
 
   -- One report an office has since verified as false.

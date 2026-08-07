@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   Mail, Lock, LogOut, LayoutDashboard, Building2, ArrowRight, ArrowLeft,
-  Layers, Siren, FileDown, UserPlus,
+  Layers, Siren, FileDown,
 } from "lucide-react";
 import ResponderDashboard from "./ResponderDashboard.jsx";
 import AdminDashboard from "./AdminDashboard.jsx";
@@ -9,7 +9,6 @@ import RoutingEditor from "./RoutingEditor.jsx";
 import ClusterReview from "./ClusterReview.jsx";
 import PanicReview from "./PanicReview.jsx";
 import EvidenceExport from "./EvidenceExport.jsx";
-import FileOnBehalf from "./FileOnBehalf.jsx";
 import { Wordmark } from "@saro/ui";
 import { useAuth, STAFF_ROLES } from "@saro/shared";
 
@@ -43,7 +42,6 @@ const SECTIONS = [
   { id: "dispatch", Icon: LayoutDashboard, label: "Dispatch",  roles: ["admin", "office", "barangay_official"] },
   { id: "clusters", Icon: Layers,          label: "Duplicates", roles: ["admin", "office", "barangay_official"] },
   { id: "evidence", Icon: FileDown,        label: "Evidence",   roles: ["admin", "office", "barangay_official"] },
-  { id: "behalf",   Icon: UserPlus,        label: "File for a resident", roles: ["admin", "barangay_official"] },
   { id: "routing",  Icon: Building2,       label: "Routing & data", roles: ["admin"] },
   { id: "panic",    Icon: Siren,           label: "Panic review",   roles: ["admin"] },
 ];
@@ -119,7 +117,6 @@ export default function StaffShell() {
         {active === "dispatch" && <ResponderDashboard />}
         {active === "clusters" && <ClusterReview />}
         {active === "evidence" && <EvidenceExport />}
-        {active === "behalf"   && <FileOnBehalf />}
         {active === "panic"    && <PanicReview />}
         {active === "routing" && isAdmin && (
           <div className="flex flex-col gap-8">

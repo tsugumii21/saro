@@ -26,7 +26,6 @@ export {
   getClusters,
   // writes
   createReport,
-  createReportOnBehalf,
   updateReportStatus,
   markFalseReport,
   updateCategory,

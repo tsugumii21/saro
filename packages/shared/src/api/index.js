@@ -141,7 +141,7 @@ export async function getReports({ status, category, barangayId, limit = 500 } =
        assigned_office_id, barangay_id, photo_url, reporter_device_id,
        reporter_user_id, filed_by_verified,
        callback_number, is_proxy_report, is_false_report, cluster_id,
-       filed_by, created_at, updated_at, resolved_at,
+       created_at, updated_at, resolved_at,
        offices:assigned_office_id ( id, short_name, full_name ),
        barangays:barangay_id ( id, name ),
        routing_table:category ( label, is_emergency, sla_hours )`
@@ -310,58 +310,13 @@ export async function getMyReports({ limit = 100 } = {}) {
   return { data: (data ?? []).map(adaptReport), error: null };
 }
 
-/**
- * File on Behalf, for barangay officials and admins.
- *
- * `reporter_user_id` is set to the OFFICIAL, not to the walk-in resident, who
- * by definition has no account. Two reasons, and both are load-bearing:
- *
- *   The reports table has a CHECK requiring exactly one of reporter_device_id
- *   or reporter_user_id. A desk-filed report has no device, so the user column
- *   is the only one left — omitting both fails the constraint outright.
- *
- *   The barangay insert policy demands `filed_by = auth.uid()` AND
- *   `reporter_user_id = auth.uid()`. Setting only filed_by, which is what this
- *   function used to do, satisfied neither the policy nor the constraint, so
- *   every File on Behalf attempt was rejected with a bare RLS violation.
- *
- * It also makes the report attributable: a named official vouched for it and
- * can be asked what they were told, which is exactly what `filed_by_verified`
- * should mean on a proxy report.
- */
-export async function createReportOnBehalf(payload) {
-  const { data: sessionData } = await supabase.auth.getUser();
-  const uid = sessionData?.user?.id;
-  if (!uid) return fail("You must be signed in to file on behalf of a resident.");
-
-  const { data, error } = await supabase
-    .from("reports")
-    .insert({
-      category: payload.category,
-      description: (payload.description ?? "").trim(),
-      lat: Number(payload.lat),
-      lng: Number(payload.lng),
-      barangay_id: payload.barangay_id,
-      callback_number: payload.callback_number || null,
-      is_proxy_report: true,
-      filed_by: uid,
-      reporter_user_id: uid,
-    })
-    .select("id, tracking_code, status, created_at")
-    .single();
-
-  if (error) return fail(error.message);
-  return { data, error: null };
-}
-
-/**
- * Move a report along the pipeline.
- *
- * The acting profile id is no longer a parameter. The old mock layer took one
- * and compared it in JavaScript, which meant the caller chose who they were.
- * Now the identity comes from the JWT and the office check is an RLS policy, so
- * a mismatch fails in the database.
- */
+// createReportOnBehalf lived here. File on Behalf — an official filing a report
+// for a walk-in resident — was removed in migration 17, along with the insert
+// policy that admitted it and the reports.filed_by column that named the filer.
+//
+// Not to be confused with `is_proxy_report`, which stays: that is the RESIDENT
+// app's "I am reporting for someone else" toggle, a neighbour filing from their
+// own phone for a neighbour without one. Different feature, similar name.
 /**
  * Move a report along the pipeline.
  *

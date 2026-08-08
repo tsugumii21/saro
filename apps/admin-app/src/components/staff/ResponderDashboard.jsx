@@ -56,11 +56,28 @@ function compressPhoto(file) {
   });
 }
 
-/** One number and its noun. Four of these replace the old eight-tile KPI grid. */
+/**
+ * One number and its noun. Four of these replace the old eight-tile KPI grid.
+ *
+ * These used to carry a 3px coloured left border, borrowing the index-tab
+ * device the rack uses. It did not survive scrutiny: on a run card the edge
+ * means *that card's status*, but a counter has no status, so here it only said
+ * "this counter differs from its neighbour" — which the label already said.
+ *
+ * The giveaway was the fourth one. "Last 24h" signals nothing, so it had been
+ * given `--color-line-strong` purely to keep the row looking consistent. A
+ * colour chosen to fill a slot is decoration.
+ *
+ * The colour now sits on the number, which is the part that actually carries
+ * the alarm: an overdue count of 7 should look different from an open count of
+ * 7. "Last 24h" gets plain ink, because it has nothing to say. Colour is never
+ * alone — the noun is directly beneath it — and it now lands on 20px text
+ * rather than a 3px rule, which is easier to see and easier to pass contrast on.
+ */
 function Count({ label, value, tone }) {
   return (
-    <div className="flex flex-col gap-0.5 px-4 py-2.5" style={{ borderLeft: `3px solid ${tone}` }}>
-      <span className="t-code" style={{ fontSize: 20, lineHeight: "24px", color: "var(--color-ink)" }}>
+    <div className="flex flex-col gap-0.5 px-4 py-2.5">
+      <span className="t-code" style={{ fontSize: 20, lineHeight: "24px", color: tone }}>
         {value}
       </span>
       <span className="t-micro text-ink-faint">{label}</span>
@@ -325,10 +342,13 @@ export default function ResponderDashboard() {
           </p>
         </div>
         <div className="flex flex-wrap items-stretch">
-          <Count label="Open" value={counts.open} tone="var(--color-status-progress-tab)" />
+          {/* Overdue reads as alert, never as panic — a breached SLA is an
+              operational failure, not somebody in danger. "Last 24h" is plain
+              ink because it is context, not a condition to act on. */}
+          <Count label="Open" value={counts.open} tone="var(--color-status-progress-ink)" />
           <Count label="Overdue" value={counts.overdue} tone="var(--color-alert)" />
-          <Count label="Unclaimed" value={counts.unclaimed} tone="var(--color-status-received-tab)" />
-          <Count label="Last 24h" value={counts.today} tone="var(--color-line-strong)" />
+          <Count label="Unclaimed" value={counts.unclaimed} tone="var(--color-status-received-ink)" />
+          <Count label="Last 24h" value={counts.today} tone="var(--color-ink)" />
         </div>
       </div>
 

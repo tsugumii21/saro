@@ -323,41 +323,42 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
             {/* Primary Responders (Prominent Highlight Cards) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               
-              <div className="bg-brand-wash/50 border border-brand-edge border-l-4 border-l-brand rounded-xs p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-ink">CDRRMO</span>
-                  <Waves className="w-4 h-4 text-brand" />
+              {/* A directory, not a set of status objects.
+               *
+               * These four cards each used to carry a tinted wash, a full
+               * coloured border AND a 4px coloured left edge — three devices
+               * saying the same thing, which is one of the clearest tells of
+               * generated UI. Worse, the colours were borrowed from tokens that
+               * mean something else: --color-alert is for errors, not for the
+               * 911 command centre, and --color-status-assigned-* belongs to a
+               * report's pipeline state, not to the fire service. The fourth
+               * card was raw `indigo-50 / indigo-200 / indigo-600 / indigo-900`
+               * — off-palette entirely, and the last hardcoded colour left in
+               * either app.
+               *
+               * An office directory has to answer "who handles what". The name
+               * and the icon do that. So all four are now the same plain card,
+               * and nothing is colour-coded, because there was never anything
+               * for the colour to encode. */}
+              {[
+                { name: "CDRRMO", Icon: Waves, full: "City Disaster Risk Reduction",
+                  handles: "Flooding, Landslides & Typhoon Debris" },
+                { name: "Legazpi 911", Icon: HeartPulse, full: "911 Command Center",
+                  handles: "Medical Emergency & Vehicular Collisions" },
+                { name: "BFP Legazpi", Icon: Flame, full: "Bureau of Fire Protection",
+                  handles: "Fire Outbreaks & Gas Leaks" },
+                { name: "PNP Legazpi", Icon: Shield, full: "National Police Station",
+                  handles: "Public Order & Crime Incidents" },
+              ].map(({ name, Icon, full, handles }) => (
+                <div key={name} className="saro-card space-y-2 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="t-subhead font-bold text-ink">{name}</span>
+                    <Icon className="h-4 w-4 text-brand" aria-hidden="true" />
+                  </div>
+                  <div className="t-body-sm font-bold text-brand">{full}</div>
+                  <div className="t-label leading-tight text-ink-muted">{handles}</div>
                 </div>
-                <div className="text-xs font-bold text-brand">City Disaster Risk Reduction</div>
-                <div className="t-label text-ink-muted leading-tight">Flooding, Landslides & Typhoon Debris</div>
-              </div>
-
-              <div className="bg-alert-wash/50 border border-alert border-l-4 border-l-alert rounded-xs p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-ink">Legazpi 911</span>
-                  <HeartPulse className="w-4 h-4 text-alert" />
-                </div>
-                <div className="text-xs font-bold text-alert">911 Command Center</div>
-                <div className="t-label text-ink-muted leading-tight">Medical Emergency & Vehicular Collisions</div>
-              </div>
-
-              <div className="bg-status-assigned-wash/50 border border-status-assigned-tab border-l-4 border-l-status-assigned-tab rounded-xs p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-ink">BFP Legazpi</span>
-                  <Flame className="w-4 h-4 text-status-assigned-tab" />
-                </div>
-                <div className="text-xs font-bold text-status-assigned-ink">Bureau of Fire Protection</div>
-                <div className="t-label text-ink-muted leading-tight">Fire Outbreaks & Gas Leaks</div>
-              </div>
-
-              <div className="bg-indigo-50/50 border border-indigo-200 border-l-4 border-l-indigo-600 rounded-xs p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-ink">PNP Legazpi</span>
-                  <Shield className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div className="text-xs font-bold text-indigo-900">National Police Station</div>
-                <div className="t-label text-ink-muted leading-tight">Public Order & Crime Incidents</div>
-              </div>
+              ))}
 
             </div>
 

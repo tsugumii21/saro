@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
-import {BarChart3, Settings, HelpCircle, AlertTriangle, TrendingUp, TrendingDown, Edit3, X, Download, Plus, Activity, ChevronRight} from "lucide-react";
+import {BarChart3, Settings, HelpCircle, AlertTriangle, TrendingUp, TrendingDown, Edit3, X, Download, Plus, Activity, ChevronRight, Loader2} from "lucide-react";
 import {
   getReports, getCategories, getOffices, getBarangays, getAssistantLogs, updateCategory,
   addKnowledgeBaseEntry
@@ -164,7 +164,14 @@ function AdminDashboardContent() {
   const [kbAnswer, setKbAnswer] = useState("");
   const [kbSaving, setKbSaving] = useState(false);
 
+  // This screen had neither a loading nor an error state: a failed read left
+  // every KPI reading zero, which is indistinguishable from a quiet day and is
+  // the worst possible way for a city-wide dashboard to fail.
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
   const loadData = useCallback(async () => {
+    setLoadError("");
     const [rRes, cRes, oRes, bRes, aRes] = await Promise.all([
       getReports(),
       getCategories(),
@@ -177,6 +184,8 @@ function AdminDashboardContent() {
     if (oRes.data) setOffices(oRes.data);
     if (bRes.data) setBarangays(bRes.data);
     if (aRes.data) setAssistantLogs(aRes.data);
+    if (rRes.error) setLoadError(rRes.error);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -315,9 +324,36 @@ function AdminDashboardContent() {
     setCollapsedOffices((prev) => ({ ...prev, [officeId]: !prev[officeId] }));
   };
 
+  if (loading) {
+    return (
+      <div role="status" className="flex items-center gap-2 px-1 py-16">
+        <Loader2 width={16} height={16} className="animate-spin text-brand" aria-hidden="true" />
+        <span className="t-body-sm text-ink-muted">Loading city-wide figures…</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div role="alert" className="saro-card border-alert p-6">
+        <p className="t-subhead font-bold text-alert">Could not load the figures</p>
+        <p className="t-body-sm mt-1.5 text-ink-muted">{loadError}</p>
+        <p className="t-body-sm mt-1.5 text-ink-faint">
+          Nothing below is shown rather than shown as zero — an empty dashboard and a failed
+          one should never look the same.
+        </p>
+        <button onClick={loadData} className="saro-btn saro-btn-primary saro-btn-sm mt-4">
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full space-y-4 font-sans max-w-7xl mx-auto pb-6">
-      
+    // max-w-7xl removed: this is a dense desktop data view and centring it into
+    // a narrow column wastes the width an operations screen is opened for.
+    <div className="w-full space-y-4 font-sans pb-6">
+
       {/* Top Header Bar */}
       <div className="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-line">
         <div className="flex items-center gap-3">

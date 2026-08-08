@@ -58,7 +58,18 @@
   --color-ink: #101725;
   --color-ink-strong: #05080F;
   --color-ink-muted: #4E596E;
-  --color-ink-faint: #7C879B;
+
+  /* ink-faint was #7C879B and failed WCAG AA on every surface in the system:
+   * 3.62:1 on white, 3.19:1 on canvas, 2.91:1 on sunken — against a 4.5:1
+   * requirement. It carries 146 usages, nearly all of them `t-label` and
+   * `t-micro` at 10–11px, which is exactly the text that needs contrast most.
+   *
+   * Darkened to the lightest value that clears 4.5:1 on surface, canvas,
+   * raised AND sunken (5.71 / 5.03 / 5.41 / 4.59), so the tier stays as light
+   * as it legitimately can. It sits a visible step below ink-muted (7.05 on
+   * white), so the three-tier ink hierarchy survives — it is just no longer
+   * built on an inaccessible bottom rung. */
+  --color-ink-faint: #5E6776;
   --color-ink-inverse: #F4F7FB;
 
   /* ── Rules: printed form ruling ─────────────────────────────────────────

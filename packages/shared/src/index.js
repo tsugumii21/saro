@@ -105,6 +105,9 @@ export { saroEvents, REALTIME_EVENTS } from "./api/events.js";
 /* ── Auth ────────────────────────────────────────────────────────────────── */
 export { AuthProvider, useAuth } from "./auth/AuthContext.jsx";
 
+/* ── Error messages ─────────────────────────────────────────────────────── */
+export { humanizeError, humanizeThrown } from "./errors.js";
+
 /* ── Constants, validation, i18n ─────────────────────────────────────────── */
 export * from "./constants.js";
 export * from "./validation.js";

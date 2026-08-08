@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { PlusCircle, Clock, MapPin, Layers, X } from "lucide-react";
+import { PlusCircle, Clock, MapPin, Layers, X, Loader2 } from "lucide-react";
 import { StatusTag, HazardMap, AlertLevelBadge } from "@saro/ui";
 import {
   getPublicMapReports, getCategories, getBarangays,
@@ -53,7 +53,14 @@ export default function PublicMapScreen() {
   const [rainfall, setRainfall] = useState([]);
   const [alert, setAlert] = useState(null);
 
+  // Three states this screen previously had none of. A map that renders an
+  // empty basemap looks identical whether it is still loading, has nothing to
+  // show, or failed — and the resident has no way to tell which.
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
   const loadData = useCallback(async () => {
+    setLoadError("");
     const [rRes, cRes, bRes, rainRes, alertRes] = await Promise.all([
       getPublicMapReports(),
       getCategories(),
@@ -68,6 +75,12 @@ export default function PublicMapScreen() {
     if (bRes.data) setBarangays(bRes.data);
     if (rainRes.data) setRainfall(rainRes.data);
     if (alertRes.data) setAlert(alertRes.data);
+
+    // Only the reports read is fatal to this screen. Rainfall or the alert
+    // level failing leaves a usable map with one layer missing, and saying
+    // "could not load" over a working hazard map would be a lie.
+    if (rRes.error) setLoadError(rRes.error);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -124,6 +137,42 @@ export default function PublicMapScreen() {
          * Legazpi into a wash of translucent polygons and the reports vanish
          * underneath. Rain is off by default for the same reason — it is the
          * layer you turn on when it is raining. */}
+        {loading && (
+          <div
+            role="status"
+            className="absolute inset-x-0 top-0 z-[600] flex items-center justify-center gap-2 bg-surface/95 py-2 backdrop-blur"
+          >
+            <Loader2 width={14} height={14} className="animate-spin text-brand" aria-hidden="true" />
+            <span className="t-body-sm text-ink-muted">Loading the map…</span>
+          </div>
+        )}
+
+        {loadError && (
+          <div
+            role="alert"
+            className="absolute inset-x-3 top-3 z-[600] border border-alert bg-alert-wash p-3"
+          >
+            <p className="t-body-sm text-alert">{loadError}</p>
+            <button onClick={loadData} className="saro-btn saro-btn-secondary saro-btn-sm mt-2">
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* Empty is not the same as broken, and it is usually good news. */}
+        {!loading && !loadError && displayReports.length === 0 && (
+          <div className="absolute inset-x-3 bottom-20 z-[600] border border-line bg-surface/95 p-3 backdrop-blur">
+            <p className="t-body-sm text-ink">
+              {statusFilter
+                ? "No reports with that status in the last 7 days."
+                : "No reports in Legazpi in the last 7 days."}
+            </p>
+            <p className="t-body-sm mt-1 text-ink-muted">
+              The hazard layers below still show where flooding and Mayon's danger zones are.
+            </p>
+          </div>
+        )}
+
         <HazardMap
           className="h-full w-full"
           style={{ minHeight: "300px" }}

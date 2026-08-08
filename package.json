@@ -14,7 +14,8 @@
     "build:resident": "npm run build --workspace @saro/resident-app",
     "build:admin": "npm run build --workspace @saro/admin-app",
     "lint": "eslint .",
-    "test:shared": "npm run test --workspace @saro/shared"
+    "test:shared": "npm run test --workspace @saro/shared",
+    "audit:contrast": "node tools/contrast-audit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

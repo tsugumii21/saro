@@ -11,14 +11,26 @@
 // See supabase/migrations/20260807000400_clustering_and_rpc.sql.
 
 import { supabase, REPORT_PHOTO_BUCKET } from "../supabase/client.js";
+import { humanizeError } from "../errors.js";
 
-/** Normalise a PostgrestError into the { data, error } shape the apps expect. */
+/**
+ * Normalise a PostgrestError into the { data, error } shape the apps expect.
+ *
+ * `error` is a sentence a person can act on, never the raw Postgres string.
+ * Screens render it directly, so this is the one place that has to be right —
+ * before this, an RLS denial reached a resident as
+ * `new row violates row-level security policy for table "reports"`.
+ */
 function wrap({ data, error }) {
-  return { data: error ? null : data, error: error ? error.message : null };
+  return { data: error ? null : data, error: error ? humanizeError(error.message) : null };
 }
 
+/**
+ * Deliberate messages written by this layer pass through unchanged;
+ * humanizeError only rewrites strings that look like machine output.
+ */
 function fail(message) {
-  return { data: null, error: message };
+  return { data: null, error: humanizeError(message) };
 }
 
 /* ── Shape adapters ─────────────────────────────────────────────────────────

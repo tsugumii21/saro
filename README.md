@@ -16,8 +16,13 @@ apps/
 packages/
   shared/           types, API client, constants, validation, i18n, design tokens
   ui/               the few visual components both apps genuinely share
-supabase/           migrations and Edge Functions (reserved — not populated yet)
+supabase/           migrations, Edge Functions, seed and admin scripts
+tools/hazard/       fetches official hazard data and builds the PMTiles archive
 ```
+
+Each app has its own README with its exact Vercel settings:
+[resident-app](apps/resident-app/README.md) ·
+[admin-app](apps/admin-app/README.md).
 
 ### Boundary rule
 
@@ -34,7 +39,7 @@ npm run dev:resident        # http://localhost:5173
 npm run dev:admin           # http://localhost:5174
 
 npm run build               # builds both apps
-npm run test:shared         # verifies the mock data layer
+npm run lint                # eslint across every workspace
 ```
 
 Each app also builds standalone:
@@ -46,34 +51,31 @@ cd apps/admin-app    && npm run build
 
 ## Deploying to Vercel
 
-Create **two** Vercel projects from this one repository.
+Two Vercel projects, one repository. Each sets its own **Root Directory** and
+must have **"Include files outside the Root Directory"** switched on, because
+both resolve `@saro/shared` and `@saro/ui` from `packages/`, which sits above
+their roots.
 
-| Setting | resident-app | admin-app |
+| | resident-app | admin-app |
 |---|---|---|
 | Root Directory | `apps/resident-app` | `apps/admin-app` |
-| Include files outside Root Directory | **on** | **on** |
-| Framework Preset | Vite | Vite |
-| Build Command | `npm run build` (from `vercel.json`) | `npm run build` (from `vercel.json`) |
+| Build Command | `npm run build` | `npm run build` |
 | Output Directory | `dist` | `dist` |
+| `VITE_SUPABASE_URL` | required | required |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | required | required |
+| `VITE_VAPID_PUBLIC_KEY` | for Web Push | not used |
+| `VITE_ADMIN_APP_URL` | optional link | — |
+| `VITE_RESIDENT_APP_URL` | — | optional link |
 
-"Include files outside the Root Directory" is required — both apps resolve
-`@saro/shared` and `@saro/ui` from `packages/`, which sits above the root
-directory.
+**Those five are the complete list.** The Supabase secret key and the Gemini API
+key are never set in Vercel and never appear in either bundle — they exist only
+as Supabase secrets, read by Edge Functions at runtime. Verify with:
 
-### Environment variables
+```bash
+npm run build
+grep -r "sb_secret_\|GEMINI_API_KEY" apps/*/dist    # must return nothing
+```
 
-Both apps ship only the Supabase URL and the **publishable** key to the browser.
-The secret key and the Gemini key exist as Supabase secrets and nowhere else —
-not in `.env.local`, not in Vercel, not in any committed file.
-
-| Variable | App | Purpose |
-|---|---|---|
-| `VITE_SUPABASE_URL` | both | Project URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | both | Anon/publishable key. Safe in the browser; RLS is what protects the data |
-| `VITE_ADMIN_APP_URL` | resident | Where the "for city officials" link goes |
-| `VITE_RESIDENT_APP_URL` | admin | Where "Back to public site" goes |
-
-See each app's `.env.example`. Both `.env.local` files are gitignored.
 
 ## Auth email (custom SMTP)
 

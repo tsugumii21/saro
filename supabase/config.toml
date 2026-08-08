@@ -45,28 +45,26 @@ file_size_limit = "50MiB"
 [auth]
 enabled = true
 # Residents are the public-facing signup, so confirmation and password-reset
-# mail returns to the RESIDENT app. The admin app never appears here: staff
-# accounts are provisioned by an administrator and never receive a link.
+# mail returns to the RESIDENT app. The admin app never appears as site_url:
+# staff accounts are provisioned by an administrator and never receive a link.
 #
-# ⚠ PLACEHOLDER URL — MUST BE REPLACED AFTER THE FIRST VERCEL DEPLOY.
-#
-# No deployed domain existed when this was set, so site_url points at the
-# Vercel default naming pattern rather than a verified address. If the real
-# project is named anything else, every confirmation and reset link 404s.
-#
-# After deploying: replace site_url with the actual resident-app origin, keep
-# the localhost entries below, and run `supabase config push` again.
+# This is the real deployed origin, verified against the live Vercel project
+# (saro-resident, root directory apps/resident-app). The earlier placeholder
+# happened to match, but it was a guess at the time and is now confirmed.
 site_url = "https://saro-resident.vercel.app"
 
 # Production AND local, deliberately not either/or. Dropping the localhost
-# entries when the real domain arrives would break every developer's auth flow;
-# keeping them costs nothing, because a redirect target still has to be on this
-# list to be honoured at all.
+# entries would break every developer's auth flow; keeping them costs nothing,
+# because a redirect target still has to appear on this list to be honoured.
 #
-# The wildcard suffix covers the deep links auth actually returns to —
+# The /** suffix covers the deep links auth actually returns to —
 # /track?code=..., the password-reset landing — not just the bare origin.
+#
+# The admin app is listed so a future staff-facing reset can return there. It
+# is NOT site_url, because no staff account is ever sent a link today.
 additional_redirect_urls = [
   "https://saro-resident.vercel.app/**",
+  "https://saro-admin-self.vercel.app/**",
   "http://localhost:5173/**",
   "http://localhost:5174/**",
 ]

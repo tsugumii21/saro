@@ -39,13 +39,18 @@ declares a colour, a font size, or a spacing value of its own.
 | Surface | `--color-surface` | `#FFFFFF` |
 | Ink | `--color-ink` | `#101725` |
 | Ink muted | `--color-ink-muted` | `#4E596E` |
-| Ink faint | `--color-ink-faint` | `#7C879B` |
+| Ink faint | `--color-ink-faint` | `#5E6776` |
 | Printed rule | `--color-rule` | `#A9CFE3` |
 | Hairline | `--color-line` | `#C6D2E0` |
 | Brand (press ink) | `--color-brand` | `#1B2E6B` |
 | Interactive | `--color-brand-bright` | `#3462D6` |
 | **Panic** | `--color-panic` | `#E2231A` |
 | Alert | `--color-alert` | `#B4460F` |
+
+Every ink tier clears WCAG 2.2 AA (4.5:1) on surface, canvas, raised and sunken.
+`ink-faint` was `#7C879B` and did not — 3.62:1 on white — which was invisible to
+the eye and obvious to `npm run audit:contrast`. Run that before changing a
+colour.
 
 **The Panic reservation is a rule, not a preference.** `--color-panic` appears in
 three places and nowhere else:
@@ -172,6 +177,31 @@ is a real operational risk.
 There is no dark theme, and that is a decision rather than an omission. Write
 the scene: a resident outdoors in Legazpi daylight or rain, and an official
 under office fluorescents. Neither is a dark-room scene.
+
+## Settled decisions
+
+Recorded so later passes do not re-open them as findings.
+
+**The UI is English-only, permanently.** Buttons, labels, navigation, headings
+and every system or error message are written in English and stay that way. This
+is a product decision, not unfinished work, and it should not be reported as an
+accessibility or localisation gap.
+
+What that does **not** touch — Bikol and Tagalog remain fully supported in every
+place they already worked:
+
+| Surface | Language support |
+|---|---|
+| Describe, typed | Bikol · Tagalog · English |
+| Describe, spoken | Bikol/Tagalog recogniser + English recogniser |
+| Any resident free text | whatever the resident writes |
+| Category labels | `label`, `label_bikol`, `label_tagalog` from the routing table |
+| Assistant answers | replies in the language the question was asked in |
+| Emergency keyword detection | Bikol, Tagalog and English keyword sets |
+
+The dead `DICTIONARIES` / `useTranslation` scaffolding was removed rather than
+left in place, because unused scaffolding reads as an intention and invites
+someone to "finish" it.
 
 ## Known gaps
 

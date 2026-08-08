@@ -1,7 +1,7 @@
 // @saro/shared — the only module either app may import across the /apps boundary.
 //
 // Contains: the Supabase data client, auth context, domain constants,
-// validation schemas, i18n dictionaries, and JSDoc types. Design tokens ship as
+// validation schemas, and JSDoc types. Design tokens ship as
 // CSS at "@saro/shared/styles/tokens.css".
 
 /* ── Supabase client ─────────────────────────────────────────────────────── */
@@ -108,7 +108,6 @@ export { AuthProvider, useAuth } from "./auth/AuthContext.jsx";
 /* ── Error messages ─────────────────────────────────────────────────────── */
 export { humanizeError, humanizeThrown } from "./errors.js";
 
-/* ── Constants, validation, i18n ─────────────────────────────────────────── */
+/* ── Constants and validation ────────────────────────────────────────────── */
 export * from "./constants.js";
 export * from "./validation.js";
-export { DICTIONARIES, useTranslation } from "./i18n.js";

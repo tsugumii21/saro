@@ -102,7 +102,6 @@ export const STORAGE_KEYS = {
 export const CLIENT_STORAGE_KEYS = {
   AUTH_PROFILE: "saro_auth_profile",
   DEVICE_FINGERPRINT: "saro_device_fp",
-  LANGUAGE: "saro_lang",
   OFFLINE_QUEUE: "saro_offline_queue",
   UNAUTH_VIEW: "saro_unauth_view",
   RESIDENT_LOGGED_OUT: "saro_resident_logged_out",

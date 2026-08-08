@@ -64,7 +64,7 @@ site_url = "https://saro-resident.vercel.app"
 # is NOT site_url, because no staff account is ever sent a link today.
 additional_redirect_urls = [
   "https://saro-resident.vercel.app/**",
-  "https://saro-admin-self.vercel.app/**",
+  "https://saro-ops.vercel.app/**",
   "http://localhost:5173/**",
   "http://localhost:5174/**",
 ]

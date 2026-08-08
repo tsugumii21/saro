@@ -51,6 +51,9 @@ cd apps/admin-app    && npm run build
 
 ## Deploying to Vercel
 
+**Live:** resident <https://saro-resident.vercel.app> · operations
+<https://saro-ops.vercel.app>. Both auto-deploy from `main`.
+
 Two Vercel projects, one repository. Each sets its own **Root Directory** and
 must have **"Include files outside the Root Directory"** switched on, because
 both resolve `@saro/shared` and `@saro/ui` from `packages/`, which sits above

@@ -53,6 +53,12 @@ holds the private key server-side.
 
 A **separate** Vercel project from the resident app, pointed at the same repo.
 
+Live at **<https://saro-ops.vercel.app>** (project `saro-ops`). The name is
+`-ops` rather than `-admin` because `saro-admin.vercel.app` is already taken by
+someone else's project, and it matches what the app calls itself in its own
+wordmark — `context="OPERATIONS"`. The original `saro-admin-self.vercel.app`
+alias still resolves here, so nothing that already links to it breaks.
+
 | Setting | Value |
 |---|---|
 | Root Directory | `apps/admin-app` |

@@ -40,6 +40,10 @@ this list, something has gone wrong — the browser bundle is world-readable.
 
 ## Vercel setup
 
+Live at **<https://saro-resident.vercel.app>** (project `saro-resident`). This
+is also Supabase's `site_url`, so every confirmation and password-reset link
+returns here.
+
 Create a Vercel project pointed at this repo, then:
 
 | Setting | Value |

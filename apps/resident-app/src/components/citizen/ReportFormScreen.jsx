@@ -275,31 +275,64 @@ export default function ReportFormScreen() {
 
   // Web Speech API
   const toggleSpeech = (lang) => {
-    if (!speechSupported) return;
+    if (!speechSupported) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        description: "Voice dictation is not supported by your browser. Please type your description.",
+      }));
+      return;
+    }
     if (isListening) {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch (err) {
+        console.warn("Speech stop warning:", err);
+      }
       setIsListening(false);
       return;
     }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    // Bikol has no speech model anywhere, so Bikol speakers get the Tagalog
-    // recogniser: the phonology is close enough that most of a sentence comes
-    // through, and a rough transcript the resident can correct beats no voice
-    // input at all. The written flow accepts Bikol properly, and the Edge
-    // Function reads all three languages.
-    recognition.lang = lang ?? speechLang;
-    recognition.interimResults = false;
-    recognition.continuous = false;
+    recognition.lang = lang ?? speechLang ?? "fil-PH";
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setDescription((prev) => (prev ? prev + " " + transcript : transcript));
+      let finalChunk = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalChunk += event.results[i][0].transcript + " ";
+        }
+      }
+      if (finalChunk.trim()) {
+        const textToAppend = finalChunk.trim();
+        setDescription((prev) => (prev ? `${prev} ${textToAppend}` : textToAppend));
+        setValidationErrors((p) => ({ ...p, description: "" }));
+      }
     };
+
     recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
+    recognition.onerror = (event) => {
+      console.warn("Speech recognition error:", event.error);
+      setIsListening(false);
+      if (event.error === "not-allowed") {
+        setValidationErrors((prev) => ({
+          ...prev,
+          description: "Microphone access denied. Please grant microphone permission in your browser.",
+        }));
+      } else if (event.error === "language-not-supported") {
+        toggleSpeech("en-US");
+      }
+    };
+
     recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch (err) {
+      console.error("Speech start error:", err);
+      setIsListening(false);
+    }
   };
 
   // Validate form against the shared schema
@@ -474,7 +507,7 @@ export default function ReportFormScreen() {
   }
 
   return (
-    <div className="px-4 py-3 max-w-md mx-auto pb-4">
+    <div className="px-4 py-3 max-w-md mx-auto pb-28 sm:pb-8">
       <div className="mb-4">
         <h2 className="text-base font-bold text-ink">File a Hazard Report</h2>
         <p className="text-xs text-ink-muted mt-0.5">
@@ -514,7 +547,7 @@ export default function ReportFormScreen() {
                 setValidationErrors((prev) => ({ ...prev, description: "" }));
               }}
               placeholder="May baha sa tabi kan eskwelahan, abot tuhod na…"
-              className="saro-field w-full resize-none"
+              className="w-full text-xs p-3 rounded-md border-2 border-line-strong hover:border-brand-edge focus:border-brand focus:ring-2 focus:ring-brand/20 bg-surface text-ink placeholder:text-ink-muted/80 resize-none leading-relaxed transition-all shadow-2xs outline-none font-medium"
               aria-invalid={Boolean(validationErrors.description)}
             />
           </div>
@@ -711,7 +744,7 @@ export default function ReportFormScreen() {
                   })}
                 </div>
 
-                <div className="flex flex-col gap-3 max-h-[380px] overflow-y-auto pr-1">
+                <div className="flex flex-col gap-3">
                   {sections.length > 0 ? (
                     sections.map((section) => (
                       <div key={section.tier} className="flex flex-col gap-2">
@@ -739,24 +772,26 @@ export default function ReportFormScreen() {
                                 key={cat.id}
                                 type="button"
                                 onClick={() => {
-                                  setSelectedCategoryId(cat.id);
-                                  setValidationErrors((prev) => ({ ...prev, category: "" }));
-                                  if (isGuest && cat.tier === "routine") {
-                                    setShowAuthWall(true);
+                                  if (selectedCategoryId === cat.id) {
+                                    setSelectedCategoryId("");
+                                  } else {
+                                    setSelectedCategoryId(cat.id);
+                                    setValidationErrors((prev) => ({ ...prev, category: "" }));
+                                    if (isGuest && cat.tier === "routine") {
+                                      setShowAuthWall(true);
+                                    }
                                   }
                                 }}
                                 aria-pressed={isSelected}
-                                className={`saro-card flex w-full items-start gap-3 p-3.5 pl-4 text-left transition-colors ${
-                                  isSelected ? "bg-brand-wash" : "bg-surface hover:bg-raised"
+                                className={`saro-card flex w-full items-start gap-3 p-3.5 pl-4 text-left transition-all duration-150 ease-out active:scale-[0.985] cursor-pointer ${
+                                  isSelected
+                                    ? "bg-brand-wash border-2 border-brand text-brand font-bold shadow-2xs"
+                                    : "bg-surface border-2 border-line hover:border-brand-edge text-ink"
                                 }`}
-                                style={{
-                                  boxShadow: `inset 4px 0 0 0 ${section.edgeColor}`,
-                                  borderColor: isSelected ? "var(--color-brand)" : undefined,
-                                }}
                               >
                                 <span
-                                  className="flex h-10 w-10 shrink-0 items-center justify-center border rounded-md"
-                                  style={section.iconStyle}
+                                  className="flex h-10 w-10 shrink-0 items-center justify-center border rounded-md transition-colors"
+                                  style={isSelected ? { background: "var(--color-brand-wash)", borderColor: "var(--color-brand)", color: "var(--color-brand)" } : section.iconStyle}
                                 >
                                   <IconComp width={20} height={20} aria-hidden="true" />
                                 </span>
@@ -772,7 +807,7 @@ export default function ReportFormScreen() {
                                   )}
                                   <span
                                     className="t-label mt-1.5 flex items-center gap-1.5 text-[11px] font-bold"
-                                    style={{ color: section.tagColor }}
+                                    style={{ color: isSelected ? "var(--color-brand)" : section.tagColor }}
                                   >
                                     <AccessIcon width={12} height={12} aria-hidden="true" />
                                     {badgeLabel}
@@ -780,7 +815,7 @@ export default function ReportFormScreen() {
                                 </span>
 
                                 <span
-                                  className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2"
+                                  className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all"
                                   style={{
                                     borderColor: isSelected ? "var(--color-brand)" : "var(--color-line-strong)",
                                     background: isSelected ? "var(--color-brand)" : "var(--color-surface)",
@@ -788,7 +823,7 @@ export default function ReportFormScreen() {
                                   }}
                                   aria-hidden="true"
                                 >
-                                  {isSelected && <Check width={14} height={14} strokeWidth={3} />}
+                                  {isSelected && <Check width={14} height={14} strokeWidth={3} className="animate-in fade-in zoom-in-75 duration-150" />}
                                 </span>
                               </button>
                             );

@@ -103,7 +103,7 @@ export default function AssistantDesktop() {
     }
   };
 
-  const toggleVoiceRecording = () => {
+  const toggleVoiceRecording = (lang) => {
     setSpeechWarning("");
     if (!speechSupported) {
       setSpeechWarning("Voice dictation is not supported by your browser. Please type your query.");
@@ -112,28 +112,54 @@ export default function AssistantDesktop() {
     }
 
     if (isRecording) {
-      if (recognitionRef.current) recognitionRef.current.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch (err) {
+        console.warn("Speech stop warning:", err);
+      }
       setIsRecording(false);
       return;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "fil-PH";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = lang ?? "fil-PH";
 
     recognition.onstart = () => setIsRecording(true);
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
-      setIsRecording(false);
+      let finalChunk = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalChunk += event.results[i][0].transcript + " ";
+        }
+      }
+      if (finalChunk.trim()) {
+        const textToAppend = finalChunk.trim();
+        setInput((prev) => (prev ? `${prev} ${textToAppend}` : textToAppend));
+      }
     };
-    recognition.onerror = () => setIsRecording(false);
+    recognition.onerror = (event) => {
+      console.warn("Speech recognition error:", event.error);
+      setIsRecording(false);
+      if (event.error === "not-allowed") {
+        setSpeechWarning("Microphone access denied. Please grant permission in browser settings.");
+        setTimeout(() => setSpeechWarning(""), 4000);
+      } else if (event.error === "language-not-supported") {
+        toggleVoiceRecording("en-US");
+      }
+    };
     recognition.onend = () => setIsRecording(false);
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Speech start error:", err);
+      setIsRecording(false);
+    }
   };
 
   return (

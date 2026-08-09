@@ -248,26 +248,65 @@ export default function ReportDesktop() {
   };
 
   const toggleSpeech = (lang) => {
-    if (!speechSupported) return;
+    if (!speechSupported) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        description: "Voice dictation is not supported by your browser. Please type your description.",
+      }));
+      return;
+    }
     if (isListening) {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch (err) {
+        console.warn("Speech stop warning:", err);
+      }
       setIsListening(false);
       return;
     }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.lang = lang ?? speechLang;
-    recognition.interimResults = false;
-    recognition.continuous = false;
+    recognition.lang = lang ?? speechLang ?? "fil-PH";
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setDescription((prev) => (prev ? prev + " " + transcript : transcript));
+      let finalChunk = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalChunk += event.results[i][0].transcript + " ";
+        }
+      }
+      if (finalChunk.trim()) {
+        const textToAppend = finalChunk.trim();
+        setDescription((prev) => (prev ? `${prev} ${textToAppend}` : textToAppend));
+        setValidationErrors((p) => ({ ...p, description: "" }));
+      }
     };
+
     recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
+    recognition.onerror = (event) => {
+      console.warn("Speech recognition error:", event.error);
+      setIsListening(false);
+      if (event.error === "not-allowed") {
+        setValidationErrors((prev) => ({
+          ...prev,
+          description: "Microphone access denied. Please grant microphone permission in your browser.",
+        }));
+      } else if (event.error === "language-not-supported") {
+        // Fallback to English if Tagalog is unsupported on this browser engine
+        toggleSpeech("en-US");
+      }
+    };
+
     recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch (err) {
+      console.error("Speech start error:", err);
+      setIsListening(false);
+    }
   };
 
   const validate = () => {

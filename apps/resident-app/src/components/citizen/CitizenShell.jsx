@@ -49,6 +49,7 @@ export default function CitizenShell({ onReturnToWelcome }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [desktopTab, setDesktopTab] = useState("notifications");
 
   // Resident Self Account Management state
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -158,6 +159,571 @@ export default function CitizenShell({ onReturnToWelcome }) {
     }
   };
 
+  /* ── Dedicated Settings Modal (Mobile + Desktop variants) ───────────── */
+  const renderSettingsModal = (isDesktopView = false) => {
+    if (isDesktopView) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-6 backdrop-blur-xs font-sans animate-in fade-in duration-150">
+          <div className="w-full max-w-2xl h-[520px] border border-line bg-surface shadow-2xl rounded-xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-surface shrink-0">
+              <div className="flex items-center gap-2.5">
+                <Settings className="w-5 h-5 text-brand" />
+                <div>
+                  <h3 className="text-base font-bold text-ink leading-none">Settings &amp; Preferences</h3>
+                  <p className="text-xs text-ink-muted mt-1 leading-none">Manage notifications, app permissions, and account settings</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="saro-btn saro-btn-ghost saro-btn-sm"
+                aria-label="Close settings"
+              >
+                <X width={16} height={16} />
+              </button>
+            </div>
+
+            {/* Two Column Layout */}
+            <div className="flex flex-1 min-h-0">
+              {/* Left Sidebar Navigation */}
+              <aside className="w-52 border-r border-line bg-sunken/40 p-3 flex flex-col gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setDesktopTab("notifications")}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-md text-xs font-bold text-left transition-colors ${
+                    desktopTab === "notifications"
+                      ? "bg-brand text-white shadow-xs"
+                      : "text-ink-muted hover:bg-raised hover:text-ink"
+                  }`}
+                >
+                  <Bell className="w-4 h-4 shrink-0" />
+                  Notifications
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDesktopTab("permissions")}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-md text-xs font-bold text-left transition-colors ${
+                    desktopTab === "permissions"
+                      ? "bg-brand text-white shadow-xs"
+                      : "text-ink-muted hover:bg-raised hover:text-ink"
+                  }`}
+                >
+                  <MapPin className="w-4 h-4 shrink-0" />
+                  Permissions
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDesktopTab("privacy")}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-md text-xs font-bold text-left transition-colors ${
+                    desktopTab === "privacy"
+                      ? "bg-brand text-white shadow-xs"
+                      : "text-ink-muted hover:bg-raised hover:text-ink"
+                  }`}
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  Privacy &amp; Legal
+                </button>
+
+                {isResident && (
+                  <button
+                    type="button"
+                    onClick={() => setDesktopTab("account")}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-md text-xs font-bold text-left transition-colors ${
+                      desktopTab === "account"
+                        ? "bg-brand text-white shadow-xs"
+                        : "text-ink-muted hover:bg-raised hover:text-ink"
+                    }`}
+                  >
+                    <User className="w-4 h-4 shrink-0" />
+                    Account
+                  </button>
+                )}
+
+                <div className="flex-1" />
+
+                {/* Footer System Info */}
+                <div className="p-3 bg-white border border-line rounded-md text-[11px] text-ink-muted space-y-0.5">
+                  <span className="font-bold text-ink block">SARO Citizen Portal</span>
+                  <span>Legazpi City DRRM</span>
+                </div>
+              </aside>
+
+              {/* Right Content Panel */}
+              <main className="flex-1 p-6 overflow-y-auto space-y-4">
+                {/* 1. Notifications Tab */}
+                {desktopTab === "notifications" && (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    <div>
+                      <h4 className="text-sm font-bold text-ink">Notification Preferences</h4>
+                      <p className="text-xs text-ink-muted mt-0.5">Control how SARO alerts you about reported hazards and status updates.</p>
+                    </div>
+
+                    <div className="border border-line rounded-lg p-4 bg-white space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2.5 rounded-full ${pushOn ? "bg-brand-wash text-brand" : "bg-sunken text-ink-faint"}`}>
+                            {pushOn ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+                          </div>
+                          <div>
+                            <span className="text-sm font-bold text-ink block">Report Update Notifications</span>
+                            <span className="text-xs text-ink-muted block">Receive browser alerts when assigned offices resolve your filed reports</span>
+                          </div>
+                        </div>
+
+                        {pushSupported() && (
+                          <button
+                            type="button"
+                            onClick={togglePush}
+                            disabled={pushBusy}
+                            role="switch"
+                            aria-checked={pushOn}
+                            aria-label="Toggle report update notifications"
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              pushOn ? "bg-brand" : "bg-line hover:bg-line/80"
+                            } ${pushBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                pushOn ? "translate-x-5" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="text-xs pt-2 border-t border-line flex items-center justify-between">
+                        <span className="text-ink-muted">Status: <strong className={pushOn ? "text-brand font-bold" : "text-ink-faint"}>{pushOn ? "Active (Push Notifications Enabled)" : "Disabled"}</strong></span>
+                        {pushError && <span className="text-alert font-bold">{pushError}</span>}
+                        {pushPermission() === "denied" && <span className="text-alert font-bold">Blocked in browser</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Hardware Permissions Tab */}
+                {desktopTab === "permissions" && (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    <div>
+                      <h4 className="text-sm font-bold text-ink">Hardware Permissions</h4>
+                      <p className="text-xs text-ink-muted mt-0.5">Manage browser access for location, microphone, and emergency dialing.</p>
+                    </div>
+
+                    <div className="border border-line rounded-lg p-4 bg-white space-y-4 shadow-2xs">
+                      {/* Location Toggle */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-md ${appPermissions.location === "granted" ? "bg-brand-wash text-brand" : "bg-sunken text-ink-faint"}`}>
+                            <MapPin className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-ink block">GPS Location Access</span>
+                            <span className="text-[11px] text-ink-muted block">Detects your current position for emergency map pin placement</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => togglePermission("location")}
+                          role="switch"
+                          aria-checked={appPermissions.location === "granted"}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                            appPermissions.location === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                              appPermissions.location === "granted" ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Microphone Toggle */}
+                      <div className="flex items-center justify-between gap-3 pt-3 border-t border-line">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-md ${appPermissions.microphone === "granted" ? "bg-brand-wash text-brand" : "bg-sunken text-ink-faint"}`}>
+                            <Mic className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-ink block">Microphone Voice Input</span>
+                            <span className="text-[11px] text-ink-muted block">Enables Bikol/Tagalog voice dictation when filing hazard descriptions</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => togglePermission("microphone")}
+                          role="switch"
+                          aria-checked={appPermissions.microphone === "granted"}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                            appPermissions.microphone === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                              appPermissions.microphone === "granted" ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Phone Dialer Toggle */}
+                      <div className="flex items-center justify-between gap-3 pt-3 border-t border-line">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-md ${appPermissions.phone === "granted" ? "bg-brand-wash text-brand" : "bg-sunken text-ink-faint"}`}>
+                            <PhoneCall className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-ink block">Phone Dialer Access</span>
+                            <span className="text-[11px] text-ink-muted block">One-tap emergency call handoff to 911 hotline dialer</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => togglePermission("phone")}
+                          role="switch"
+                          aria-checked={appPermissions.phone === "granted"}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                            appPermissions.phone === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                              appPermissions.phone === "granted" ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Privacy & Legal Tab */}
+                {desktopTab === "privacy" && (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    <div>
+                      <h4 className="text-sm font-bold text-ink">Legal &amp; Privacy Governance</h4>
+                      <p className="text-xs text-ink-muted mt-0.5">Read about data retention, anonymity rules, and civic safety compliance.</p>
+                    </div>
+
+                    <div className="border border-line rounded-lg p-4 bg-white space-y-3 shadow-2xs">
+                      <div className="flex items-start gap-3">
+                        <FileText className="w-6 h-6 text-brand shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-sm font-bold text-ink block">Data Governance &amp; Privacy Notice</span>
+                          <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+                            Emergency reports are handled anonymously. Standard hazard reports follow your resident account so city offices can follow up on resolution status.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => { setShowSettings(false); setShowPrivacy(true); }}
+                        className="saro-btn saro-btn-secondary saro-btn-sm w-full flex items-center justify-center gap-2 mt-2"
+                      >
+                        <FileText className="w-4 h-4 text-brand" />
+                        Read Full Privacy Policy Notice
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Account Settings Tab */}
+                {desktopTab === "account" && isResident && (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    <div>
+                      <h4 className="text-sm font-bold text-ink">Account Self-Management</h4>
+                      <p className="text-xs text-ink-muted mt-0.5">Manage your personal details or delete your resident account profile.</p>
+                    </div>
+
+                    <div className="border border-line rounded-lg p-4 bg-white space-y-3 shadow-2xs">
+                      <button
+                        onClick={() => {
+                          setEditName(profile?.full_name || "");
+                          setEditEmail(profile?.email || "");
+                          setEditPassword("");
+                          setResMsg({ type: "", text: "" });
+                          setShowEditProfileModal(true);
+                        }}
+                        className="w-full flex items-center justify-between p-3 rounded-md border border-line hover:bg-raised text-left transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <User className="w-5 h-5 text-brand shrink-0" />
+                          <div>
+                            <span className="text-xs font-bold text-ink block">Edit Resident Profile</span>
+                            <span className="text-[11px] text-ink-muted block">Update name, email, or password</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-ink-faint" />
+                      </button>
+
+                      <div className="border-t border-line pt-2">
+                        <button
+                          onClick={() => {
+                            setDeleteConfirmPassword("");
+                            setResMsg({ type: "", text: "" });
+                            setShowDeleteProfileModal(true);
+                          }}
+                          className="w-full flex items-center justify-between p-3 rounded-md border border-alert/30 bg-alert-wash/30 hover:bg-alert-wash text-left transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Trash2 className="w-5 h-5 text-alert shrink-0" />
+                            <div>
+                              <span className="text-xs font-bold text-alert block">Delete Account</span>
+                              <span className="text-[11px] text-ink-muted block">Permanently remove profile; filed reports stay with city</span>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-alert/70" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </main>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* Mobile Sheet Variant (< 1024px) */
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans">
+        <div className="w-full max-w-md border border-line bg-surface p-5 shadow-sheet animate-fade-in rounded-lg space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between border-b border-line pb-3">
+            <div className="flex items-center gap-2">
+              <Settings className="w-5 h-5 text-brand" />
+              <h3 className="text-base font-bold text-ink">Settings &amp; Preferences</h3>
+            </div>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="saro-btn saro-btn-ghost saro-btn-sm"
+              aria-label="Close settings"
+            >
+              <X width={16} height={16} />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {/* Notification Toggle Switch */}
+            <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {pushOn
+                    ? <Bell className="w-5 h-5 text-brand shrink-0" />
+                    : <BellOff className="w-5 h-5 text-ink-faint shrink-0" />}
+                  <div>
+                    <span className="t-subhead block font-bold text-ink text-sm">
+                      Report Update Notifications
+                    </span>
+                    <span className="t-body-sm block text-ink-muted text-xs">
+                      Get notified when your report changes status
+                    </span>
+                  </div>
+                </div>
+
+                {/* Clean On/Off Toggle Button */}
+                {pushSupported() && (
+                  <button
+                    type="button"
+                    onClick={togglePush}
+                    disabled={pushBusy}
+                    role="switch"
+                    aria-checked={pushOn}
+                    aria-label="Toggle report update notifications"
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      pushOn ? "bg-brand" : "bg-line hover:bg-line/80"
+                    } ${pushBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                        pushOn ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                )}
+              </div>
+
+              <div className="text-[11px] text-ink-muted pt-1 border-t border-line/60 flex items-center justify-between">
+                <span>Status: <strong className={pushOn ? "text-brand font-bold" : "text-ink-faint"}>{pushOn ? "ON (Push Enabled)" : "OFF (Push Disabled)"}</strong></span>
+                {pushError && <span className="text-alert font-bold">{pushError}</span>}
+                {pushPermission() === "denied" && <span className="text-alert font-bold">Blocked in browser</span>}
+              </div>
+            </div>
+
+            {/* Hardware Permissions Section */}
+            <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
+              <span className="text-xs font-bold text-ink uppercase tracking-wider block">
+                App Hardware Permissions
+              </span>
+
+              {/* Location Toggle */}
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <div className="flex items-center gap-2.5">
+                  <MapPin className={`w-4.5 h-4.5 ${appPermissions.location === "granted" ? "text-brand" : "text-ink-faint"}`} />
+                  <div>
+                    <span className="text-xs font-bold text-ink block">Location Access</span>
+                    <span className="text-[11px] text-ink-muted block leading-tight">GPS position for Panic and reports</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => togglePermission("location")}
+                  role="switch"
+                  aria-checked={appPermissions.location === "granted"}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                    appPermissions.location === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                      appPermissions.location === "granted" ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Microphone Toggle */}
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-line/50">
+                <div className="flex items-center gap-2.5">
+                  <Mic className={`w-4.5 h-4.5 ${appPermissions.microphone === "granted" ? "text-brand" : "text-ink-faint"}`} />
+                  <div>
+                    <span className="text-xs font-bold text-ink block">Microphone Access</span>
+                    <span className="text-[11px] text-ink-muted block leading-tight">Voice input for describing hazards</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => togglePermission("microphone")}
+                  role="switch"
+                  aria-checked={appPermissions.microphone === "granted"}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                    appPermissions.microphone === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                      appPermissions.microphone === "granted" ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Phone Call Toggle */}
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-line/50">
+                <div className="flex items-center gap-2.5">
+                  <PhoneCall className={`w-4.5 h-4.5 ${appPermissions.phone === "granted" ? "text-brand" : "text-ink-faint"}`} />
+                  <div>
+                    <span className="text-xs font-bold text-ink block">Phone Dialer Access</span>
+                    <span className="text-[11px] text-ink-muted block leading-tight">Emergency 911 phone dialer handoff</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => togglePermission("phone")}
+                  role="switch"
+                  aria-checked={appPermissions.phone === "granted"}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                    appPermissions.phone === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                      appPermissions.phone === "granted" ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Privacy Notice Item */}
+            <div className="border border-line rounded-md p-3.5 bg-white space-y-2">
+              <span className="text-xs font-bold text-ink uppercase tracking-wider block">
+                Legal &amp; Privacy Governance
+              </span>
+              <button
+                onClick={() => { setShowSettings(false); setShowPrivacy(true); }}
+                className="w-full flex items-center gap-3 border border-line p-3 rounded-md text-left hover:bg-raised transition-colors"
+              >
+                <FileText width={18} height={18} className="shrink-0 text-brand" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="t-subhead block font-bold text-ink">Privacy Notice</span>
+                  <span className="t-body-sm block text-ink-muted text-xs">
+                    What data is collected, who sees it, and security retention rules
+                  </span>
+                </span>
+                <ChevronRight width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* Resident Account Self-Management Section (Signed-in residents only) */}
+            {isResident && profile && (
+              <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
+                <span className="text-xs font-bold text-ink uppercase tracking-wider block">
+                  Account Self-Management
+                </span>
+
+                <button
+                  onClick={() => {
+                    setEditName(profile.full_name || "");
+                    setEditEmail(profile.email || "");
+                    setEditPassword("");
+                    setResMsg({ type: "", text: "" });
+                    setShowEditProfileModal(true);
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded border border-line hover:bg-raised text-left transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <User className="w-4 h-4 text-brand shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-ink block">Edit Profile</span>
+                      <span className="text-[11px] text-ink-muted block leading-tight">Update name, email, or password</span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-ink-faint" />
+                </button>
+
+                {/* Visually Separated Delete Account Entry */}
+                <div className="border-t border-line/60 pt-2">
+                  <button
+                    onClick={() => {
+                      setDeleteConfirmPassword("");
+                      setResMsg({ type: "", text: "" });
+                      setShowDeleteProfileModal(true);
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded border border-alert/30 bg-alert-wash/30 hover:bg-alert-wash text-left transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Trash2 className="w-4 h-4 text-alert shrink-0" />
+                      <div>
+                        <span className="text-xs font-bold text-alert block">Delete Account</span>
+                        <span className="text-[11px] text-ink-muted block leading-tight">Permanently delete account; reports stay trackable</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-alert/70" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* System Metadata */}
+            <div className="bg-raised p-3 rounded-md border border-line text-xs text-ink-muted flex items-center justify-between">
+              <div>
+                <span className="font-bold text-ink block">SARO Resident Portal</span>
+                <span>Legazpi City DRRM System</span>
+              </div>
+              {isResident && (
+                <span className="t-micro font-bold px-2 py-1 bg-brand/10 text-brand rounded border border-brand/20">
+                  Verified Resident
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ── Desktop branch (≥ 1024px) ───────────────────────────────────────────
   // All state (modals, auth, settings) is managed here and passed down so
   // neither branch duplicates logic. The mobile JSX below is untouched.
@@ -185,11 +751,16 @@ export default function CitizenShell({ onReturnToWelcome }) {
       );
     }
     return (
-      <DesktopShell
-        onReturnToWelcome={onReturnToWelcome}
-        onShowSettings={() => setShowSettings(true)}
-        onShowAuth={() => setShowAuth(true)}
-      />
+      <div className="relative h-full w-full overflow-hidden">
+        <DesktopShell
+          onReturnToWelcome={onReturnToWelcome}
+          onShowSettings={() => setShowSettings(true)}
+          onShowAuth={() => setShowAuth(true)}
+        />
+        {showSettings && renderSettingsModal(true)}
+        {showEditProfileModal && renderEditProfileModal()}
+        {showDeleteProfileModal && renderDeleteProfileModal()}
+      </div>
     );
   }
   // ── End desktop branch ───────────────────────────────────────────────────
@@ -216,6 +787,7 @@ export default function CitizenShell({ onReturnToWelcome }) {
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-canvas text-ink">
+      {showSettings && renderSettingsModal(false)}
       <ConnectionIndicator />
 
       <header className="sticky top-0 z-30 shrink-0 border-b border-line bg-surface px-4 py-2.5">
@@ -333,379 +905,8 @@ export default function CitizenShell({ onReturnToWelcome }) {
         </div>
       )}
 
-      {/* Dedicated Settings Modal */}
-      {showSettings && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans">
-          <div className="w-full max-w-md border border-line bg-surface p-5 shadow-sheet animate-fade-in rounded-lg space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-brand" />
-                <h3 className="text-base font-bold text-ink">Settings & Preferences</h3>
-              </div>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="saro-btn saro-btn-ghost saro-btn-sm"
-                aria-label="Close settings"
-              >
-                <X width={16} height={16} />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {/* Notification Toggle Switch */}
-              <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    {pushOn
-                      ? <Bell className="w-5 h-5 text-brand shrink-0" />
-                      : <BellOff className="w-5 h-5 text-ink-faint shrink-0" />}
-                    <div>
-                      <span className="t-subhead block font-bold text-ink text-sm">
-                        Report Update Notifications
-                      </span>
-                      <span className="t-body-sm block text-ink-muted text-xs">
-                        Get notified when your report changes status
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Clean On/Off Toggle Button */}
-                  {pushSupported() && (
-                    <button
-                      type="button"
-                      onClick={togglePush}
-                      disabled={pushBusy}
-                      role="switch"
-                      aria-checked={pushOn}
-                      aria-label="Toggle report update notifications"
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        pushOn ? "bg-brand" : "bg-line hover:bg-line/80"
-                      } ${pushBusy ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                          pushOn ? "translate-x-5" : "translate-x-0"
-                        }`}
-                      />
-                    </button>
-                  )}
-                </div>
-
-                <div className="text-[11px] text-ink-muted pt-1 border-t border-line/60 flex items-center justify-between">
-                  <span>Status: <strong className={pushOn ? "text-brand font-bold" : "text-ink-faint"}>{pushOn ? "ON (Push Enabled)" : "OFF (Push Disabled)"}</strong></span>
-                  {pushError && <span className="text-alert font-bold">{pushError}</span>}
-                  {pushPermission() === "denied" && <span className="text-alert font-bold">Blocked in browser</span>}
-                </div>
-              </div>
-
-              {/* Hardware Permissions Section */}
-              <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
-                <span className="text-xs font-bold text-ink uppercase tracking-wider block">
-                  App Hardware Permissions
-                </span>
-
-                {/* Location Toggle */}
-                <div className="flex items-center justify-between gap-3 pt-1">
-                  <div className="flex items-center gap-2.5">
-                    <MapPin className={`w-4.5 h-4.5 ${appPermissions.location === "granted" ? "text-brand" : "text-ink-faint"}`} />
-                    <div>
-                      <span className="text-xs font-bold text-ink block">Location Access</span>
-                      <span className="text-[11px] text-ink-muted block leading-tight">GPS position for Panic and reports</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => togglePermission("location")}
-                    role="switch"
-                    aria-checked={appPermissions.location === "granted"}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      appPermissions.location === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
-                        appPermissions.location === "granted" ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Microphone Toggle */}
-                <div className="flex items-center justify-between gap-3 pt-2 border-t border-line/50">
-                  <div className="flex items-center gap-2.5">
-                    <Mic className={`w-4.5 h-4.5 ${appPermissions.microphone === "granted" ? "text-brand" : "text-ink-faint"}`} />
-                    <div>
-                      <span className="text-xs font-bold text-ink block">Microphone Access</span>
-                      <span className="text-[11px] text-ink-muted block leading-tight">Voice input for describing hazards</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => togglePermission("microphone")}
-                    role="switch"
-                    aria-checked={appPermissions.microphone === "granted"}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      appPermissions.microphone === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
-                        appPermissions.microphone === "granted" ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Phone Call Toggle */}
-                <div className="flex items-center justify-between gap-3 pt-2 border-t border-line/50">
-                  <div className="flex items-center gap-2.5">
-                    <PhoneCall className={`w-4.5 h-4.5 ${appPermissions.phone === "granted" ? "text-brand" : "text-ink-faint"}`} />
-                    <div>
-                      <span className="text-xs font-bold text-ink block">Phone Dialer Access</span>
-                      <span className="text-[11px] text-ink-muted block leading-tight">Emergency 911 phone dialer handoff</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => togglePermission("phone")}
-                    role="switch"
-                    aria-checked={appPermissions.phone === "granted"}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                      appPermissions.phone === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
-                        appPermissions.phone === "granted" ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* Privacy Notice Item */}
-              <div className="border border-line rounded-md p-3.5 bg-white space-y-2">
-                <span className="text-xs font-bold text-ink uppercase tracking-wider block">
-                  Legal & Privacy Governance
-                </span>
-                <button
-                  onClick={() => { setShowSettings(false); setShowPrivacy(true); }}
-                  className="w-full flex items-center gap-3 border border-line p-3 rounded-md text-left hover:bg-raised transition-colors"
-                >
-                  <FileText width={18} height={18} className="shrink-0 text-brand" aria-hidden="true" />
-                  <span className="min-w-0 flex-1">
-                    <span className="t-subhead block font-bold text-ink">Privacy Notice</span>
-                    <span className="t-body-sm block text-ink-muted text-xs">
-                      What data is collected, who sees it, and security retention rules
-                    </span>
-                  </span>
-                  <ChevronRight width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />
-                </button>
-              </div>
-
-              {/* Resident Account Self-Management Section (Signed-in residents only) */}
-              {isResident && profile && (
-                <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
-                  <span className="text-xs font-bold text-ink uppercase tracking-wider block">
-                    Account Self-Management
-                  </span>
-
-                  <button
-                    onClick={() => {
-                      setEditName(profile.full_name || "");
-                      setEditEmail(profile.email || "");
-                      setEditPassword("");
-                      setResMsg({ type: "", text: "" });
-                      setShowEditProfileModal(true);
-                    }}
-                    className="w-full flex items-center justify-between p-2.5 rounded border border-line hover:bg-raised text-left transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <User className="w-4 h-4 text-brand shrink-0" />
-                      <div>
-                        <span className="text-xs font-bold text-ink block">Edit Profile</span>
-                        <span className="text-[11px] text-ink-muted block leading-tight">Update name, email, or password</span>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-ink-faint" />
-                  </button>
-
-                  {/* Visually Separated Delete Account Entry */}
-                  <div className="border-t border-line/60 pt-2">
-                    <button
-                      onClick={() => {
-                        setDeleteConfirmPassword("");
-                        setResMsg({ type: "", text: "" });
-                        setShowDeleteProfileModal(true);
-                      }}
-                      className="w-full flex items-center justify-between p-2.5 rounded border border-alert/30 bg-alert-wash/30 hover:bg-alert-wash text-left transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Trash2 className="w-4 h-4 text-alert shrink-0" />
-                        <div>
-                          <span className="text-xs font-bold text-alert block">Delete Account</span>
-                          <span className="text-[11px] text-ink-muted block leading-tight">Permanently delete account; reports stay trackable</span>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-alert/70" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* System Metadata */}
-              <div className="bg-raised p-3 rounded-md border border-line text-xs text-ink-muted flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-ink block">SARO Resident Portal</span>
-                  <span>Legazpi City DRRM System</span>
-                </div>
-                {isResident && (
-                  <span className="t-micro font-bold px-2 py-1 bg-brand/10 text-brand rounded border border-brand/20">
-                    Verified Resident
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Resident Profile Modal */}
-      {showEditProfileModal && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans">
-          <div className="w-full max-w-sm border border-line bg-surface p-5 shadow-sheet animate-fade-in rounded-lg space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div className="flex items-center gap-2">
-                <User className="w-5 h-5 text-brand" />
-                <h3 className="text-base font-bold text-ink">Edit Resident Profile</h3>
-              </div>
-              <button
-                onClick={() => setShowEditProfileModal(false)}
-                className="saro-btn saro-btn-ghost saro-btn-sm"
-              >
-                <X width={16} height={16} />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <label className="block">
-                <span className="t-label text-ink-faint block mb-1">Full Name</span>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="saro-input w-full text-xs"
-                />
-              </label>
-
-              <label className="block">
-                <span className="t-label text-ink-faint block mb-1">Email Address</span>
-                <input
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  className="saro-input w-full text-xs font-mono"
-                />
-              </label>
-
-              <label className="block border-t border-line/60 pt-2.5">
-                <span className="t-label text-ink-faint block mb-1">New Password (optional)</span>
-                <input
-                  type="password"
-                  placeholder="Leave blank to keep current"
-                  value={editPassword}
-                  onChange={(e) => setEditPassword(e.target.value)}
-                  className="saro-input w-full text-xs"
-                />
-              </label>
-
-              {resMsg.text && (
-                <p className={`text-xs p-2 rounded font-bold ${resMsg.type === "error" ? "bg-alert-wash text-alert border border-alert" : "bg-emerald-50 text-emerald-800 border border-emerald-200"}`}>
-                  {resMsg.text}
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
-              <button
-                onClick={() => setShowEditProfileModal(false)}
-                className="saro-btn saro-btn-secondary saro-btn-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveResidentProfile}
-                disabled={resSaving}
-                className="saro-btn saro-btn-primary saro-btn-sm"
-              >
-                {resSaving ? "Saving..." : "Save Profile"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Resident Account Modal */}
-      {showDeleteProfileModal && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans">
-          <div className="w-full max-w-sm border border-line bg-surface p-5 shadow-sheet animate-fade-in rounded-lg space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div className="flex items-center gap-2">
-                <Trash2 className="w-5 h-5 text-alert" />
-                <h3 className="text-base font-bold text-ink">Delete Account</h3>
-              </div>
-              <button
-                onClick={() => setShowDeleteProfileModal(false)}
-                className="saro-btn saro-btn-ghost saro-btn-sm"
-              >
-                <X width={16} height={16} />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded border border-alert/30 bg-alert-wash/50 text-ink leading-relaxed">
-                <span className="font-bold text-alert block mb-1">Notice: Account Removal</span>
-                <p>
-                  Your account login and synced "My Reports" list will be deleted. <strong>Reports you've filed will stay with the city and remain checkable by their tracking codes</strong>, they just won't be linked to an account anymore.
-                </p>
-              </div>
-
-              <label className="block">
-                <span className="t-label text-ink-faint block mb-1">Confirm Password</span>
-                <input
-                  type="password"
-                  placeholder="Re-enter password to confirm"
-                  value={deleteConfirmPassword}
-                  onChange={(e) => setDeleteConfirmPassword(e.target.value)}
-                  className="saro-input w-full text-xs"
-                />
-              </label>
-
-              {resMsg.text && (
-                <p className="text-xs p-2 rounded bg-alert-wash text-alert border border-alert font-bold">
-                  {resMsg.text}
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
-              <button
-                onClick={() => setShowDeleteProfileModal(false)}
-                className="saro-btn saro-btn-secondary saro-btn-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteResidentAccount}
-                disabled={resDeleting}
-                className="saro-btn saro-btn-sm bg-alert hover:bg-alert-strong text-white font-bold"
-              >
-                {resDeleting ? "Deleting..." : "Delete Account"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showEditProfileModal && renderEditProfileModal()}
+      {showDeleteProfileModal && renderDeleteProfileModal()}
 
       <nav className="sticky bottom-0 z-30 shrink-0 border-t border-line bg-surface font-sans" aria-label="Main">
         <div className="mx-auto flex max-w-md items-end justify-around relative px-1 h-[56px]">

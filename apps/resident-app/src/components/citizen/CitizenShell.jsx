@@ -744,7 +744,7 @@ export default function CitizenShell({ onReturnToWelcome }) {
       return (
         <div className="fixed inset-0 z-50 flex h-full w-full flex-col overflow-hidden bg-canvas">
           <ConnectionIndicator />
-          <div className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-8">
+          <div className="mx-auto w-full max-w-7xl flex-1 overflow-y-auto p-6 md:p-8 lg:p-10">
             <ConsentNotice dismissible onAcknowledge={() => setShowPrivacy(false)} />
           </div>
         </div>
@@ -796,11 +796,19 @@ export default function CitizenShell({ onReturnToWelcome }) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowAccountMenu(true)}
-              className="saro-btn saro-btn-ghost saro-btn-sm"
-              aria-label={isResident ? `Account: ${profile?.full_name}` : "Sign in"}
+              className="relative flex items-center gap-2 p-1 rounded-full text-left transition-transform active:scale-95 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-brand/40"
+              aria-label={isResident ? `Account settings for ${profile?.full_name || "Resident"}` : "Account settings and sign in"}
             >
-              <User width={14} height={14} />
-              {isResident ? (profile?.full_name?.split(" ")[0] ?? "Account") : "Sign in"}
+              {isResident ? (
+                <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-brand-wash text-brand font-bold text-xs border border-brand/30 shadow-2xs">
+                  {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : <User className="w-4 h-4 text-brand" />}
+                  <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-emerald-500" aria-hidden="true" />
+                </div>
+              ) : (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sunken text-ink-muted border border-line hover:border-brand-edge shadow-2xs">
+                  <User className="w-4 h-4 text-ink-muted" />
+                </div>
+              )}
             </button>
           </div>
         </div>
@@ -819,36 +827,48 @@ export default function CitizenShell({ onReturnToWelcome }) {
 
       {showAccountMenu && (
         <div
-          className="absolute inset-0 z-50 flex items-end justify-center bg-ink-strong/50 sm:items-center sm:p-4"
+          className="absolute inset-0 z-50 flex items-end justify-center bg-ink-strong/50 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in duration-150"
           onClick={() => setShowAccountMenu(false)}
         >
           <div
-            className="saro-rise w-full max-w-sm border-t border-line bg-surface p-5 sm:border"
+            className="saro-rise w-full max-w-sm rounded-t-2xl sm:rounded-2xl border border-line bg-surface p-5 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-rule pb-4">
-              <span className="flex items-center gap-3">
-                <ShieldCheck
-                  width={22}
-                  height={22}
-                  className={isResident ? "text-status-resolved-ink" : "text-ink-faint"}
-                  aria-hidden="true"
-                />
-                <span>
-                  <span className="t-subhead block font-bold text-ink">
-                    {isResident ? profile?.full_name || "Resident" : "Anonymous Reporter"}
+            <div className="flex items-center justify-between border-b border-line pb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                {isResident ? (
+                  <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-wash text-brand font-bold text-sm border border-brand/30">
+                    {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : <User className="w-5 h-5 text-brand" />}
+                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-emerald-500" aria-hidden="true" />
+                  </div>
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-muted border border-line">
+                    <User className="w-5 h-5 text-ink-muted" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold text-ink truncate">
+                      {isResident ? profile?.full_name || "Resident" : "Anonymous Reporter"}
+                    </span>
+                    {isResident && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs text-ink-muted block truncate mt-0.5">
+                    {isResident ? profile?.email || "Reports follow your account" : "Reports stay on this device"}
                   </span>
-                  <span className="t-body-sm block text-ink-muted text-xs">
-                    {isResident ? "Reports follow your account" : "Reports stay on this device"}
-                  </span>
-                </span>
-              </span>
+                </div>
+              </div>
               <button
                 onClick={() => setShowAccountMenu(false)}
-                className="saro-btn saro-btn-ghost saro-btn-sm -mr-2 -mt-1"
+                className="saro-btn saro-btn-ghost saro-btn-sm shrink-0 -mr-1 -mt-1 text-ink-muted hover:text-ink"
                 aria-label="Close"
               >
-                <X width={16} height={16} />
+                <X className="w-5 h-5" />
               </button>
             </div>
 

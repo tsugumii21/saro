@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   PencilLine, Search, PhoneCall, MapPin, ChevronRight,
   CloudOff, Flame, Activity, Shield, CloudRain,
-  Sparkles, Bot, Crosshair,
+  Sparkles, Bot, Crosshair, User,
 } from "lucide-react";
 import { AlertLevelBadge, HazardMap } from "@saro/ui";
 import {
@@ -57,14 +57,17 @@ function timeSince(dateStr) {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
+import { useAuth } from "@saro/shared";
+
 /**
  * Desktop Home — Standardized 400px Left Panel + Flex-1 Live DRRM Map.
  *
  * Left panel (400px): Panic control + situation cards + civic action links + safety tips grid.
  * Right panel (flex-1): Interactive live HazardMap (flex-col layout, zero top-offset bugs).
  */
-export default function HomeDesktop() {
+export default function HomeDesktop({ onToggleAccount }) {
   const navigate = useNavigate();
+  const { profile, isResident } = useAuth();
 
   // Panic state
   const [panicState, setPanicState] = useState("idle");
@@ -216,9 +219,9 @@ export default function HomeDesktop() {
   return (
     <div className="flex h-full w-full overflow-hidden bg-canvas text-ink font-sans">
 
-      {/* ── Left panel (Standardized 400px) ───────────────────────────────── */}
+      {/* ── Left panel (Expanded 440px / xl:460px) ─────────────────────────── */}
       <aside
-        className="flex w-[400px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface"
+        className="flex w-[440px] xl:w-[460px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface"
         aria-label="Home — situation and reporting"
       >
         {/* Panel header */}
@@ -377,9 +380,9 @@ export default function HomeDesktop() {
                   { label: "Assigned", value: reportStats.assigned, cls: "text-status-assigned-ink" },
                   { label: "In Progress", value: reportStats.in_progress, cls: "text-brand" },
                 ].map(({ label, value, cls }) => (
-                  <div key={label} className="bg-sunken px-2.5 py-1.5 border border-line flex items-center justify-between rounded-xs">
-                    <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">{label}</span>
-                    <span className={`text-xs font-bold font-mono ${cls}`}>{value}</span>
+                  <div key={label} className="bg-sunken p-2.5 border border-line flex flex-col gap-0.5 rounded-lg">
+                    <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider leading-none">{label}</span>
+                    <span className={`text-sm font-bold font-mono ${cls} leading-snug mt-0.5`}>{value}</span>
                   </div>
                 ))}
               </div>
@@ -453,28 +456,28 @@ export default function HomeDesktop() {
             </button>
           </div>
 
-          {/* ── Safety Advisory Grid (Clean 2x2 Desktop Grid) ───────────── */}
+          {/* ── Safety Advisory Grid (Full-Width Desktop Cards) ───────────── */}
           <div className="flex flex-col gap-2.5 pt-2 border-t border-line">
             <span className="text-xs font-bold text-ink-muted uppercase tracking-wider">
               Disaster Preparedness &amp; Safety
             </span>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2.5">
               {SAFETY_TIPS.map((tip) => {
                 const Icon = tip.IconComp;
                 return (
                   <div
                     key={tip.id}
-                    className="p-3 border border-line bg-raised rounded-xs flex flex-col gap-1.5 hover:border-brand-edge transition-colors"
+                    className="p-3.5 border border-line bg-raised rounded-lg flex flex-col gap-2 hover:border-brand-edge transition-colors shadow-2xs"
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0 rounded-xs">
-                        <Icon className="w-3 h-3" />
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-6 h-6 bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0 rounded-md">
+                        <Icon className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-xs font-bold text-ink leading-tight truncate">
+                      <span className="text-xs font-bold text-ink leading-tight">
                         {tip.title}
                       </span>
                     </div>
-                    <p className="text-[11px] text-ink-muted leading-relaxed line-clamp-3">
+                    <p className="text-xs text-ink-muted leading-relaxed">
                       {tip.tip}
                     </p>
                   </div>

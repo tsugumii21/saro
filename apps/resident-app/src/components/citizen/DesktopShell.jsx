@@ -15,6 +15,7 @@ import TrackDesktop from "./desktop/TrackDesktop";
 import MapDesktop from "./desktop/MapDesktop";
 import ReportDesktop from "./desktop/ReportDesktop";
 import AssistantDesktop from "./desktop/AssistantDesktop";
+import AccountPopover from "./desktop/AccountPopover";
 
 /**
  * Desktop shell — lg: and above (≥ 1024px).
@@ -40,6 +41,7 @@ export default function DesktopShell({
 }) {
   const { profile, isResident, signOut } = useAuth();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState("bottom-left");
 
   const handleSignOut = async () => {
     setAccountOpen(false);
@@ -47,8 +49,13 @@ export default function DesktopShell({
     onReturnToWelcome?.();
   };
 
+  const toggleAccountMenu = (position = "bottom-left") => {
+    setPopoverPosition(position);
+    setAccountOpen((prev) => !prev);
+  };
+
   return (
-    <div className="flex h-full w-full overflow-hidden bg-canvas text-ink font-sans">
+    <div className="flex h-full w-full overflow-hidden bg-canvas text-ink font-sans relative">
       <ConnectionIndicator />
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
@@ -115,13 +122,13 @@ export default function DesktopShell({
         {/* Account widget */}
         <div className="border-t border-line px-3 py-3">
           <button
-            onClick={() => setAccountOpen((v) => !v)}
-            className="flex w-full items-center gap-3 px-2 py-2 text-left transition-colors hover:bg-raised"
-            aria-expanded={accountOpen}
+            onClick={() => toggleAccountMenu("bottom-left")}
+            className="flex w-full items-center gap-3 px-2 py-2 text-left transition-colors hover:bg-raised rounded-lg"
+            aria-expanded={accountOpen && popoverPosition === "bottom-left"}
             aria-haspopup="dialog"
           >
             <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center bg-brand-wash text-brand border border-brand-edge"
+              className="flex h-8 w-8 shrink-0 items-center justify-center bg-brand-wash text-brand border border-brand-edge rounded-full"
               aria-hidden="true"
             >
               <User width={15} height={15} />
@@ -147,108 +154,26 @@ export default function DesktopShell({
       {/* ── Main content ────────────────────────────────────────────────── */}
       <main className="min-w-0 flex-1 overflow-hidden">
         <Routes>
-          <Route path="/"          element={<HomeDesktop />} />
-          <Route path="/map"       element={<MapDesktop />} />
-          <Route path="/report"    element={<ReportDesktop />} />
-          <Route path="/track"     element={<TrackDesktop />} />
-          <Route path="/assistant" element={<AssistantDesktop />} />
+          <Route path="/"          element={<HomeDesktop onToggleAccount={() => toggleAccountMenu("top-right")} />} />
+          <Route path="/map"       element={<MapDesktop onToggleAccount={() => toggleAccountMenu("top-right")} />} />
+          <Route path="/report"    element={<ReportDesktop onToggleAccount={() => toggleAccountMenu("top-right")} />} />
+          <Route path="/track"     element={<TrackDesktop onToggleAccount={() => toggleAccountMenu("top-right")} />} />
+          <Route path="/assistant" element={<AssistantDesktop onToggleAccount={() => toggleAccountMenu("top-right")} />} />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 
-      {/* ── Account popover (desktop) ─────────────────────────────────── */}
-      {accountOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-start"
-          onClick={() => setAccountOpen(false)}
-          role="dialog"
-          aria-label="Account menu"
-          aria-modal="true"
-        >
-          {/* Panel anchors to bottom of sidebar */}
-          <div
-            className="mb-[60px] ml-3 w-[232px] border border-line bg-surface shadow-lift animate-fade-in"
-            style={{ clipPath: "polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-start justify-between gap-3 border-b border-rule px-4 py-3">
-              <span className="flex items-center gap-2.5">
-                <ShieldCheck
-                  width={18}
-                  height={18}
-                  className={isResident ? "text-status-resolved-ink" : "text-ink-faint"}
-                  aria-hidden="true"
-                />
-                <span>
-                  <span className="block text-sm font-bold text-ink">
-                    {isResident ? profile?.full_name || "Resident" : "Anonymous Reporter"}
-                  </span>
-                  <span className="block text-xs text-ink-muted">
-                    {isResident ? "Reports follow your account" : "Reports stay on this device"}
-                  </span>
-                </span>
-              </span>
-              <button
-                onClick={() => setAccountOpen(false)}
-                className="saro-btn saro-btn-ghost saro-btn-sm -mr-1 -mt-0.5"
-                aria-label="Close"
-              >
-                <X width={14} height={14} />
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-1.5 p-3">
-              {/* Sign in prompt for guests */}
-              {!isResident && (
-                <button
-                  onClick={() => { setAccountOpen(false); onShowAuth?.(); }}
-                  className="flex items-center justify-between gap-2 border border-brand-edge bg-brand-wash px-3 py-2.5 text-left transition-colors hover:bg-brand-wash/80"
-                >
-                  <span>
-                    <span className="block text-sm font-bold text-brand-strong">Sign In or Create Account</span>
-                    <span className="block text-xs text-ink-muted">Keeps your history synced</span>
-                  </span>
-                  <ChevronRight width={14} height={14} className="shrink-0 text-brand" aria-hidden="true" />
-                </button>
-              )}
-
-              {/* Settings */}
-              <button
-                onClick={() => { setAccountOpen(false); onShowSettings?.(); }}
-                className="flex items-center gap-2.5 border border-line px-3 py-2.5 text-left transition-colors hover:bg-raised"
-              >
-                <Settings width={16} height={16} className="shrink-0 text-ink-muted" aria-hidden="true" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-bold text-ink">Settings</span>
-                  <span className="block text-xs text-ink-muted">Notifications, permissions, privacy</span>
-                </span>
-                <ChevronRight width={14} height={14} className="shrink-0 text-ink-faint" aria-hidden="true" />
-              </button>
-
-              {/* Sign out / forget device */}
-              <div className="border-t border-line pt-1.5">
-                <button
-                  onClick={handleSignOut}
-                  className="flex w-full items-center gap-2.5 border border-alert/30 bg-alert-wash/50 px-3 py-2.5 text-left transition-colors hover:bg-alert-wash"
-                >
-                  <LogOut width={16} height={16} className="shrink-0 text-alert" aria-hidden="true" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-alert">
-                      {isResident ? "Sign Out" : "Forget This Device"}
-                    </span>
-                    <span className="block text-xs text-ink-muted">
-                      {isResident
-                        ? "Your reports stay saved on your account"
-                        : "Clears local Track list. Filed reports stay with city."}
-                    </span>
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Dynamic Account popover (desktop) ─────────────────────────── */}
+      <AccountPopover
+        isOpen={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        position={popoverPosition}
+        profile={profile}
+        isResident={isResident}
+        onShowSettings={onShowSettings}
+        onShowAuth={onShowAuth}
+        onSignOut={handleSignOut}
+      />
     </div>
   );
 }

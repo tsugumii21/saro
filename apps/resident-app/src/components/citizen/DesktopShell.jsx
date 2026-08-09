@@ -73,12 +73,13 @@ export default function DesktopShell({
           <NavLink
             to="/report"
             className={({ isActive }) =>
-              `flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 font-bold text-sm transition-all shadow-sm ${
+              `flex w-full items-center justify-center gap-2 px-4 py-3 font-bold text-sm transition-colors ${
                 isActive
-                  ? "bg-brand-strong text-white shadow-md"
-                  : "bg-brand text-white hover:bg-brand-mid hover:shadow-md"
+                  ? "bg-brand-strong text-white"
+                  : "bg-brand text-white hover:bg-brand-mid"
               }`
             }
+            style={{ clipPath: "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%)" }}
           >
             <PlusCircle width={16} height={16} aria-hidden="true" />
             Report a Hazard

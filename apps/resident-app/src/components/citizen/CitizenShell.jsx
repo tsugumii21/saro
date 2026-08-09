@@ -744,7 +744,7 @@ export default function CitizenShell({ onReturnToWelcome }) {
       return (
         <div className="fixed inset-0 z-50 flex h-full w-full flex-col overflow-hidden bg-canvas">
           <ConnectionIndicator />
-          <div className="mx-auto w-full max-w-7xl flex-1 overflow-y-auto p-6 md:p-8 lg:p-10">
+          <div className="mx-auto w-full max-w-[1536px] flex-1 overflow-y-auto p-6 md:p-8 lg:p-10">
             <ConsentNotice dismissible onAcknowledge={() => setShowPrivacy(false)} />
           </div>
         </div>

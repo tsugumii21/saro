@@ -78,9 +78,9 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
       >
         <div className="grid grid-cols-12 gap-8 items-start">
           {/* Left Column: Executive Summary & CTA Card */}
-          <aside className="col-span-4 lg:col-span-3 sticky top-6 space-y-4 max-h-[calc(100vh-5rem)] overflow-y-auto pr-1">
+          <aside className="col-span-4 lg:col-span-4 sticky top-6 space-y-4 max-h-[calc(100vh-5rem)] overflow-y-auto pr-1">
             <div className="bg-surface border border-line rounded-xl p-6 shadow-xl space-y-5">
-              <div className="flex items-center justify-between border-b border-line pb-4">
+              <div className="relative flex items-center justify-between border-b border-line pb-4 pr-8">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="p-2.5 rounded-xl bg-brand-wash border border-brand/20 text-brand shrink-0">
                     <ShieldCheck className="w-6 h-6 stroke-[2.2]" />
@@ -99,7 +99,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
                     type="button"
                     onClick={accept}
                     aria-label="Close and acknowledge"
-                    className="saro-btn saro-btn-ghost saro-btn-sm text-ink-muted hover:text-ink shrink-0"
+                    className="absolute top-0 right-0 p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-sunken transition-colors focus:outline-none focus:ring-2 focus:ring-brand/30"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -138,10 +138,10 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
                 <button
                   type="button"
                   onClick={accept}
-                  className="saro-btn saro-btn-primary saro-btn-lg w-full flex items-center justify-center gap-2 font-bold shadow-md hover:shadow-lg transition-all"
+                  className="saro-btn saro-btn-primary saro-btn-lg w-full flex items-center justify-center gap-2 font-bold shadow-md hover:shadow-lg transition-all text-xs px-4 py-3"
                 >
-                  <ShieldCheck className="w-5 h-5" />
-                  I Understand &amp; Acknowledge
+                  <ShieldCheck className="w-4.5 h-4.5 shrink-0" />
+                  <span>I Understand &amp; Acknowledge</span>
                 </button>
               </div>
             </div>
@@ -156,7 +156,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
           </aside>
 
           {/* Right Column: Detailed Governance Content */}
-          <main className="col-span-8 lg:col-span-9 space-y-6">
+          <main className="col-span-8 lg:col-span-8 space-y-6">
             {/* Section 1: What We Collect */}
             <div className="bg-surface border border-line rounded-xl p-6 shadow-md space-y-4">
               <div className="flex items-center gap-2 border-b border-line pb-3">

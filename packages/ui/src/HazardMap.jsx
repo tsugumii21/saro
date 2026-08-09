@@ -817,6 +817,66 @@ export default function HazardMap({
         .setLngLat([lng, lat])
         .addTo(map.current);
 
+      if (report.title || report.categoryName || isClustered) {
+        const catName = report.categoryName || "Incident Report";
+        const brgy = report.barangayName || "Legazpi City";
+        const timeStr = report.timeSinceStr || "";
+        const statusLabel = (report.status || "received").toUpperCase();
+        const headingText = isClustered
+          ? `${count} Reports in this Area (${catName})`
+          : catName;
+        const summaryText = isClustered
+          ? `Cluster Summary (${count} Reports): Multiple citizen reports submitted for ${catName} in ${brgy}. Active hazard area under monitoring.`
+          : `Single incident report for ${catName} in ${brgy}.`;
+
+        const reportId = String(report.id || `rep-${lat}-${lng}`).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+        const popupHTML = `
+          <div style="font-family:system-ui,-apple-system,sans-serif;padding:6px;width:300px;max-width:100%">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">
+              <span style="font-size:10px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;color:${report.color || '#0060A9'};background:rgba(0,96,169,0.08);padding:2.5px 7px;border-radius:4px;border:1px solid rgba(0,96,169,0.2)">
+                ${statusLabel}
+              </span>
+              ${isClustered ? `<span style="font-size:10px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;color:#FFFFFF;background:#101725;padding:2.5px 7px;border-radius:4px">⚡ ${count} REPORTS IN CLUSTER</span>` : ''}
+            </div>
+            <div style="font-size:13px;font-weight:800;color:#101725;line-height:1.3;margin-bottom:4px">
+              ${headingText}
+            </div>
+            <div style="font-size:11px;color:#64748B;margin-bottom:10px;display:flex;align-items:center;gap:4px">
+              <span>📍 ${brgy}</span>
+              ${timeStr ? `<span>· ${timeStr}</span>` : ''}
+            </div>
+            <div style="font-size:11px;color:#334155;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:8px;margin-bottom:10px;line-height:1.4">
+              <div style="font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Summarized Context</div>
+              ${summaryText}
+            </div>
+            <button id="btn-report-${reportId}" style="width:100%;background:#1B2E6B;color:#FFFFFF;border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s ease">
+              Report a Hazard in This Area
+            </button>
+          </div>
+        `;
+
+        const popup = new Popup({ offset: 16, closeButton: true, maxWidth: "340px" })
+          .setHTML(popupHTML);
+
+        popup.on("open", () => {
+          const btn = document.getElementById(`btn-report-${reportId}`);
+          if (btn) {
+            btn.onclick = (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (report.onActionClick) {
+                report.onActionClick();
+              } else if (typeof window !== "undefined") {
+                window.location.href = `/report?category=${encodeURIComponent(report.category || '')}`;
+              }
+            };
+          }
+        });
+
+        marker.setPopup(popup);
+      }
+
       if (report.onSelect) el.addEventListener("click", () => report.onSelect(report));
       markers.current.push(marker);
     }

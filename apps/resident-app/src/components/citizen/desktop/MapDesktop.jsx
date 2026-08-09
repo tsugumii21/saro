@@ -289,24 +289,15 @@ export default function MapDesktop() {
             priority: r.priority,
             color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
             count: count,
+            category: r.category_id || r.category,
+            categoryName: getCategoryName(r.category_id || r.category),
+            barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
+            timeSinceStr: timeSince(r.created_at),
+            status: r.status,
+            onActionClick: () => navigate(`/report?category=${r.category_id || r.category}`),
             onSelect: () => setSelectedReport({ ...r, clusterCount: count }),
           }))}
         />
-
-        {/* Selected Pin Details Overlay Card (Desktop bottom-left floating) */}
-        {selectedReport && (
-          <div className="absolute bottom-6 left-6 z-30 w-full max-w-md shadow-lift animate-fade-in">
-            <IncidentPinCard
-              report={selectedReport}
-              categoryName={getCategoryName(selectedReport.category_id || selectedReport.category)}
-              barangayName={getBarangayName(selectedReport.barangay_id) || selectedReport.barangay || "Legazpi City"}
-              timeSinceStr={timeSince(selectedReport.created_at)}
-              onClose={() => setSelectedReport(null)}
-              onActionClick={() => navigate(`/report?category=${selectedReport.category_id || selectedReport.category}`)}
-              actionLabel="Report a Hazard in This Area"
-            />
-          </div>
-        )}
       </div>
     </div>
   );

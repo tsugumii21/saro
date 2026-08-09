@@ -60,26 +60,25 @@ export default function DesktopShell({
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
-        className="flex w-[200px] shrink-0 flex-col border-r border-line bg-surface"
+        className="flex w-[220px] shrink-0 flex-col border-r border-line bg-surface"
         aria-label="Primary navigation"
       >
         {/* Wordmark */}
-        <div className="border-b border-line px-5 py-4">
+        <div className="border-b border-line px-5 py-5">
           <Wordmark size="sm" />
         </div>
 
         {/* Report CTA */}
-        <div className="px-3 pt-4">
+        <div className="px-4 pt-5">
           <NavLink
             to="/report"
             className={({ isActive }) =>
-              `flex w-full items-center justify-center gap-2 px-4 py-3 font-bold text-sm transition-colors ${
+              `flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 font-bold text-sm transition-all shadow-sm ${
                 isActive
-                  ? "bg-brand-strong text-white"
-                  : "bg-brand text-white hover:bg-brand-mid"
+                  ? "bg-brand-strong text-white shadow-md"
+                  : "bg-brand text-white hover:bg-brand-mid hover:shadow-md"
               }`
             }
-            style={{ clipPath: "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%)" }}
           >
             <PlusCircle width={16} height={16} aria-hidden="true" />
             Report a Hazard
@@ -87,25 +86,25 @@ export default function DesktopShell({
         </div>
 
         {/* Nav links */}
-        <nav className="flex flex-col gap-px px-3 pt-4" aria-label="Sections">
+        <nav className="flex flex-col gap-1 px-3 pt-5" aria-label="Sections">
           {NAV_ITEMS.map(({ to, end, Icon, label }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `group flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-colors ${
+                `group flex items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-medium transition-all ${
                   isActive
-                    ? "bg-brand-wash text-brand border-l-2 border-brand"
-                    : "text-ink-muted hover:bg-raised hover:text-ink border-l-2 border-transparent"
+                    ? "bg-brand-wash text-brand"
+                    : "text-ink-muted hover:bg-raised hover:text-ink"
                 }`
               }
             >
               {({ isActive }) => (
                 <>
                   <Icon
-                    width={17}
-                    height={17}
+                    width={18}
+                    height={18}
                     strokeWidth={isActive ? 2.3 : 1.8}
                     aria-hidden="true"
                   />
@@ -116,14 +115,26 @@ export default function DesktopShell({
           ))}
         </nav>
 
-        {/* Spacer */}
-        <div className="flex-1" />
+        {/* Spacer + Minimal Emergency Anchor */}
+        <div className="flex-1 flex flex-col justify-end px-4 pb-4">
+          <div className="rounded-lg border border-line bg-raised/60 px-3 py-2.5 space-y-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+              Emergency
+            </p>
+            <p className="text-[11px] font-semibold text-ink leading-tight">
+              CDRRMO Hotline
+            </p>
+            <p className="text-[11px] text-ink-muted">
+              052-480-5539
+            </p>
+          </div>
+        </div>
 
         {/* Account widget */}
-        <div className="border-t border-line px-3 py-3">
+        <div className="border-t border-line px-3 py-3.5">
           <button
             onClick={() => toggleAccountMenu("bottom-left")}
-            className="flex w-full items-center gap-3 px-2 py-2 text-left transition-colors hover:bg-raised rounded-lg"
+            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-all hover:bg-raised"
             aria-expanded={accountOpen && popoverPosition === "bottom-left"}
             aria-haspopup="dialog"
           >

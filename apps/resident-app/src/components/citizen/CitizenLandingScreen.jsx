@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PencilLine, Search, PhoneCall, MapPin, ChevronRight, CloudOff } from "lucide-react";
-import { Wordmark } from "@saro/ui";
+import { PencilLine, Search, PhoneCall, MapPin, ChevronRight, CloudOff, Flame, Activity, Lightbulb, ChevronLeft, Shield, CloudRain, Sparkles, RefreshCw } from "lucide-react";
+import { Wordmark, AlertLevelBadge } from "@saro/ui";
 import {
   createReport, registerPanicFlag, addReportMedia, enqueueReport, removeFromOutbox,
   rememberReport, requestBackgroundSync, PANIC_CATEGORY,
+  getVolcanicAlert, getPublicMapReports,
 } from "@saro/shared";
 import PanicControl from "./PanicControl";
 import ReportTicket from "./ReportTicket";
@@ -56,6 +57,47 @@ import {
 
 const CALLBACK_HINT = "Panic alert. No detail given yet.";
 
+const SAFETY_TIPS = [
+  {
+    id: 1,
+    title: "Monsoon & Flood Safety",
+    category: "Weather Advisory",
+    IconComp: CloudRain,
+    tip: "Keep house gutters clear and monitor Legazpi River water levels during heavy downpours. Avoid walking through floodwaters.",
+  },
+  {
+    id: 2,
+    title: "Mayon Volcanic Protocol",
+    category: "Ashfall Preparedness",
+    IconComp: Flame,
+    tip: "Keep clean drinking water sealed and N95 dust masks ready in case of sudden wind shifts or volcanic alert changes.",
+  },
+  {
+    id: 3,
+    title: "Emergency Go-Bag Kit",
+    category: "Disaster Preparedness",
+    IconComp: Shield,
+    tip: "Pack 3 days of non-perishable food, water, first aid supplies, flashlight, and extra batteries for every household member.",
+  },
+  {
+    id: 4,
+    title: "Civic Damage Reporting",
+    category: "Community Action",
+    IconComp: Sparkles,
+    tip: "Report broken street drains or fallen branches via 'Describe a Hazard' so City Engineering can resolve issues fast.",
+  },
+];
+
+function timeSince(dateStr) {
+  if (!dateStr) return "recently";
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (isNaN(seconds) || seconds < 0) return "recently";
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
 export default function CitizenLandingScreen() {
   const navigate = useNavigate();
 
@@ -65,6 +107,38 @@ export default function CitizenLandingScreen() {
   const [imprecise, setImprecise] = useState(false);
   const [photoAttached, setPhotoAttached] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
+
+  // Live situation & advisory state
+  const [volcanicAlert, setVolcanicAlert] = useState(null);
+  const [reportStats, setReportStats] = useState({ received: 0, assigned: 0, in_progress: 0, total: 0 });
+  const [tipIndex, setTipIndex] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    getVolcanicAlert().then(({ data }) => {
+      if (active && data) setVolcanicAlert(data);
+    });
+    getPublicMapReports().then(({ data }) => {
+      if (active && data) {
+        const counts = { received: 0, assigned: 0, in_progress: 0, total: data.length };
+        data.forEach((r) => {
+          if (r.status === "received") counts.received++;
+          if (r.status === "assigned") counts.assigned++;
+          if (r.status === "in_progress") counts.in_progress++;
+        });
+        setReportStats(counts);
+      }
+    });
+    return () => { active = false; };
+  }, []);
+
+  const handleNextTip = () => {
+    setTipIndex((prev) => (prev + 1) % SAFETY_TIPS.length);
+  };
+
+  const handlePrevTip = () => {
+    setTipIndex((prev) => (prev - 1 + SAFETY_TIPS.length) % SAFETY_TIPS.length);
+  };
 
   // Warm-up results, filled during the hold and read at fire time.
   const positionRef = useRef(null);
@@ -98,7 +172,7 @@ export default function CitizenLandingScreen() {
 
     // Advisory only, for dispatchers. Fire and forget — a counter must never
     // sit between a person and their alert.
-    registerPanicFlag(id).catch(() => {});
+    registerPanicFlag(id).catch(() => { });
 
     // ── 2. Position: whatever the warm-up got, or the fallback. ─────────────
     // Capped so a stalled fix cannot hold up the write. The warm-up has usually
@@ -228,7 +302,7 @@ export default function CitizenLandingScreen() {
 
         <a href="tel:911" className="saro-btn saro-btn-secondary saro-btn-lg saro-btn-block">
           <PhoneCall width={16} height={16} />
-          Call 911 again
+          Call 911 Again
         </a>
 
         {!queued && (
@@ -237,7 +311,7 @@ export default function CitizenLandingScreen() {
             onClick={() => navigate(`/report?panic=${sent.tracking_code}`)}
             className="saro-btn saro-btn-primary saro-btn-lg saro-btn-block"
           >
-            Add what is happening
+            Add What Is Happening
             <ChevronRight width={16} height={16} />
           </button>
         )}
@@ -254,16 +328,12 @@ export default function CitizenLandingScreen() {
   }
 
   /* ── Idle ──────────────────────────────────────────────────────────────── */
-  return (
-    <div className="flex min-h-full flex-col px-4 pb-6 pt-4">
-      <header className="mb-4 flex items-center justify-between">
-        <Wordmark size="sm" />
-        <a href="tel:911" className="t-label inline-flex items-center gap-1.5 px-2 py-1 text-ink-muted">
-          <PhoneCall width={13} height={13} aria-hidden="true" />
-          Call 911
-        </a>
-      </header>
+  const currentTip = SAFETY_TIPS[tipIndex];
+  const TipIcon = currentTip.IconComp;
 
+  return (
+    <div className="flex min-h-full flex-col px-4 pb-5 pt-3 gap-3.5 bg-surface">
+      {/* ── 1. Primary Safety Focus: Panic Button Card ──────────────────── */}
       <PanicControl
         onFire={handlePanic}
         onHoldStart={warmUp}
@@ -271,50 +341,216 @@ export default function CitizenLandingScreen() {
       />
 
       {state === "failed" && (
-        <p role="alert" className="t-body-sm saro-card mt-4 border-alert p-3 text-alert">
+        <p role="alert" className="t-body-sm saro-card border-alert p-3 text-alert bg-alert-wash">
           Something went wrong sending that. Call 911 directly — do not wait for this to work.
         </p>
       )}
 
-      <div className="mt-7">
-        <span className="t-label text-ink-faint">Not an emergency</span>
+      {/* ── 2. Live Monitoring & City Situation Snippets ────────────────── */}
+      <div className="flex flex-col gap-2 w-full">
+        <span className="t-label font-bold text-ink-muted uppercase tracking-wider text-[10px]">
+          Live Monitoring &amp; Situation
+        </span>
 
-        <div className="mt-3 flex flex-col">
+        <div className="flex flex-col gap-2.5 w-full">
+          {/* Mayon Alert Status Card */}
+          <div
+            onClick={() => navigate("/map")}
+            className="group flex w-full flex-col gap-2 p-3.5 rounded-lg bg-surface border border-line hover:border-brand-edge transition-all cursor-pointer shadow-2xs"
+          >
+            <div className="flex items-center justify-between gap-2 w-full">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-status-assigned-ink border border-amber-200 flex items-center justify-center shrink-0">
+                  <Flame className="w-4 h-4" aria-hidden="true" />
+                </div>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-[13px] font-bold text-ink leading-tight group-hover:text-brand transition-colors">
+                    Mayon Alert Status
+                  </span>
+                  <span className="text-[11px] text-ink-muted mt-0.5">
+                    Updated {volcanicAlert?.last_verified_at ? timeSince(volcanicAlert.last_verified_at) : "1d ago"} · PHIVOLCS Bulletin
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {volcanicAlert ? (
+                  <AlertLevelBadge alert={volcanicAlert} compact />
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse shrink-0" />
+                    <span>Level 0 · Normal</span>
+                  </span>
+                )}
+                <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-brand group-hover:translate-x-0.5 transition-all shrink-0" aria-hidden="true" />
+              </div>
+            </div>
+          </div>
+
+          {/* Active City Reports Activity Card */}
+          <div
+            onClick={() => navigate("/map")}
+            className="group flex w-full flex-col gap-2.5 p-3.5 rounded-lg bg-surface border border-line hover:border-brand-edge transition-all cursor-pointer shadow-2xs"
+          >
+            <div className="flex items-center justify-between gap-2 w-full">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-lg bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0">
+                  <Activity className="w-4 h-4" aria-hidden="true" />
+                </div>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="text-[13px] font-bold text-ink leading-tight group-hover:text-brand transition-colors">
+                    Active City Reports
+                  </span>
+                  <span className="text-[10px] font-mono font-bold text-brand bg-brand-wash px-2 py-0.5 rounded border border-brand-edge shrink-0">
+                    {reportStats.total} active
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-brand group-hover:translate-x-0.5 transition-all shrink-0" aria-hidden="true" />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 w-full pt-1 border-t border-line-faint">
+              <div className="bg-sunken px-2.5 py-1.5 rounded-md border border-line-faint flex items-center justify-between">
+                <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">Received</span>
+                <span className="text-xs font-bold font-mono text-ink">{reportStats.received}</span>
+              </div>
+              <div className="bg-sunken px-2.5 py-1.5 rounded-md border border-line-faint flex items-center justify-between">
+                <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">Assigned</span>
+                <span className="text-xs font-bold font-mono text-status-assigned-ink">{reportStats.assigned}</span>
+              </div>
+              <div className="bg-sunken px-2.5 py-1.5 rounded-md border border-line-faint flex items-center justify-between">
+                <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">In Progress</span>
+                <span className="text-xs font-bold font-mono text-brand">{reportStats.in_progress}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. Civic Services & Reporting ───────────────────────────────── */}
+      <div className="flex flex-col gap-2">
+        <span className="t-label font-bold text-ink-muted uppercase tracking-wider text-[10px]">
+          Civic Services &amp; Reporting
+        </span>
+
+        <div className="grid grid-cols-1 gap-2">
+          {/* Describe a Hazard */}
           <button
             type="button"
             onClick={() => navigate("/report")}
-            className="flex w-full items-center gap-4 border-b border-line py-4 text-left"
+            className="group flex w-full items-center gap-3.5 p-3 rounded-lg bg-white border border-line hover:border-brand-edge transition-all text-left"
+            style={{ borderLeft: '3px solid var(--color-brand-mid)' }}
           >
-            <PencilLine width={20} height={20} className="text-brand" aria-hidden="true" />
-            <span className="min-w-0 flex-1">
-              <span className="t-subhead block">Describe a problem</span>
-              <span className="t-body-sm block text-ink-muted">
-                Flooding, a broken drain, a pothole, debris
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                 style={{ background: 'var(--color-brand-wash)' }}>
+              <PencilLine className="w-4 h-4" style={{ color: 'var(--color-brand-mid)' }} aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[13px] font-bold text-ink block leading-tight group-hover:text-brand transition-colors">
+                Describe a Hazard
               </span>
-            </span>
-            <ChevronRight width={18} height={18} className="text-ink-faint" aria-hidden="true" />
+              <span className="text-[11px] text-ink-muted block mt-0.5 leading-snug">
+                Flooding, road debris, infrastructure damage
+              </span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-brand group-hover:translate-x-0.5 transition-all shrink-0" aria-hidden="true" />
           </button>
 
+          {/* Track a Report */}
           <button
             type="button"
             onClick={() => navigate("/track")}
-            className="flex w-full items-center gap-4 border-b border-line py-4 text-left"
+            className="group flex w-full items-center gap-3.5 p-3 rounded-lg bg-white border border-line hover:border-brand-edge transition-all text-left"
+            style={{ borderLeft: '3px solid var(--color-brand-mid)' }}
           >
-            <Search width={20} height={20} className="text-brand" aria-hidden="true" />
-            <span className="min-w-0 flex-1">
-              <span className="t-subhead block">Check a code</span>
-              <span className="t-body-sm block text-ink-muted">
-                See what happened to a report you filed
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                 style={{ background: 'var(--color-brand-wash)' }}>
+              <Search className="w-4 h-4" style={{ color: 'var(--color-brand-mid)' }} aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[13px] font-bold text-ink block leading-tight group-hover:text-brand transition-colors">
+                Track a Report
               </span>
-            </span>
-            <ChevronRight width={18} height={18} className="text-ink-faint" aria-hidden="true" />
+              <span className="text-[11px] text-ink-muted block mt-0.5 leading-snug">
+                Check status with your tracking code
+              </span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-brand group-hover:translate-x-0.5 transition-all shrink-0" aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <p className="t-body-sm mt-auto pt-8 text-ink-faint">
-        SARO is Bikol for “one”. One place to report anything in Legazpi City — we send it
-        to the right office for you.
+      {/* ── 4. Rotating Safety Advisory Card ────────────────────────────── */}
+      <div className="p-3.5 rounded-lg border border-line bg-gradient-to-r from-slate-50 to-brand-wash/40 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-brand-wash text-brand flex items-center justify-center shrink-0">
+              <TipIcon className="w-3.5 h-3.5" aria-hidden="true" />
+            </div>
+            <div>
+              <span className="text-[11px] font-extrabold text-ink block leading-tight">
+                {currentTip.title}
+              </span>
+              <span className="text-[9px] font-semibold text-brand tracking-wide uppercase">
+                {currentTip.category}
+              </span>
+            </div>
+          </div>
+
+          {/* Carousel controls */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handlePrevTip}
+              className="p-1 rounded hover:bg-white text-ink-muted transition-colors"
+              aria-label="Previous safety tip"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[10px] font-bold text-ink-faint px-0.5">
+              {tipIndex + 1}/{SAFETY_TIPS.length}
+            </span>
+            <button
+              type="button"
+              onClick={handleNextTip}
+              className="p-1 rounded hover:bg-white text-ink-muted transition-colors"
+              aria-label="Next safety tip"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-ink-muted leading-relaxed">
+          {currentTip.tip}
+        </p>
+      </div>
+
+      {/* ── 5. Command Center Status ─────────────────────────────────────────── */}
+      <div className="p-3 rounded-lg border border-line flex items-center justify-between gap-3"
+           style={{ background: 'var(--color-brand-wash)' }}>
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+               style={{ background: 'var(--color-brand)', color: 'white' }}>
+            <PhoneCall className="w-3.5 h-3.5" aria-hidden="true" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[12px] font-bold text-ink leading-tight">Legazpi Command Center</span>
+            <span className="text-[10px] text-ink-muted leading-tight mt-0.5 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-status-resolved-ink animate-pulse shrink-0 inline-block" />
+              Online — CDRRMO 24/7
+            </span>
+          </div>
+        </div>
+        <a href="tel:911" className="text-[11px] font-bold px-2.5 py-1 rounded-md transition-colors"
+           style={{ background: 'var(--color-brand)', color: 'white' }}>
+          Call 911
+        </a>
+      </div>
+
+      {/* ── 6. Footer ────────────────────────────────────────────────────────── */}
+      <p className="text-[11px] text-ink-faint text-center leading-relaxed pt-0.5">
+        SARO is Bikol for &ldquo;one&rdquo;. One front door for emergency reporting &amp; hazard tracking in Legazpi City.
       </p>
     </div>
   );

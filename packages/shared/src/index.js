@@ -13,6 +13,10 @@ export {
   getOffices,
   getCategories,
   getBarangays,
+  CRITICAL_CATEGORIES,
+  URGENT_CATEGORIES,
+  getCategoryTier,
+  isEmergencyCategory,
   // resident reads (RPC only)
   getReportByTrackingCode,
   getStatusHistory,
@@ -58,16 +62,31 @@ export {
   getHazardZones,
   getVolcanicAlert,
   setVolcanicAlert,
+  MOCK_LIVE_VOLCANIC_ALERT,
+  toggleMockVolcanoFeed,
+  isMockVolcanoFeedActive,
   getRainfall,
+  getEvacuationCenters,
+  getAccidentBlackspots,
+  getEvacuationRoute,
   // profiles
   getProfile,
+  getProfiles,
+  updateProfile,
+  checkAccountHistory,
+  deleteProfile,
+  // resident accounts & audit logs
+  getResidentAccounts,
+  updateResidentProfile,
+  deleteResidentAccount,
+  getResidentDeletionLogs,
 } from "./api/index.js";
 
 /* ── AI (gemini-proxy Edge Function) ─────────────────────────────────────────
  * One client, two modes. Describe's structuring call and the public assistant
  * share it rather than each holding their own integration.
  */
-export { askAssistant, structureDescription } from "./api/proxy.js";
+export { askAssistant, polishText } from "./api/proxy.js";
 
 /* ── Emergency detection (runs in the browser, before any network call) ──── */
 export {

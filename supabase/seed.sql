@@ -3,12 +3,9 @@
 -- Runs automatically on `supabase db reset` (local). To load it into the
 -- linked remote project:  supabase db push && psql "$DB_URL" -f supabase/seed.sql
 --
--- Contains reference data (offices, barangays, routing table) and a spread of
--- realistic reports: mixed statuses, mixed ages, two natural clusters, one
--- false report, one proxy report. Staff accounts are NOT seeded here — they
--- need auth.users rows, which is what scripts/create-staff-users.mjs is for.
---
--- Safe to re-run: everything is idempotent on a natural key.
+-- Contains reference data (offices, barangays, routing table), evacuation centers,
+-- accident blackspots, gap log entries, and a comprehensive spread of realistic reports
+-- across every connected office, barangay, and pipeline status.
 
 set search_path = public, extensions;
 
@@ -27,9 +24,6 @@ on conflict (short_name) do nothing;
 
 -- ── Barangays ───────────────────────────────────────────────────────────────
 
--- Boundaries are small squares around each barangay centre. Good enough for
--- point-in-polygon assignment in a prototype; replace with the city's real
--- shapefile before this goes anywhere near production.
 insert into public.barangays (name, is_coastal, boundary)
 select
   v.name,
@@ -80,11 +74,29 @@ from (values
 join public.offices o on o.short_name = v.office_short_name
 on conflict (category) do nothing;
 
+-- ── Evacuation Centers ───────────────────────────────────────────────────────
+
+insert into public.evacuation_centers (name, address, lat, lng, capacity, current_occupancy, status, notes)
+values
+  ('Legazpi City Evacuation Center (Ibalong Center)', 'Bitano, Legazpi City', 13.1425, 123.7485, 800, 45, 'open', 'Primary multi-purpose disaster shelter equipped with generator and water supply.'),
+  ('Rawis Multi-Purpose Evacuation Center', 'Barangay Rawis, Legazpi City', 13.1610, 123.7540, 500, 0, 'ready', 'Barangay disaster resilience hall with medical triage room.'),
+  ('Banquerohan Disaster Operations Center', 'Banquerohan, Legazpi City', 13.1180, 123.7220, 650, 0, 'ready', 'High-ground shelter for Mayon southeast sector evacuees.'),
+  ('Tapo-Tapo Elementary Shelter', 'Barangay Tapo-Tapo, Legazpi City', 13.1350, 123.7150, 350, 0, 'ready', 'Secondary designated evacuation site with emergency provisions.'),
+  ('Oro Site National High School Evacuation Gym', 'Oro Site, Legazpi City', 13.1390, 123.7460, 400, 0, 'ready', 'Equipped with medical station and sanitation facilities.')
+on conflict do nothing;
+
+-- ── Accident Blackspots ──────────────────────────────────────────────────────
+
+insert into public.accident_blackspots (name, location_label, lat, lng, incident_count, severity, last_reported_at)
+values
+  ('Yawa Bridge Intersection Blackspot', 'Yawa Bridge, Rawis Highway', 13.1550, 123.7480, 14, 'critical', now() - interval '2 hours'),
+  ('Legazpi Port-Tahao Road Curve', 'Tahao Road, Barangay 15', 13.1385, 123.7410, 9, 'high', now() - interval '1 day'),
+  ('Washington Drive Junction', 'Washington Drive, Bitano', 13.1460, 123.7380, 6, 'moderate', now() - interval '3 days'),
+  ('Rizal St. & Quezon Ave. Intersection', 'Rizal Street Corner Quezon Ave', 13.1410, 123.7440, 11, 'critical', now() - interval '5 hours'),
+  ('Daraga-Legazpi Boundary Junction', 'Maharlika Highway, Daraga Border', 13.1300, 123.7280, 8, 'high', now() - interval '12 hours')
+on conflict do nothing;
+
 -- ── Reports ─────────────────────────────────────────────────────────────────
---
--- Inserted oldest first so the clustering trigger sees the same arrival order
--- it would in production. Routing, barangay assignment, status history and
--- clustering are all produced by triggers — nothing below sets them by hand.
 
 do $$
 declare
@@ -98,72 +110,77 @@ begin
 
   for r in
     select * from (values
-      -- category,        description,                                                                              lat,      lng,       age_hours, final_status,   device
-      ('flood',           'Flooding near Bitano market line. Water level rising fast by the bakery.',                13.1438,  123.7448,  96,  'resolved',    'dev_seed_a1b2c3d4e5f6'),
-      ('pothole',         'Deep pothole on the northbound lane, two tricycles already damaged.',                     13.1490,  123.7380,  80,  'resolved',    'dev_seed_b2c3d4e5f6a1'),
-      ('open_drain',      'Manhole cover missing outside the elementary school gate.',                               13.1415,  123.7410,  62,  'in_progress', 'dev_seed_c3d4e5f6a1b2'),
-      ('typhoon_debris',  'Fallen acacia branch blocking half the road after last night''s wind.',                   13.1395,  123.7465,  50,  'in_progress', 'dev_seed_d4e5f6a1b2c3'),
-      ('water_contam',    'Tap water running brown since yesterday morning, whole street affected.',                 13.1360,  123.7330,  44,  'assigned',    'dev_seed_e5f6a1b2c3d4'),
-      ('bridge_damage',   'Crack widening on the seawall walkway near the pier.',                                    13.1320,  123.7560,  30,  'assigned',    'dev_seed_f6a1b2c3d4e5'),
-      ('traffic_obstruction','Traffic light at the junction stuck on red in all directions.',                        13.1420,  123.7540,  26,  'assigned',    'dev_seed_a1b2c3d4e5f7'),
-      ('landslide',       'Soil slipping down the cut slope above the barangay road.',                               13.1180,  123.7250,  20,  'in_progress', 'dev_seed_b2c3d4e5f6a8'),
-      ('coastal_hazard',  'Storm surge pushing over the breakwater at high tide.',                                   13.1650, 123.7420,  14,  'assigned',    'dev_seed_c3d4e5f6a1b9'),
-      ('medical',         'Elderly neighbour collapsed at home, breathing but unresponsive.',                        13.1500,  123.7490,   9,  'resolved',    'dev_seed_d4e5f6a1b2ca'),
-      ('accident',        'Motorcycle and jeepney collision at the corner, one rider on the ground.',                13.1200,  123.7100,   6,  'in_progress', 'dev_seed_e5f6a1b2c3db'),
-      ('crime',           'Group fighting outside the sari-sari store, one person holding a bottle.',                13.1610,  123.7510,   4,  'assigned',    'dev_seed_f6a1b2c3d4ec'),
-      -- Cluster 1: three independent reports of the same fire, minutes apart, same block.
-      ('fire',            'Smoke coming from the second floor of the corner house.',                                 13.1444,  123.7452,   3,  'in_progress', 'dev_seed_a1b2c3d4e5fd'),
-      ('fire',            'House on fire near the bakery, flames visible from the street now.',                      13.1445,  123.7453,   3,  'in_progress', 'dev_seed_b2c3d4e5f6ae'),
-      ('fire',            'Big fire two houses down from us, please send help.',                                     13.1443,  123.7451,   3,  'in_progress', 'dev_seed_c3d4e5f6a1bf'),
-      -- Cluster 2: two reports of the same flooded underpass.
-      ('flood',           'Underpass completely flooded, cars turning back.',                                        13.1489,  123.7381,   2,  'assigned',    'dev_seed_d4e5f6a1b2cg'),
-      ('flood',           'Water up to knee height at the underpass, nobody can pass.',                              13.1490,  123.7382,   2,  'assigned',    'dev_seed_e5f6a1b2c3dh'),
-      -- Fresh, untriaged.
-      ('gas_leak',        'Strong LPG smell along the alley, cannot tell which house.',                              13.1365,  123.7335,   1,  'received',    'dev_seed_f6a1b2c3d4ei'),
-      ('pothole',         'Sunken patch forming after the rain, getting deeper each day.',                           13.1210,  123.7110,   1,  'received',    'dev_seed_a1b2c3d4e5fj')
+      -- CDRRMO
+      ('flood',                'Flooding near Bitano market line. Water level rising fast by the bakery.',                13.1438,  123.7448,  96,  'closed_confirmed', 'dev_seed_a1'),
+      ('landslide',            'Soil slipping down the cut slope above the barangay road in Homapon.',                   13.1180,  123.7250,  20,  'in_progress',      'dev_seed_a2'),
+      ('typhoon_debris',       'Fallen acacia branch blocking half the road after last night''s wind in Oro Site.',      13.1395,  123.7465,  50,  'in_progress',      'dev_seed_a3'),
+      -- Legazpi 911
+      ('medical',              'Elderly neighbour collapsed at home, breathing but unresponsive in Bonot.',               13.1500,  123.7490,   9,  'resolved',         'dev_seed_b1'),
+      ('accident',             'Motorcycle and jeepney collision at Taysan corner, one rider injured.',                   13.1200,  123.7100,   6,  'in_progress',      'dev_seed_b2'),
+      -- City Engineering
+      ('pothole',              'Deep pothole on the northbound lane in Gogon, two tricycles damaged.',                    13.1490,  123.7380,  80,  'resolved',         'dev_seed_c1'),
+      ('open_drain',           'Manhole cover missing outside the elementary school gate in Em''s Barrio.',               13.1415,  123.7410,  62,  'reopened',         'dev_seed_c2'),
+      ('bridge_damage',        'Crack widening on the seawall walkway near Puro pier.',                                   13.1320,  123.7560,  30,  'assigned',         'dev_seed_c3'),
+      -- Public Safety Office
+      ('traffic_obstruction',  'Traffic light at Victory Village junction stuck on red in all directions.',              13.1420,  123.7540,  26,  'assigned',         'dev_seed_d1'),
+      -- BFP Legazpi (Cluster 1: 3 fire reports at same spot in Bitano)
+      ('fire',                 'Smoke coming from the second floor of the corner house in Bitano.',                      13.1444,  123.7452,   3,  'in_progress',      'dev_seed_e1'),
+      ('fire',                 'House on fire near the bakery in Bitano, flames visible from street.',                    13.1445,  123.7453,   3,  'in_progress',      'dev_seed_e2'),
+      ('fire',                 'Big fire two houses down from us in Bitano, please send BFP trucks.',                    13.1443,  123.7451,   3,  'in_progress',      'dev_seed_e3'),
+      ('gas_leak',             'Strong LPG smell along alley in Cruzada, cannot tell which house.',                       13.1365,  123.7335,   1,  'received',         'dev_seed_e4'),
+      -- PNP Legazpi
+      ('crime',                'Group fighting outside the sari-sari store in Rawis, bottle broken.',                     13.1610,  123.7510,   4,  'assigned',         'dev_seed_f1'),
+      -- City Health Office
+      ('water_contam',         'Tap water running brown since yesterday in Cruzada, whole street affected.',             13.1360,  123.7330,  44,  'assigned',         'dev_seed_g1'),
+      -- Coast Guard Station
+      ('coastal_hazard',       'Storm surge pushing over the breakwater at Dap-Dap during high tide.',                    13.1650,  123.7420,  14,  'assigned',         'dev_seed_h1'),
+      -- Cluster 2: Underpass Flooding in Gogon (2 reports)
+      ('flood',                'Gogon underpass completely flooded, cars turning back.',                                 13.1489,  123.7381,   2,  'assigned',         'dev_seed_i1'),
+      ('flood',                'Water up to knee height at Gogon underpass, zero access.',                               13.1490,  123.7382,   2,  'assigned',         'dev_seed_i2'),
+      -- Fresh received report
+      ('pothole',              'Sunken pavement patch forming after heavy rain near Taysan boundary.',                    13.1210,  123.7110,   1,  'received',         'dev_seed_j1'),
+      -- Closed Unconfirmed report
+      ('traffic_obstruction',  'Illegal parking blocking fire lane near Bonot commercial complex.',                       13.1510,  123.7495,  36,  'closed_unconfirmed','dev_seed_k1')
     ) as t(category, description, lat, lng, age_hours, final_status, device)
   loop
     insert into public.reports (category, description, lat, lng, reporter_device_id, created_at)
     values (r.category, r.description, r.lat, r.lng, r.device, now() - make_interval(hours => r.age_hours))
     returning id into new_id;
 
-    -- Walk the report forward through the pipeline so status history is real
-    -- rather than a single synthetic row.
-    if r.final_status in ('assigned', 'in_progress', 'resolved') then
+    if r.final_status in ('assigned', 'in_progress', 'resolved', 'closed_confirmed', 'closed_unconfirmed', 'reopened') then
       update public.reports set status = 'assigned' where id = new_id;
     end if;
-    if r.final_status in ('in_progress', 'resolved') then
+    if r.final_status in ('in_progress', 'resolved', 'closed_confirmed', 'closed_unconfirmed', 'reopened') then
       update public.reports set status = 'in_progress' where id = new_id;
     end if;
-    if r.final_status = 'resolved' then
+    if r.final_status in ('resolved', 'closed_confirmed', 'closed_unconfirmed') then
       update public.reports set status = 'resolved' where id = new_id;
+    end if;
+    if r.final_status = 'closed_confirmed' then
+      update public.reports set status = 'closed_confirmed' where id = new_id;
+    elsif r.final_status = 'closed_unconfirmed' then
+      update public.reports set status = 'closed_unconfirmed' where id = new_id;
+    elsif r.final_status = 'reopened' then
+      update public.reports set status = 'reopened' where id = new_id;
     end if;
   end loop;
 
-  -- One report a resident filed for a neighbour.
-  --
-  -- This is the resident app's "reporting for someone else" toggle, which sets
-  -- is_proxy_report and makes a callback number mandatory — the person who
-  -- actually has the problem has no phone in the app, so the office needs a way
-  -- to reach somebody.
-  --
-  -- It is NOT the removed File on Behalf feature, which had an official file
-  -- from the admin app. That is gone (migration 17); this is not.
-  insert into public.reports (category, description, lat, lng, is_proxy_report, callback_number, reporter_device_id, created_at)
+  -- Recurring spot history: Market Entrance Drain in Em's Barrio (multiple occurrences over time)
+  insert into public.reports (category, description, lat, lng, reporter_device_id, created_at)
   values (
     'open_drain',
-    'Reporting for my neighbour: broken drain cover on the corner, she has no phone.',
-    13.1362, 123.7332, true, '09170001234', 'dev_seed_neighbour001', now() - interval '5 hours'
-  );
+    'Recurring issue: Drain cover broken again at Em''s Barrio school gate following heavy truck delivery.',
+    13.1415, 123.7410, 'dev_seed_recurring01', now() - interval '120 hours'
+  ) returning id into new_id;
+  update public.reports set status = 'resolved' where id = new_id;
 
-  -- One report an office has since verified as false.
+  -- False report entry
   insert into public.reports (category, description, lat, lng, reporter_device_id, created_at)
   values (
     'fire',
-    'Smoke near the plaza.',
+    'False alarm: Smoke reported near plaza was controlled trash burning.',
     13.1400, 123.7440, 'dev_seed_falsereport01', now() - interval '36 hours'
-  )
-  returning id into new_id;
+  ) returning id into new_id;
   update public.reports set is_false_report = true, status = 'resolved' where id = new_id;
 end $$;
 
@@ -178,5 +195,7 @@ values
   ('Ano ang hotline ng CDRRMO?',                                           true,  'hotlines',        true,  now() - interval '20 hours'),
   ('Pwede po ba mag-report kung wala akong account?',                      true,  'accounts',        true,  now() - interval '18 hours'),
   ('Gaano katagal bago ma-resolve ang report sa lubak?',                   false, 'sla_expectations',false, now() - interval '8 hours'),
-  ('Saan ko makikita ang status ng report ko?',                            true,  'tracking',        true,  now() - interval '3 hours')
+  ('Saan ko makikita ang status ng report ko?',                            true,  'tracking',        true,  now() - interval '3 hours'),
+  ('Saan ang pinakamalapit na evacuation center sa Rawis pag bumaha?',      false, 'evacuation',      false, now() - interval '5 hours'),
+  ('Sino ang namamahala sa pag-aayos ng nabasag na seawall sa Puro?',       false, 'infrastructure',  false, now() - interval '2 hours')
 on conflict do nothing;

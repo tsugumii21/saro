@@ -1,3 +1,5 @@
+@import "maplibre-gl/dist/maplibre-gl.css";
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * SARO design tokens — the run-card system.
  *
@@ -211,7 +213,11 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-code, kbd, samp, pre, .font-mono {
+code,
+kbd,
+samp,
+pre,
+.font-mono {
   font-family: var(--font-mono);
 }
 
@@ -229,42 +235,95 @@ code, kbd, samp, pre, .font-mono {
  * A fixed set. Nothing in either app sets an ad-hoc font-size.
  */
 
-.t-display { font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.022em; }
-.t-title   { font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: -0.016em; }
-.t-heading { font-size: 20px; line-height: 26px; font-weight: 700; letter-spacing: -0.011em; }
-.t-subhead { font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.006em; }
-.t-body    { font-size: 15px; line-height: 22px; font-weight: 400; }
-.t-body-sm { font-size: 13px; line-height: 19px; font-weight: 400; }
+.t-display {
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: 800;
+  letter-spacing: -0.022em;
+}
+
+.t-title {
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 700;
+  letter-spacing: -0.016em;
+}
+
+.t-heading {
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 700;
+  letter-spacing: -0.011em;
+}
+
+.t-subhead {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+
+.t-body {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 400;
+}
+
+.t-body-sm {
+  font-size: 13px;
+  line-height: 19px;
+  font-weight: 400;
+}
 
 /* Labels are the form world's small caps: field names, column heads, tab
  * legends. Uppercase with real tracking so they read as system chrome and
  * never compete with content. */
 .t-label {
-  font-size: 11px; line-height: 14px; font-weight: 700;
-  letter-spacing: 0.07em; text-transform: uppercase;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
+
 .t-micro {
-  font-size: 10px; line-height: 13px; font-weight: 700;
-  letter-spacing: 0.09em; text-transform: uppercase;
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 /* Mono: codes, serials, timestamps, coordinates, counts. */
 .t-code-xl {
   font-family: var(--font-mono);
-  font-size: 34px; line-height: 38px; font-weight: 700; letter-spacing: 0.08em;
+  font-size: 34px;
+  line-height: 38px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
+
 .t-code {
   font-family: var(--font-mono);
-  font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0.06em;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
+
 .t-data {
   font-family: var(--font-mono);
-  font-size: 13px; line-height: 18px; font-weight: 400;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
+
 .t-data-sm {
   font-family: var(--font-mono);
-  font-size: 11px; line-height: 15px; font-weight: 400;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -276,6 +335,7 @@ code, kbd, samp, pre, .font-mono {
 .saro-clip {
   clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
 }
+
 .saro-clip-lg {
   clip-path: polygon(18px 0, 100% 0, 100% 100%, 0 100%, 0 18px);
 }
@@ -304,13 +364,11 @@ code, kbd, samp, pre, .font-mono {
  * track across a wide table without needing zebra striping.
  */
 .saro-ruled {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 35px,
-    var(--color-rule-faint) 35px,
-    var(--color-rule-faint) 36px
-  );
+  background-image: repeating-linear-gradient(to bottom,
+      transparent 0,
+      transparent 35px,
+      var(--color-rule-faint) 35px,
+      var(--color-rule-faint) 36px);
 }
 
 /* ═══ Buttons ═════════════════════════════════════════════════════════════ */
@@ -333,30 +391,56 @@ code, kbd, samp, pre, .font-mono {
   transition: background-color 120ms linear, border-color 120ms linear, color 120ms linear;
   white-space: nowrap;
 }
-.saro-btn:disabled { opacity: 0.42; cursor: not-allowed; }
+
+.saro-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
 
 .saro-btn-primary {
   background: var(--color-brand);
   color: #fff;
 }
-.saro-btn-primary:hover:not(:disabled) { background: var(--color-brand-mid); }
+
+.saro-btn-primary:hover:not(:disabled) {
+  background: var(--color-brand-mid);
+}
 
 .saro-btn-secondary {
   background: var(--color-surface);
   color: var(--color-ink);
   border-color: var(--color-line-strong);
 }
-.saro-btn-secondary:hover:not(:disabled) { background: var(--color-raised); }
+
+.saro-btn-secondary:hover:not(:disabled) {
+  background: var(--color-raised);
+}
 
 .saro-btn-ghost {
   background: transparent;
   color: var(--color-ink-muted);
 }
-.saro-btn-ghost:hover:not(:disabled) { background: var(--color-sunken); color: var(--color-ink); }
 
-.saro-btn-sm { height: 30px; font-size: 12px; padding: 0 var(--spacing-3); }
-.saro-btn-lg { height: 52px; font-size: 16px; padding: 0 var(--spacing-6); }
-.saro-btn-block { width: 100%; }
+.saro-btn-ghost:hover:not(:disabled) {
+  background: var(--color-sunken);
+  color: var(--color-ink);
+}
+
+.saro-btn-sm {
+  height: 30px;
+  font-size: 12px;
+  padding: 0 var(--spacing-3);
+}
+
+.saro-btn-lg {
+  height: 52px;
+  font-size: 16px;
+  padding: 0 var(--spacing-6);
+}
+
+.saro-btn-block {
+  width: 100%;
+}
 
 /* ═══ Fields ══════════════════════════════════════════════════════════════ */
 
@@ -372,9 +456,19 @@ code, kbd, samp, pre, .font-mono {
   border-radius: var(--radius-xs);
   padding: var(--spacing-3) var(--spacing-3);
 }
-.saro-field::placeholder { color: var(--color-ink-faint); }
-.saro-field:focus { border-color: var(--color-brand-bright); outline-offset: 0; }
-.saro-field[aria-invalid="true"] { border-color: var(--color-alert); }
+
+.saro-field::placeholder {
+  color: var(--color-ink-faint);
+}
+
+.saro-field:focus {
+  border-color: var(--color-brand-bright);
+  outline-offset: 0;
+}
+
+.saro-field[aria-invalid="true"] {
+  border-color: var(--color-alert);
+}
 
 .saro-field-code {
   font-family: var(--font-mono);
@@ -421,29 +515,72 @@ code, kbd, samp, pre, .font-mono {
 
 /* ═══ Utilities ═══════════════════════════════════════════════════════════ */
 
-.saro-hairline { border-color: var(--color-line); }
+.saro-hairline {
+  border-color: var(--color-line);
+}
 
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 
-.leaflet-container { width: 100%; height: 100%; z-index: 10; }
-.saro-marker, .saro-pin { background: none !important; border: none !important; }
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Ensure MapLibre info icon button is removed everywhere */
+.maplibregl-ctrl-attrib-button {
+  display: none !important;
+}
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+}
+
+.saro-marker,
+.saro-pin {
+  background: none !important;
+  border: none !important;
+}
 
 @keyframes saro-rise {
-  from { transform: translateY(8px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
-.saro-rise { animation: saro-rise 160ms cubic-bezier(0.2, 0, 0.13, 1); }
+
+.saro-rise {
+  animation: saro-rise 160ms cubic-bezier(0.2, 0, 0.13, 1);
+}
 
 /* The Panic control's held state. One slow, deliberate sweep — a physical
  * dwell, not a decorative pulse. Nothing else in the product animates in
  * panic vermilion. */
 @keyframes saro-hold {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .saro-rise { animation: none; }
-  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .saro-rise {
+    animation: none;
+  }
+
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

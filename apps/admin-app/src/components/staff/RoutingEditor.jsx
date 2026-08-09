@@ -58,10 +58,13 @@ export default function RoutingEditor() {
 
   const officeBy = useMemo(() => Object.fromEntries(offices.map((o) => [o.id, o])), [offices]);
 
-  // The fallback office is the one a category with no office of its own falls
-  // to. Showing which office holds that job matters: it is where every
-  // unrouted report silently accumulates.
-  const fallbackCount = rules.filter((r) => !r.responsible_office_id).length;
+  const hazardRules = useMemo(() => {
+    return rules.filter(
+      (r) => r.category !== "emergency_unspecified" && !r.label?.toLowerCase().includes("panic")
+    );
+  }, [rules]);
+
+  const fallbackCount = hazardRules.filter((r) => !r.responsible_office_id && !r.office_id).length;
 
   const startEdit = (rule) => {
     setError("");
@@ -114,7 +117,7 @@ export default function RoutingEditor() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="t-heading">Routing table</h1>
+          <h1 className="t-heading">Routing Table</h1>
           <p className="t-body-sm mt-1 text-ink-muted">
             Where each kind of report goes. Edited by hand, never by a model — every change
             is logged with who made it.
@@ -127,14 +130,14 @@ export default function RoutingEditor() {
             aria-pressed={showLog}
           >
             <History width={14} height={14} />
-            {showLog ? "Hide changes" : "Recent changes"}
+            {showLog ? "Hide Changes" : "Recent Changes"}
           </button>
           <button
             onClick={() => { setEditing("__new__"); setDraft(BLANK); setError(""); }}
             className="saro-btn saro-btn-primary saro-btn-sm"
           >
             <Plus width={14} height={14} />
-            New rule
+            New Rule
           </button>
         </div>
       </div>
@@ -167,13 +170,13 @@ export default function RoutingEditor() {
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-raised">
-              {["Category", "Goes to", "Urgency", "SLA", "Closed with", ""].map((h) => (
+              {["Category", "Goes To", "Urgency", "SLA", "Closed With", ""].map((h) => (
                 <th key={h} className="t-label px-3 py-2.5 text-left text-ink-faint">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rules.map((rule) => {
+            {hazardRules.map((rule) => {
               const office = officeBy[rule.responsible_office_id ?? rule.office_id];
               return (
                 <tr key={rule.category} className="border-t border-line">

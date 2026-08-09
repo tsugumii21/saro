@@ -39,6 +39,44 @@ export const INITIAL_STATUS = "received";
 /** Status that requires an attached resolution photo before it can be set. */
 export const RESOLUTION_MEDIA_REQUIRED_STATUS = "resolved";
 
+/* ── Auto-Archiving ──────────────────────────────────────────────────────── */
+
+/**
+ * Resolved and Closed reports stop rendering as active map pins after this many hours.
+ * Default: 72 hours (3 days). Adjust here to change city-wide threshold.
+ */
+export const DEFAULT_AUTO_ARCHIVE_HOURS = 72;
+
+/**
+ * Evaluates whether a report should be hidden from active live map views.
+ *
+ * Rules:
+ * - Status must be 'resolved', 'closed_confirmed', or 'closed_unconfirmed'.
+ * - Age since resolution (resolved_at, updated_at, or created_at) must exceed maxAgeHours.
+ * - 'reopened', 'received', 'assigned', and 'in_progress' reports are NEVER archived.
+ *
+ * @param {object} report
+ * @param {number} maxAgeHours Default 72 hours
+ * @returns {boolean}
+ */
+export function isArchivedReport(report, maxAgeHours = DEFAULT_AUTO_ARCHIVE_HOURS) {
+  if (!report) return false;
+  const status = report.status;
+  const isResolvedOrClosed =
+    status === "resolved" ||
+    status === "closed_confirmed" ||
+    status === "closed_unconfirmed";
+
+  if (!isResolvedOrClosed) return false;
+
+  const timestamp = report.resolved_at || report.updated_at || report.created_at;
+  if (!timestamp) return false;
+
+  const ageMs = Date.now() - new Date(timestamp).getTime();
+  const thresholdMs = maxAgeHours * 3600000;
+  return ageMs > thresholdMs;
+}
+
 /* ── Roles ───────────────────────────────────────────────────────────────── */
 
 // "guest" is a client-side label for nobody being signed in — it is not a value
@@ -108,7 +146,9 @@ export const CLIENT_STORAGE_KEYS = {
   /** Version of the RA 10173 notice this device has acknowledged. */
   CONSENT_ACK: "saro_consent_ack",
   /** Timestamp of the last Panic press, for the local 15-minute repeat check. */
-  PANIC_LAST_AT: "saro_panic_last_at"
+  PANIC_LAST_AT: "saro_panic_last_at",
+  PERMISSION_PRIMING_DONE: "saro_perm_priming_done",
+  PERMISSIONS_STATE: "saro_permissions_state"
 };
 
 /* ── Data privacy notice ─────────────────────────────────────────────────── */

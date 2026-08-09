@@ -2,16 +2,17 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   AlertTriangle, MapPin, Navigation, Camera, Mic, MicOff,
-  Send, ChevronDown, Phone, Users, CheckCircle2, X, Plus, WifiOff, Search, Check,
+  Send, ChevronDown, CheckCircle2, X, Plus, WifiOff, Search, Check,
   Waves, Mountain, Wind, Ambulance, Car, Flame, Wrench, ShieldAlert, Droplets, Anchor,
-  Lock, DoorOpen, Sparkles
+  Lock, DoorOpen, UserPlus, BellRing, Zap, FileText, Siren
 } from "lucide-react";
 import { booleanPointInPolygon, point } from "@turf/turf";
 import {
   getCategories, getBarangays, getOffices, createReport, addReportMedia,
   validateReportDraft, LEGAZPI_CENTER, CLIENT_STORAGE_KEYS, useAuth,
-  structureDescription, detectEmergencyInDescription,
+  detectEmergencyInDescription,
   enqueueReport, removeFromOutbox, rememberReport, requestBackgroundSync,
+  getCategoryTier, isEmergencyCategory,
 } from "@saro/shared";
 import { HazardMap } from "@saro/ui";
 import ResidentAuthScreen from "./ResidentAuthScreen";
@@ -126,8 +127,6 @@ export default function ReportFormScreen() {
   const [barangayId, setBarangayId] = useState("");
   const [barangayAutoDetected, setBarangayAutoDetected] = useState(false);
   const [photos, setPhotos] = useState([]); // Multiple photos support
-  const [callbackNumber, setCallbackNumber] = useState("");
-  const [isProxy, setIsProxy] = useState(false);
 
   const [boundsError, setBoundsError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -138,15 +137,10 @@ export default function ReportFormScreen() {
 
   // Speech recognition state
   const [isListening, setIsListening] = useState(false);
-  const [speechLang, setSpeechLang] = useState("en-PH");
+  const [speechLang] = useState("fil-PH");
   const recognitionRef = useRef(null);
   const speechSupported = typeof window !== "undefined" &&
     (window.SpeechRecognition || window.webkitSpeechRecognition);
-
-  // Describe-flow structuring
-  const [analysing, setAnalysing] = useState(false);
-  const [aiResult, setAiResult] = useState(null);
-  const [aiDismissed, setAiDismissed] = useState(false);
 
   /**
    * The emergency fast-track, decided in this browser, on every keystroke.
@@ -204,8 +198,7 @@ export default function ReportFormScreen() {
   // nothing but the device. Only the third can fail, and it can only ever add.
   const isEmergencyReport =
     Boolean(selectedCategory?.is_emergency) ||
-    Boolean(keywordEmergency) ||
-    Boolean(aiResult?.isEmergency);
+    Boolean(keywordEmergency);
 
   // Guests must sign in for standard reports only.
   const needsAccount = isGuest && Boolean(selectedCategory) && !isEmergencyReport;
@@ -280,43 +273,6 @@ export default function ReportFormScreen() {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  /**
-   * Ask the Edge Function to turn what was typed or spoken into a category and
-   * a dispatcher summary.
-   *
-   * Nothing here is applied silently. The suggestion lands in the form as a
-   * pre-selection the resident can see and change, which is the difference
-   * between a helpful guess and a misrouted report: a wrong category costs one
-   * tap to fix, and if it were auto-filed it would cost an office a day.
-   *
-   * Failure is not an error state. A timeout or a rate limit leaves the person
-   * with the form they already had, plus a note explaining they can carry on by
-   * hand — because they always could.
-   */
-  const analyseDescription = async () => {
-    const text = description.trim();
-    if (text.length < 8) return;
-
-    setAnalysing(true);
-    setAiDismissed(false);
-
-    const result = await structureDescription(text);
-    setAiResult(result);
-
-    // Only pre-select when the model actually matched a real category and said
-    // it was confident. A low-confidence guess pushed into the picker looks
-    // like a decision the resident made.
-    if (result.category && result.confidence === "high") {
-      const match = categories.find((c) => c.id === result.category);
-      if (match) {
-        setSelectedCategoryId(match.id);
-        setValidationErrors((prev) => ({ ...prev, category: "" }));
-      }
-    }
-
-    setAnalysing(false);
-  };
-
   // Web Speech API
   const toggleSpeech = (lang) => {
     if (!speechSupported) return;
@@ -352,8 +308,6 @@ export default function ReportFormScreen() {
       categoryId: selectedCategoryId,
       coords,
       description,
-      isProxy,
-      callbackNumber
     });
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -380,8 +334,6 @@ export default function ReportFormScreen() {
       lat: coords.lat,
       lng: coords.lng,
       barangay_id: barangayId || null,
-      callback_number: callbackNumber.trim() || null,
-      is_proxy_report: isProxy,
       // Urgent reports stay anonymous even for signed-in residents: filing
       // fast should never mean attaching your name.
       anonymous: fileAnonymously,
@@ -439,21 +391,8 @@ export default function ReportFormScreen() {
     return office?.short_name || office?.name || "";
   };
 
-  // Offline queued confirmation
-  // The login wall. Reached only from handleSubmit, only for a standard report
-  // filed by a guest. Everything typed so far stays in state, so signing in
-  // returns straight to a filled form rather than an empty one — and
-  // "Continue without an account" backs out to the same place.
-  if (showAuthWall) {
-    return (
-      <ResidentAuthScreen
-        mode="sign-up"
-        reason="Standard reports need an account so the office can follow up with you. Emergencies never do — pick an emergency category and you can file straight away, anonymously."
-        onCancel={() => setShowAuthWall(false)}
-        onSignedIn={() => setShowAuthWall(false)}
-      />
-    );
-  }
+  // The auth wall is now a modal overlay (rendered at the bottom of the JSX)
+  // so the form stays visible and all typed data is preserved in state.
 
   const clearForm = () => {
     setSubmitted(null);
@@ -463,11 +402,7 @@ export default function ReportFormScreen() {
     setCoords(null);
     setBarangayId("");
     setPhotos([]);
-    setCallbackNumber("");
-    setIsProxy(false);
     setValidationErrors({});
-    setAiResult(null);
-    setAiDismissed(false);
   };
 
   /* ── Queued: the report exists, it just has not arrived yet ────────────── */
@@ -539,7 +474,7 @@ export default function ReportFormScreen() {
   }
 
   return (
-    <div className="px-4 py-3 max-w-md mx-auto pb-24">
+    <div className="px-4 py-3 max-w-md mx-auto pb-4">
       <div className="mb-4">
         <h2 className="text-base font-bold text-ink">File a Hazard Report</h2>
         <p className="text-xs text-ink-muted mt-0.5">
@@ -577,9 +512,6 @@ export default function ReportFormScreen() {
               onChange={(e) => {
                 setDescription(e.target.value);
                 setValidationErrors((prev) => ({ ...prev, description: "" }));
-                // A stale suggestion about text that has since changed is worse
-                // than none: it looks like the system agreed with the new words.
-                if (aiResult) setAiResult(null);
               }}
               placeholder="May baha sa tabi kan eskwelahan, abot tuhod na…"
               className="saro-field w-full resize-none"
@@ -588,29 +520,21 @@ export default function ReportFormScreen() {
           </div>
 
           {speechSupported && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="t-label text-ink-faint">Speak instead</span>
-              {[
-                { code: "fil-PH", label: "Bikol / Tagalog" },
-                { code: "en-PH", label: "English" },
-              ].map((option) => {
-                const active = isListening && speechLang === option.code;
-                return (
-                  <button
-                    key={option.code}
-                    type="button"
-                    onClick={() => { setSpeechLang(option.code); toggleSpeech(option.code); }}
-                    aria-pressed={active}
-                    className="saro-btn saro-btn-secondary saro-btn-sm"
-                    style={active ? { borderColor: "var(--color-brand)", color: "var(--color-brand)" } : undefined}
-                  >
-                    {active ? <MicOff width={13} height={13} /> : <Mic width={13} height={13} />}
-                    {active ? "Stop" : option.label}
-                  </button>
-                );
-              })}
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => toggleSpeech()}
+                aria-pressed={isListening}
+                className={`saro-btn saro-btn-sm flex items-center gap-1.5 ${
+                  isListening ? "saro-btn-primary" : "saro-btn-secondary"
+                }`}
+              >
+                {isListening ? <MicOff width={13} height={13} /> : <Mic width={13} height={13} className="text-brand" />}
+                {isListening ? "Stop listening" : "Voice Input"}
+              </button>
+
               {isListening && (
-                <span className="t-body-sm text-brand" role="status">Listening…</span>
+                <span className="t-body-sm text-brand font-medium animate-pulse" role="status">Listening…</span>
               )}
             </div>
           )}
@@ -639,73 +563,11 @@ export default function ReportFormScreen() {
               </span>
             </p>
           )}
-
-          <button
-            type="button"
-            onClick={analyseDescription}
-            disabled={analysing || description.trim().length < 8}
-            className="saro-btn saro-btn-secondary saro-btn-block mt-3"
-          >
-            <Sparkles width={15} height={15} />
-            {analysing ? "Reading what you wrote…" : "Suggest a category for me"}
-          </button>
-
-          {/* Step 2: what it understood, shown back for correction. Nothing is
-              filed from here — this is a suggestion sitting next to a picker. */}
-          {aiResult && !aiDismissed && (
-            <div className="saro-clip saro-card mt-3 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <span className="t-label text-ink-faint">
-                  {aiResult.degraded ? "Could not check that" : "What SARO understood"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setAiDismissed(true)}
-                  aria-label="Dismiss suggestion"
-                  className="saro-btn saro-btn-ghost saro-btn-sm shrink-0"
-                >
-                  <X width={14} height={14} />
-                </button>
-              </div>
-
-              {aiResult.degraded ? (
-                <p className="t-body-sm mt-2 text-ink-muted">
-                  The city's assistant did not answer in time. Nothing is lost — pick the
-                  category yourself below and file as normal.
-                </p>
-              ) : (
-                <>
-                  <p className="t-body mt-2">{aiResult.summary}</p>
-
-                  <dl className="mt-3 flex flex-col gap-2 border-t border-rule pt-3">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <dt className="t-label text-ink-faint">Suggested category</dt>
-                      <dd className="t-body-sm font-bold">
-                        {aiResult.categoryLabel ?? "None — please choose one below"}
-                      </dd>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <dt className="t-label text-ink-faint">Confidence</dt>
-                      <dd className="t-body-sm">
-                        {aiResult.confidence === "high" ? "Reasonably sure" : "Not sure"}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  <p className="t-body-sm mt-3 text-ink-muted">
-                    {aiResult.confidence === "high"
-                      ? "Selected below. Change it if it is wrong — you decide, not the assistant."
-                      : "Not confident enough to choose for you. Pick the category below."}
-                  </p>
-                </>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Thumb-Friendly Un-truncated Category Picker */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-1">
             <label className="block text-xs font-bold text-ink uppercase tracking-wider">
               What Type of Hazard? <span className="text-alert">*</span>
             </label>
@@ -716,6 +578,9 @@ export default function ReportFormScreen() {
               </span>
             )}
           </div>
+          <p className="text-[11px] text-ink-muted leading-tight mb-2.5">
+            Critical and Urgent hazards need no account. Routine hazards require signing in.
+          </p>
 
           {/* Scaled Search Bar */}
           <div className="relative mb-3">
@@ -738,173 +603,208 @@ export default function ReportFormScreen() {
             )}
           </div>
 
-          {/* High Contrast Emergency / Non-Urgent Filter Pills */}
-          <div className="flex items-center gap-1.5 mb-3 overflow-x-auto scrollbar-none pb-0.5">
-            {[
-              { id: "all", label: `All (${categories.length})` },
-              { id: "emergency", label: `Emergency (${categories.filter((c) => c.is_emergency).length})` },
-              { id: "standard", label: `Non-Urgent (${categories.filter((c) => !c.is_emergency).length})` }
-            ].map((tab) => {
-              const isActive = catTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setCatTab(tab.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${
-                    isActive
-                      ? "bg-ink text-white shadow-sm border border-ink"
-                      : "bg-sunken text-ink-muted border border-line hover:bg-line hover:text-ink"
-                  }`}
-                >
-                  {isActive && <Check className="w-3.5 h-3.5 text-brand-edge stroke-[3]" />}
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Category cards.
-           *
-           * The 4px leading edge is a functional signal, not decoration, and it
-           * carries the single rule that decides whether this form can be
-           * submitted at all:
-           *
-           *   vermilion edge  → emergency category → files immediately, no
-           *                     account, no login prompt, ever
-           *   grey edge       → standard category  → needs a resident account
-           *
-           * This is the same rule enforced by `needsAccount` above, by the
-           * describe-flow keyword check, and by the RLS insert policies. One
-           * fact, stated in three places, and this is the only place a resident
-           * can see it before they hit it.
-           *
-           * The vermilion is the reserved Panic ink, used here deliberately:
-           * picking an emergency category is the same act as pressing Panic,
-           * taken through a slower door. It is the third and last permitted
-           * place for this colour — see the reservation note in tokens.css.
-           *
-           * Colour is never alone. Every card also carries an icon (open door
-           * vs padlock) and the words, so the rule survives greyscale, a sunlit
-           * screen, and deuteranopia.
-           *
-           * The access clause is shown to guests only. A signed-in resident can
-           * file anything, so telling them to sign in would be a lie.
-           */}
-          <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
-            {categories
-              .filter((cat) => {
-                if (catTab === "emergency" && !cat.is_emergency) return false;
-                if (catTab === "standard" && cat.is_emergency) return false;
-                if (catSearch) {
-                  const q = catSearch.toLowerCase();
-                  return (
-                    cat.name.toLowerCase().includes(q) ||
-                    (cat.name_bikol || "").toLowerCase().includes(q) ||
-                    (cat.name_tagalog || "").toLowerCase().includes(q)
-                  );
-                }
-                return true;
-              })
+          {/* ── Category Tier Filter Pills ─────────────────────────────── */}
+          {(() => {
+            const availableCategories = categories
+              .filter((cat) => cat.id !== "emergency_unspecified" && cat.category !== "emergency_unspecified")
               .map((cat) => {
-                const isSelected = selectedCategoryId === cat.id;
-                const IconComp = getCategoryIcon(cat);
-                const openToGuests = cat.is_emergency;
-                const AccessIcon = openToGuests ? DoorOpen : Lock;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCategoryId(cat.id);
-                      setValidationErrors((prev) => ({ ...prev, category: "" }));
-                    }}
-                    aria-pressed={isSelected}
-                    className={`saro-card flex w-full items-start gap-3 p-3.5 pl-4 text-left transition-colors ${
-                      isSelected ? "bg-brand-wash" : "bg-surface hover:bg-raised"
-                    }`}
-                    style={{
-                      // Inset rather than border-left: selection changes the
-                      // border colour on all four sides, and a border-l utility
-                      // would lose that fight unpredictably. The edge must
-                      // never disappear — it is the signal.
-                      boxShadow: `inset 4px 0 0 0 ${
-                        openToGuests ? "var(--color-panic)" : "var(--color-line-strong)"
-                      }`,
-                      borderColor: isSelected ? "var(--color-brand)" : undefined,
-                    }}
-                  >
-                    <span
-                      className="flex h-10 w-10 shrink-0 items-center justify-center border"
-                      style={
-                        openToGuests
-                          ? {
-                              background: "var(--color-panic-wash)",
-                              borderColor: "var(--color-panic)",
-                              color: "var(--color-panic-strong)",
-                            }
-                          : {
-                              background: "var(--color-sunken)",
-                              borderColor: "var(--color-line)",
-                              color: "var(--color-brand)",
-                            }
-                      }
-                    >
-                      <IconComp width={20} height={20} aria-hidden="true" />
-                    </span>
+                const tier = cat.tier || getCategoryTier(cat);
+                return { ...cat, tier, is_emergency: tier === "critical" || tier === "urgent" };
+              });
 
-                    <span className="min-w-0 flex-1">
-                      <span className="t-subhead block font-bold leading-snug text-ink">
-                        {cat.name}
-                      </span>
-                      {cat.name_bikol && (
-                        <span className="t-body-sm mt-0.5 block text-ink-muted">
-                          {cat.name_bikol}
-                        </span>
-                      )}
-                      <span
-                        className="t-label mt-1.5 flex items-center gap-1.5"
-                        style={{
-                          color: openToGuests
-                            ? "var(--color-panic-strong)"
-                            : "var(--color-ink-faint)",
-                        }}
-                      >
-                        <AccessIcon width={12} height={12} aria-hidden="true" />
-                        {openToGuests ? "Emergency" : "Non-urgent"}
-                        {isGuest && (openToGuests ? " · No account needed" : " · Sign in to file")}
-                      </span>
-                    </span>
+            const criticalCount = availableCategories.filter((c) => c.tier === "critical").length;
+            const urgentCount = availableCategories.filter((c) => c.tier === "urgent").length;
+            const routineCount = availableCategories.filter((c) => c.tier === "routine").length;
 
-                    <span
-                      className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2"
-                      style={{
-                        borderColor: isSelected ? "var(--color-brand)" : "var(--color-line-strong)",
-                        background: isSelected ? "var(--color-brand)" : "var(--color-surface)",
-                        color: "#fff",
-                      }}
-                      aria-hidden="true"
-                    >
-                      {isSelected && <Check width={14} height={14} strokeWidth={3} />}
-                    </span>
-                  </button>
-                );
-              })}
+            const filterTabs = [
+              { id: "all", label: `All (${availableCategories.length})` },
+              { id: "critical", label: `Critical (${criticalCount})` },
+              { id: "urgent", label: `Urgent (${urgentCount})` },
+              { id: "routine", label: `Routine (${routineCount})` },
+            ];
 
-            {categories.filter((cat) => {
-              if (catTab === "emergency" && !cat.is_emergency) return false;
-              if (catTab === "standard" && cat.is_emergency) return false;
+            const filteredCategories = availableCategories.filter((cat) => {
+              if (catTab !== "all" && cat.tier !== catTab) return false;
               if (catSearch) {
                 const q = catSearch.toLowerCase();
-                return cat.name.toLowerCase().includes(q) || (cat.name_bikol || "").toLowerCase().includes(q);
+                return (
+                  cat.name.toLowerCase().includes(q) ||
+                  (cat.name_bikol || "").toLowerCase().includes(q) ||
+                  (cat.name_tagalog || "").toLowerCase().includes(q)
+                );
               }
               return true;
-            }).length === 0 && (
-              <div className="text-center py-6 text-xs text-ink-faint bg-raised rounded-xs border border-line font-medium">
-                No matching hazard categories found. Try clearing your search.
-              </div>
-            )}
-          </div>
+            });
+
+            const criticalGroup = filteredCategories.filter((c) => c.tier === "critical");
+            const urgentGroup = filteredCategories.filter((c) => c.tier === "urgent");
+            const routineGroup = filteredCategories.filter((c) => c.tier === "routine");
+
+            const sections = [
+              {
+                tier: "critical",
+                title: "Critical Hazards",
+                subtitle: "Real-time alert · No account needed",
+                badge: "CRITICAL · IMMEDIATE ALERT",
+                icon: Siren,
+                items: criticalGroup,
+                edgeColor: "var(--color-panic)",
+                iconStyle: {
+                  background: "var(--color-panic-wash)",
+                  borderColor: "var(--color-panic)",
+                  color: "var(--color-panic-strong)",
+                },
+                tagColor: "var(--color-panic-strong)",
+              },
+              {
+                tier: "urgent",
+                title: "Urgent Hazards",
+                subtitle: "Fast-tracked priority · No account needed",
+                badge: "URGENT · NO ACCOUNT NEEDED",
+                icon: Zap,
+                items: urgentGroup,
+                edgeColor: "#D97706",
+                iconStyle: {
+                  background: "#FEF3C7",
+                  borderColor: "#F59E0B",
+                  color: "#B45309",
+                },
+                tagColor: "#B45309",
+              },
+              {
+                tier: "routine",
+                title: "Routine Hazards",
+                subtitle: isGuest ? "Standard queue · Sign in to file" : "Standard response queue",
+                badge: isGuest ? "ROUTINE · SIGN IN TO FILE" : "ROUTINE · STANDARD QUEUE",
+                icon: FileText,
+                items: routineGroup,
+                edgeColor: "var(--color-line-strong)",
+                iconStyle: {
+                  background: "var(--color-sunken)",
+                  borderColor: "var(--color-line)",
+                  color: "var(--color-brand)",
+                },
+                tagColor: "var(--color-ink-muted)",
+              },
+            ].filter((sec) => sec.items.length > 0);
+
+            return (
+              <>
+                <div className="flex items-center gap-1.5 mb-3 overflow-x-auto scrollbar-none pb-0.5">
+                  {filterTabs.map((tab) => {
+                    const isActive = catTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setCatTab(tab.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${
+                          isActive
+                            ? "bg-ink text-white shadow-sm border border-ink"
+                            : "bg-sunken text-ink-muted border border-line hover:bg-line hover:text-ink"
+                        }`}
+                      >
+                        {isActive && <Check className="w-3.5 h-3.5 text-brand-edge stroke-[3]" />}
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col gap-3 max-h-[380px] overflow-y-auto pr-1">
+                  {sections.length > 0 ? (
+                    sections.map((section) => (
+                      <div key={section.tier} className="flex flex-col gap-2">
+                        <div className="flex items-center gap-1.5 px-1 py-1 border-b border-line/60">
+                          <section.icon className="w-3.5 h-3.5 shrink-0" style={{ color: section.tagColor }} aria-hidden="true" />
+                          <span className="text-xs font-bold text-ink uppercase tracking-wider">{section.title}</span>
+                          <span className="text-[10px] text-ink-faint ml-auto font-medium">{section.subtitle}</span>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          {section.items.map((cat) => {
+                            const isSelected = selectedCategoryId === cat.id;
+                            const IconComp = getCategoryIcon(cat);
+                            const AccessIcon = section.tier === "routine" && isGuest ? Lock : DoorOpen;
+                            const badgeLabel = section.tier === "critical"
+                              ? "CRITICAL · IMMEDIATE ALERT"
+                              : section.tier === "urgent"
+                              ? "URGENT · NO ACCOUNT NEEDED"
+                              : isGuest
+                              ? "ROUTINE · SIGN IN TO FILE"
+                              : "ROUTINE · STANDARD QUEUE";
+
+                            return (
+                              <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCategoryId(cat.id);
+                                  setValidationErrors((prev) => ({ ...prev, category: "" }));
+                                  if (isGuest && cat.tier === "routine") {
+                                    setShowAuthWall(true);
+                                  }
+                                }}
+                                aria-pressed={isSelected}
+                                className={`saro-card flex w-full items-start gap-3 p-3.5 pl-4 text-left transition-colors ${
+                                  isSelected ? "bg-brand-wash" : "bg-surface hover:bg-raised"
+                                }`}
+                                style={{
+                                  boxShadow: `inset 4px 0 0 0 ${section.edgeColor}`,
+                                  borderColor: isSelected ? "var(--color-brand)" : undefined,
+                                }}
+                              >
+                                <span
+                                  className="flex h-10 w-10 shrink-0 items-center justify-center border rounded-md"
+                                  style={section.iconStyle}
+                                >
+                                  <IconComp width={20} height={20} aria-hidden="true" />
+                                </span>
+
+                                <span className="min-w-0 flex-1">
+                                  <span className="t-subhead block font-bold leading-snug text-ink">
+                                    {cat.name}
+                                  </span>
+                                  {cat.name_bikol && (
+                                    <span className="t-body-sm mt-0.5 block text-ink-muted">
+                                      {cat.name_bikol}
+                                    </span>
+                                  )}
+                                  <span
+                                    className="t-label mt-1.5 flex items-center gap-1.5 text-[11px] font-bold"
+                                    style={{ color: section.tagColor }}
+                                  >
+                                    <AccessIcon width={12} height={12} aria-hidden="true" />
+                                    {badgeLabel}
+                                  </span>
+                                </span>
+
+                                <span
+                                  className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2"
+                                  style={{
+                                    borderColor: isSelected ? "var(--color-brand)" : "var(--color-line-strong)",
+                                    background: isSelected ? "var(--color-brand)" : "var(--color-surface)",
+                                    color: "#fff",
+                                  }}
+                                  aria-hidden="true"
+                                >
+                                  {isSelected && <Check width={14} height={14} strokeWidth={3} />}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6 text-xs text-ink-faint bg-raised rounded-xs border border-line font-medium">
+                      No matching hazard categories found. Try clearing your search.
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
 
           {validationErrors.category && (
             <p className="text-xs text-alert mt-1.5 font-medium">{validationErrors.category}</p>
@@ -919,7 +819,7 @@ export default function ReportFormScreen() {
         {/* Location Section */}
         <div>
           <label className="block text-xs font-semibold text-ink mb-1.5">
-            Where is it? <span className="text-alert">*</span>
+            Where Is It? <span className="text-alert">*</span>
           </label>
           <div className="flex items-center gap-2 mb-2">
             <button
@@ -928,7 +828,7 @@ export default function ReportFormScreen() {
               className="flex items-center gap-1.5 px-3 py-2 bg-white border border-line rounded-xs text-xs font-medium text-ink active:bg-raised min-h-[44px]"
             >
               <Navigation className="w-3.5 h-3.5 text-brand" aria-hidden="true" />
-              Use my location
+              Use My Location
             </button>
             <span className="t-label text-ink-muted">or tap the map below</span>
           </div>
@@ -997,7 +897,7 @@ export default function ReportFormScreen() {
         {/* Photo Evidence — Multi-photo */}
         <div>
           <label className="block text-xs font-semibold text-ink mb-1">
-            Photo evidence <span className="text-ink-muted font-normal">(optional, up to 5)</span>
+            Photo Evidence <span className="text-ink-muted font-normal">(optional, up to 5)</span>
           </label>
           {photos.length > 0 && (
             <div className="flex gap-2 mb-2 overflow-x-auto no-scrollbar">
@@ -1028,7 +928,7 @@ export default function ReportFormScreen() {
                 <Camera className="w-5 h-5 text-ink-muted" aria-hidden="true" />
               )}
               <span className="text-xs text-ink-muted font-medium">
-                {photos.length > 0 ? "Add another photo" : "Take photo or choose from gallery"}
+                {photos.length > 0 ? "Add Another Photo" : "Take Photo or Choose From Gallery"}
               </span>
               <input
                 type="file"
@@ -1042,69 +942,91 @@ export default function ReportFormScreen() {
           )}
         </div>
 
-        {/* Proxy Reporting Toggle */}
-        <div className="bg-white rounded-xs border border-line p-3">
-          <label className="flex items-center gap-3 cursor-pointer min-h-[44px]">
-            <input
-              type="checkbox"
-              checked={isProxy}
-              onChange={(e) => setIsProxy(e.target.checked)}
-              className="w-4 h-4 rounded border-line text-brand accent-brand"
-            />
-            <div>
-              <span className="text-xs font-semibold text-ink flex items-center gap-1">
-                <Users className="w-3.5 h-3.5 text-ink-muted" aria-hidden="true" />
-                Reporting for someone else
-              </span>
-              <span className="t-label text-ink-muted block mt-0.5">
-                They will need the tracking code. A callback number is required.
-              </span>
-            </div>
-          </label>
-
-          {isProxy && (
-            <div className="mt-3">
-              <label className="block text-xs font-semibold text-ink mb-1">
-                Callback number <span className="text-alert">*</span>
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3 top-2.5 text-ink-muted" aria-hidden="true" />
-                <input
-                  type="tel"
-                  value={callbackNumber}
-                  onChange={(e) => { setCallbackNumber(e.target.value); setValidationErrors((prev) => ({ ...prev, callback: "" })); }}
-                  placeholder="09XX-XXX-XXXX"
-                  className="w-full text-sm py-2.5 pl-9 pr-3 rounded-xs border border-line bg-white text-ink placeholder:text-ink-muted"
-                  required={isProxy}
-                />
+        {/* ── Inline account-needed prompt ─────────────────────────────── */}
+        {needsAccount && (
+          <div className="mt-4 rounded-lg border p-4 flex flex-col gap-2.5"
+               style={{ borderColor: 'var(--color-brand-edge)', background: 'var(--color-brand-wash)' }}>
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+                   style={{ background: 'var(--color-brand)', color: 'white' }}>
+                <UserPlus className="w-4 h-4" aria-hidden="true" />
               </div>
-              {validationErrors.callback && (
-                <p className="text-xs text-alert mt-1 font-medium">{validationErrors.callback}</p>
-              )}
+              <div>
+                <span className="text-[13px] font-bold text-ink block leading-tight">
+                  Account needed for non-emergency reports
+                </span>
+                <span className="text-[11px] text-ink-muted block mt-1 leading-snug">
+                  The city office may need to follow up with you about this report.
+                  Your description, photos, and location are saved — nothing is lost when you sign in.
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => setShowAuthWall(true)}
+                className="saro-btn saro-btn-primary saro-btn-sm flex-1 flex items-center justify-center gap-1.5"
+              >
+                <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
+                Sign In or Create Account
+              </button>
+            </div>
+            <p className="text-[10px] text-ink-faint leading-snug">
+              Emergencies never need an account — switch to an emergency category above to file immediately.
+            </p>
+          </div>
+        )}
+
+        {/* Submit Button (stays below form content) */}
+        <div className="pt-4 pb-2">
+          {!isOnline && (
+            <div className="flex items-center gap-1.5 t-label text-status-assigned-ink bg-status-assigned-tab/10 border border-status-assigned-tab/30 rounded-xs px-3 py-1.5 mb-2 font-medium">
+              <WifiOff className="w-3.5 h-3.5" aria-hidden="true" />
+              Offline — report will be queued for later submission
             </div>
           )}
-        </div>
-
-        {/* Sticky Submit Button */}
-        <div className="fixed bottom-16 left-0 right-0 z-30 px-4 pb-2 bg-gradient-to-t from-canvas via-canvas/95 to-transparent pt-4">
-          <div className="max-w-md mx-auto">
-            {!isOnline && (
-              <div className="flex items-center gap-1.5 t-label text-status-assigned-ink bg-status-assigned-tab/10 border border-status-assigned-tab/30 rounded-xs px-3 py-1.5 mb-2 font-medium">
-                <WifiOff className="w-3.5 h-3.5" aria-hidden="true" />
-                Offline — report will be queued for later submission
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="saro-btn-primary w-full"
-            >
-              <Send className="w-4 h-4" aria-hidden="true" />
-              {submitting ? "Submitting..." : isOnline ? "Submit report" : "Save report offline"}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="saro-btn saro-btn-primary saro-btn-lg saro-btn-block flex items-center justify-center gap-2"
+          >
+            <Send className="w-4 h-4" aria-hidden="true" />
+            {submitting ? "Submitting..." : isOnline ? "Submit report" : "Save report offline"}
+          </button>
         </div>
       </form>
+
+      {/* ── Auth Modal Overlay ──────────────────────────────────────── */}
+      {showAuthWall && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-ink/50 backdrop-blur-sm"
+            onClick={() => setShowAuthWall(false)}
+          />
+          {/* Modal content */}
+          <div className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl animate-[slideUp_200ms_ease-out]"
+               style={{ animationFillMode: 'both' }}>
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 pt-4 pb-2 bg-surface rounded-t-2xl">
+              <span className="text-xs font-bold text-ink-muted uppercase tracking-wider">Sign in to continue</span>
+              <button
+                type="button"
+                onClick={() => setShowAuthWall(false)}
+                className="p-1.5 rounded-full hover:bg-raised transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4 text-ink-muted" />
+              </button>
+            </div>
+            <ResidentAuthScreen
+              mode="sign-up"
+              reason="Non-emergency reports need an account so the office can follow up. Your report details are saved — sign in or create an account, then tap Submit again."
+              onCancel={() => setShowAuthWall(false)}
+              onSignedIn={() => setShowAuthWall(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

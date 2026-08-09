@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, NavLink } from "react-router-dom";
+import { useDesktopBreakpoint } from "../../hooks/useDesktopBreakpoint";
+import DesktopShell from "./DesktopShell";
 import {
   Map, PlusCircle, List, Bot, Home, User, LogOut, X, ChevronRight, ShieldCheck,
-  Bell, BellOff, FileText,
+  Bell, BellOff, FileText, PhoneCall, Settings, MapPin, Mic, Trash2,
 } from "lucide-react";
 import { Wordmark } from "@saro/ui";
 import ConnectionIndicator from "../common/ConnectionIndicator";
@@ -10,7 +12,9 @@ import {
   CLIENT_STORAGE_KEYS, useAuth,
   startOutboxSync, pushSupported, pushPermission,
   subscribeToPush, unsubscribeFromPush, currentPushSubscription,
+  updateResidentProfile, deleteResidentAccount
 } from "@saro/shared";
+import { getPermissionsState, setPermissionState, requestBrowserPermission } from "../../lib/permissions";
 import ConsentNotice from "./ConsentNotice";
 import CitizenLandingScreen from "./CitizenLandingScreen";
 import PublicMapScreen from "./PublicMapScreen";
@@ -35,18 +39,44 @@ import ResidentAuthScreen from "./ResidentAuthScreen";
 const TABS = [
   { to: "/", end: true, Icon: Home, label: "Home" },
   { to: "/map", Icon: Map, label: "Map" },
+  { to: "/report", Icon: PlusCircle, label: "Report", isPrimary: true },
   { to: "/track", Icon: List, label: "Track" },
   { to: "/assistant", Icon: Bot, label: "Ask" },
 ];
 
-export default function CitizenShell() {
+export default function CitizenShell({ onReturnToWelcome }) {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+
+  // Resident Self Account Management state
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showDeleteProfileModal, setShowDeleteProfileModal] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [resSaving, setResSaving] = useState(false);
+  const [resMsg, setResMsg] = useState({ type: "", text: "" });
+  const [deleteConfirmPassword, setDeleteConfirmPassword] = useState("");
+  const [resDeleting, setResDeleting] = useState(false);
+
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState("");
   const { profile, isResident, signOut } = useAuth();
+  const [appPermissions, setAppPermissions] = useState(getPermissionsState());
+
+  const togglePermission = async (key) => {
+    const current = appPermissions[key];
+    if (current === "granted") {
+      const updated = setPermissionState(key, "denied");
+      setAppPermissions(updated);
+    } else {
+      await requestBrowserPermission(key);
+      setAppPermissions(getPermissionsState());
+    }
+  };
 
   // The queue drains from here rather than from a screen, because a queued
   // report must keep trying no matter which tab the person is looking at — or
@@ -72,19 +102,101 @@ export default function CitizenShell() {
   };
 
   const handleForgetDevice = () => {
+    sessionStorage.removeItem(CLIENT_STORAGE_KEYS.UNAUTH_VIEW);
     localStorage.removeItem(CLIENT_STORAGE_KEYS.DEVICE_FINGERPRINT);
     localStorage.removeItem(CLIENT_STORAGE_KEYS.OFFLINE_QUEUE);
     setShowAccountMenu(false);
+    onReturnToWelcome?.();
   };
 
   const handleSignOut = async () => {
+    sessionStorage.removeItem(CLIENT_STORAGE_KEYS.UNAUTH_VIEW);
     await signOut();
     setShowAccountMenu(false);
+    onReturnToWelcome?.();
   };
+
+  const handleSaveResidentProfile = async () => {
+    if (!profile?.id) return;
+    setResSaving(true);
+    setResMsg({ type: "", text: "" });
+
+    const { error } = await updateResidentProfile({
+      userId: profile.id,
+      full_name: editName,
+      email: editEmail,
+      password: editPassword,
+    });
+
+    setResSaving(false);
+    if (error) {
+      setResMsg({ type: "error", text: error });
+    } else {
+      setResMsg({ type: "success", text: "Profile updated successfully!" });
+      setTimeout(() => setShowEditProfileModal(false), 1200);
+    }
+  };
+
+  const handleDeleteResidentAccount = async () => {
+    if (!profile?.id) return;
+    setResDeleting(true);
+    setResMsg({ type: "", text: "" });
+
+    const { error } = await deleteResidentAccount({
+      userId: profile.id,
+      reason: "Self-deletion by resident",
+    });
+
+    setResDeleting(false);
+    if (error) {
+      setResMsg({ type: "error", text: error });
+    } else {
+      setShowDeleteProfileModal(false);
+      setShowSettings(false);
+      await signOut();
+      onReturnToWelcome?.();
+    }
+  };
+
+  // ── Desktop branch (≥ 1024px) ───────────────────────────────────────────
+  // All state (modals, auth, settings) is managed here and passed down so
+  // neither branch duplicates logic. The mobile JSX below is untouched.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const isDesktop = useDesktopBreakpoint();
+
+  if (isDesktop) {
+    // Auth and privacy overlays render over the desktop shell too.
+    if (showAuth) {
+      return (
+        <div className="fixed inset-0 z-50 flex h-full w-full flex-col overflow-hidden bg-surface">
+          <ConnectionIndicator />
+          <ResidentAuthScreen onCancel={() => setShowAuth(false)} onSignedIn={() => setShowAuth(false)} />
+        </div>
+      );
+    }
+    if (showPrivacy) {
+      return (
+        <div className="fixed inset-0 z-50 flex h-full w-full flex-col overflow-hidden bg-canvas">
+          <ConnectionIndicator />
+          <div className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-8">
+            <ConsentNotice dismissible onAcknowledge={() => setShowPrivacy(false)} />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <DesktopShell
+        onReturnToWelcome={onReturnToWelcome}
+        onShowSettings={() => setShowSettings(true)}
+        onShowAuth={() => setShowAuth(true)}
+      />
+    );
+  }
+  // ── End desktop branch ───────────────────────────────────────────────────
 
   if (showAuth) {
     return (
-      <div className="relative flex h-screen w-full flex-col overflow-hidden bg-surface sm:h-full">
+      <div className="absolute inset-0 z-50 flex h-full w-full flex-col overflow-hidden bg-surface">
         <ConnectionIndicator />
         <ResidentAuthScreen onCancel={() => setShowAuth(false)} onSignedIn={() => setShowAuth(false)} />
       </div>
@@ -93,7 +205,7 @@ export default function CitizenShell() {
 
   if (showPrivacy) {
     return (
-      <div className="relative flex h-screen w-full flex-col overflow-hidden bg-canvas sm:h-full">
+      <div className="absolute inset-0 z-50 flex h-full w-full flex-col overflow-hidden bg-canvas">
         <ConnectionIndicator />
         <div className="mx-auto w-full max-w-md flex-1 overflow-y-auto p-4">
           <ConsentNotice dismissible onAcknowledge={() => setShowPrivacy(false)} />
@@ -103,20 +215,22 @@ export default function CitizenShell() {
   }
 
   return (
-    <div className="relative flex h-screen w-full flex-col overflow-hidden bg-canvas text-ink sm:h-full">
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-canvas text-ink">
       <ConnectionIndicator />
 
       <header className="sticky top-0 z-30 shrink-0 border-b border-line bg-surface px-4 py-2.5">
         <div className="mx-auto flex max-w-md items-center justify-between">
           <Wordmark size="sm" />
-          <button
-            onClick={() => setShowAccountMenu(true)}
-            className="saro-btn saro-btn-ghost saro-btn-sm"
-            aria-label={isResident ? `Account: ${profile?.full_name}` : "Sign in"}
-          >
-            <User width={14} height={14} />
-            {isResident ? (profile?.full_name?.split(" ")[0] ?? "Account") : "Sign in"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAccountMenu(true)}
+              className="saro-btn saro-btn-ghost saro-btn-sm"
+              aria-label={isResident ? `Account: ${profile?.full_name}` : "Sign in"}
+            >
+              <User width={14} height={14} />
+              {isResident ? (profile?.full_name?.split(" ")[0] ?? "Account") : "Sign in"}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -133,7 +247,7 @@ export default function CitizenShell() {
 
       {showAccountMenu && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink-strong/50 sm:items-center sm:p-4"
+          className="absolute inset-0 z-50 flex items-end justify-center bg-ink-strong/50 sm:items-center sm:p-4"
           onClick={() => setShowAccountMenu(false)}
         >
           <div
@@ -149,10 +263,10 @@ export default function CitizenShell() {
                   aria-hidden="true"
                 />
                 <span>
-                  <span className="t-subhead block">
-                    {isResident ? profile?.full_name || "Resident" : "Anonymous reporter"}
+                  <span className="t-subhead block font-bold text-ink">
+                    {isResident ? profile?.full_name || "Resident" : "Anonymous Reporter"}
                   </span>
-                  <span className="t-body-sm block text-ink-muted">
+                  <span className="t-body-sm block text-ink-muted text-xs">
                     {isResident ? "Reports follow your account" : "Reports stay on this device"}
                   </span>
                 </span>
@@ -166,117 +280,494 @@ export default function CitizenShell() {
               </button>
             </div>
 
-            <div className="mt-4 flex flex-col gap-2">
+            <div className="mt-3 flex flex-col gap-2">
               {!isResident && (
                 <button
                   onClick={() => { setShowAccountMenu(false); setShowAuth(true); }}
-                  className="flex items-center justify-between gap-3 border border-brand-edge bg-brand-wash px-4 py-3 text-left"
+                  className="flex items-center justify-between gap-3 border border-brand-edge bg-brand-wash px-4 py-3 rounded-md text-left transition-colors hover:bg-brand-wash/80"
                 >
                   <span>
-                    <span className="t-subhead block text-brand-strong">Sign in or create an account</span>
-                    <span className="t-body-sm block text-ink-muted">Keeps your history if you lose this phone</span>
+                    <span className="t-subhead block text-brand-strong font-bold">Sign In or Create an Account</span>
+                    <span className="t-body-sm block text-ink-muted text-xs">Keeps your history synced if you lose this phone</span>
                   </span>
                   <ChevronRight width={16} height={16} className="shrink-0 text-brand" aria-hidden="true" />
                 </button>
               )}
 
-              {/* Opt-in, and only here. Never prompted on app open: a
-                  permission dialog someone did not ask for is one tap from
-                  "Block", and a blocked resident cannot be told their report
-                  was resolved. */}
-              {pushSupported() && (
+              {/* 1. Settings Entry */}
+              <button
+                onClick={() => { setShowAccountMenu(false); setShowSettings(true); }}
+                className="flex items-center gap-3 border border-line p-3 rounded-md text-left hover:bg-raised transition-colors"
+              >
+                <Settings width={18} height={18} className="shrink-0 text-ink-muted" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="t-subhead block font-bold text-ink">Settings</span>
+                  <span className="t-body-sm block text-ink-muted text-xs">
+                    Notification preferences & privacy notice
+                  </span>
+                </span>
+                <ChevronRight width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />
+              </button>
+
+              {/* 2. Sign Out (Visually Separated at Bottom) */}
+              <div className="border-t border-line pt-2 mt-1">
                 <button
-                  onClick={togglePush}
-                  disabled={pushBusy}
-                  aria-pressed={pushOn}
-                  className="flex items-center gap-3 border border-line px-4 py-3 text-left hover:bg-raised"
+                  onClick={isResident ? handleSignOut : handleForgetDevice}
+                  className="w-full flex items-center gap-3 border border-alert/30 bg-alert-wash/50 p-3 rounded-md text-left hover:bg-alert-wash transition-colors"
                 >
-                  {pushOn
-                    ? <Bell width={16} height={16} className="shrink-0 text-brand" aria-hidden="true" />
-                    : <BellOff width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />}
+                  <LogOut width={18} height={18} className="shrink-0 text-alert" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
-                    <span className="t-subhead block">
-                      {pushOn ? "Notifications are on" : "Tell me when my report changes"}
+                    <span className="t-subhead block font-bold text-alert">
+                      {isResident ? "Sign Out" : "Forget This Device"}
                     </span>
-                    <span className="t-body-sm block text-ink-muted">
-                      {pushError
-                        ? pushError
-                        : pushPermission() === "denied"
-                        ? "Blocked in your browser settings"
-                        : "No phone number needed. Status changes only."}
+                    <span className="t-body-sm block text-ink-muted text-xs">
+                      {isResident
+                        ? "Your reports stay safely saved on your account"
+                        : "Clears local Track list. Filed reports stay with city."}
                     </span>
                   </span>
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dedicated Settings Modal */}
+      {showSettings && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans">
+          <div className="w-full max-w-md border border-line bg-surface p-5 shadow-sheet animate-fade-in rounded-lg space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <Settings className="w-5 h-5 text-brand" />
+                <h3 className="text-base font-bold text-ink">Settings & Preferences</h3>
+              </div>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="saro-btn saro-btn-ghost saro-btn-sm"
+                aria-label="Close settings"
+              >
+                <X width={16} height={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* Notification Toggle Switch */}
+              <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {pushOn
+                      ? <Bell className="w-5 h-5 text-brand shrink-0" />
+                      : <BellOff className="w-5 h-5 text-ink-faint shrink-0" />}
+                    <div>
+                      <span className="t-subhead block font-bold text-ink text-sm">
+                        Report Update Notifications
+                      </span>
+                      <span className="t-body-sm block text-ink-muted text-xs">
+                        Get notified when your report changes status
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Clean On/Off Toggle Button */}
+                  {pushSupported() && (
+                    <button
+                      type="button"
+                      onClick={togglePush}
+                      disabled={pushBusy}
+                      role="switch"
+                      aria-checked={pushOn}
+                      aria-label="Toggle report update notifications"
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        pushOn ? "bg-brand" : "bg-line hover:bg-line/80"
+                      } ${pushBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                          pushOn ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-ink-muted pt-1 border-t border-line/60 flex items-center justify-between">
+                  <span>Status: <strong className={pushOn ? "text-brand font-bold" : "text-ink-faint"}>{pushOn ? "ON (Push Enabled)" : "OFF (Push Disabled)"}</strong></span>
+                  {pushError && <span className="text-alert font-bold">{pushError}</span>}
+                  {pushPermission() === "denied" && <span className="text-alert font-bold">Blocked in browser</span>}
+                </div>
+              </div>
+
+              {/* Hardware Permissions Section */}
+              <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
+                <span className="text-xs font-bold text-ink uppercase tracking-wider block">
+                  App Hardware Permissions
+                </span>
+
+                {/* Location Toggle */}
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-2.5">
+                    <MapPin className={`w-4.5 h-4.5 ${appPermissions.location === "granted" ? "text-brand" : "text-ink-faint"}`} />
+                    <div>
+                      <span className="text-xs font-bold text-ink block">Location Access</span>
+                      <span className="text-[11px] text-ink-muted block leading-tight">GPS position for Panic and reports</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => togglePermission("location")}
+                    role="switch"
+                    aria-checked={appPermissions.location === "granted"}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      appPermissions.location === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                        appPermissions.location === "granted" ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Microphone Toggle */}
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-line/50">
+                  <div className="flex items-center gap-2.5">
+                    <Mic className={`w-4.5 h-4.5 ${appPermissions.microphone === "granted" ? "text-brand" : "text-ink-faint"}`} />
+                    <div>
+                      <span className="text-xs font-bold text-ink block">Microphone Access</span>
+                      <span className="text-[11px] text-ink-muted block leading-tight">Voice input for describing hazards</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => togglePermission("microphone")}
+                    role="switch"
+                    aria-checked={appPermissions.microphone === "granted"}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      appPermissions.microphone === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                        appPermissions.microphone === "granted" ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Phone Call Toggle */}
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-line/50">
+                  <div className="flex items-center gap-2.5">
+                    <PhoneCall className={`w-4.5 h-4.5 ${appPermissions.phone === "granted" ? "text-brand" : "text-ink-faint"}`} />
+                    <div>
+                      <span className="text-xs font-bold text-ink block">Phone Dialer Access</span>
+                      <span className="text-[11px] text-ink-muted block leading-tight">Emergency 911 phone dialer handoff</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => togglePermission("phone")}
+                    role="switch"
+                    aria-checked={appPermissions.phone === "granted"}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      appPermissions.phone === "granted" ? "bg-brand" : "bg-line hover:bg-line/80"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                        appPermissions.phone === "granted" ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Privacy Notice Item */}
+              <div className="border border-line rounded-md p-3.5 bg-white space-y-2">
+                <span className="text-xs font-bold text-ink uppercase tracking-wider block">
+                  Legal & Privacy Governance
+                </span>
+                <button
+                  onClick={() => { setShowSettings(false); setShowPrivacy(true); }}
+                  className="w-full flex items-center gap-3 border border-line p-3 rounded-md text-left hover:bg-raised transition-colors"
+                >
+                  <FileText width={18} height={18} className="shrink-0 text-brand" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="t-subhead block font-bold text-ink">Privacy Notice</span>
+                    <span className="t-body-sm block text-ink-muted text-xs">
+                      What data is collected, who sees it, and security retention rules
+                    </span>
+                  </span>
+                  <ChevronRight width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />
+                </button>
+              </div>
+
+              {/* Resident Account Self-Management Section (Signed-in residents only) */}
+              {isResident && profile && (
+                <div className="border border-line rounded-md p-3.5 bg-white space-y-3">
+                  <span className="text-xs font-bold text-ink uppercase tracking-wider block">
+                    Account Self-Management
+                  </span>
+
+                  <button
+                    onClick={() => {
+                      setEditName(profile.full_name || "");
+                      setEditEmail(profile.email || "");
+                      setEditPassword("");
+                      setResMsg({ type: "", text: "" });
+                      setShowEditProfileModal(true);
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded border border-line hover:bg-raised text-left transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <User className="w-4 h-4 text-brand shrink-0" />
+                      <div>
+                        <span className="text-xs font-bold text-ink block">Edit Profile</span>
+                        <span className="text-[11px] text-ink-muted block leading-tight">Update name, email, or password</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-ink-faint" />
+                  </button>
+
+                  {/* Visually Separated Delete Account Entry */}
+                  <div className="border-t border-line/60 pt-2">
+                    <button
+                      onClick={() => {
+                        setDeleteConfirmPassword("");
+                        setResMsg({ type: "", text: "" });
+                        setShowDeleteProfileModal(true);
+                      }}
+                      className="w-full flex items-center justify-between p-2.5 rounded border border-alert/30 bg-alert-wash/30 hover:bg-alert-wash text-left transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Trash2 className="w-4 h-4 text-alert shrink-0" />
+                        <div>
+                          <span className="text-xs font-bold text-alert block">Delete Account</span>
+                          <span className="text-[11px] text-ink-muted block leading-tight">Permanently delete account; reports stay trackable</span>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-alert/70" />
+                    </button>
+                  </div>
+                </div>
               )}
 
-              <button
-                onClick={() => { setShowAccountMenu(false); setShowPrivacy(true); }}
-                className="flex items-center gap-3 border border-line px-4 py-3 text-left hover:bg-raised"
-              >
-                <FileText width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />
-                <span>
-                  <span className="t-subhead block">Privacy notice</span>
-                  <span className="t-body-sm block text-ink-muted">
-                    What is collected, who sees it, how long it is kept
+              {/* System Metadata */}
+              <div className="bg-raised p-3 rounded-md border border-line text-xs text-ink-muted flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-ink block">SARO Resident Portal</span>
+                  <span>Legazpi City DRRM System</span>
+                </div>
+                {isResident && (
+                  <span className="t-micro font-bold px-2 py-1 bg-brand/10 text-brand rounded border border-brand/20">
+                    Verified Resident
                   </span>
-                </span>
-              </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* Edit Resident Profile Modal */}
+      {showEditProfileModal && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans">
+          <div className="w-full max-w-sm border border-line bg-surface p-5 shadow-sheet animate-fade-in rounded-lg space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-brand" />
+                <h3 className="text-base font-bold text-ink">Edit Resident Profile</h3>
+              </div>
               <button
-                onClick={isResident ? handleSignOut : handleForgetDevice}
-                className="flex items-center gap-3 border border-line px-4 py-3 text-left hover:bg-raised"
+                onClick={() => setShowEditProfileModal(false)}
+                className="saro-btn saro-btn-ghost saro-btn-sm"
               >
-                <LogOut width={16} height={16} className="shrink-0 text-alert" aria-hidden="true" />
-                <span>
-                  <span className="t-subhead block">{isResident ? "Sign out" : "Forget this device"}</span>
-                  <span className="t-body-sm block text-ink-muted">
-                    {isResident
-                      ? "Your reports stay on your account"
-                      : "Clears Track. Filed reports stay with the city."}
-                  </span>
-                </span>
+                <X width={16} height={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <label className="block">
+                <span className="t-label text-ink-faint block mb-1">Full Name</span>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="saro-input w-full text-xs"
+                />
+              </label>
+
+              <label className="block">
+                <span className="t-label text-ink-faint block mb-1">Email Address</span>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="saro-input w-full text-xs font-mono"
+                />
+              </label>
+
+              <label className="block border-t border-line/60 pt-2.5">
+                <span className="t-label text-ink-faint block mb-1">New Password (optional)</span>
+                <input
+                  type="password"
+                  placeholder="Leave blank to keep current"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  className="saro-input w-full text-xs"
+                />
+              </label>
+
+              {resMsg.text && (
+                <p className={`text-xs p-2 rounded font-bold ${resMsg.type === "error" ? "bg-alert-wash text-alert border border-alert" : "bg-emerald-50 text-emerald-800 border border-emerald-200"}`}>
+                  {resMsg.text}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
+              <button
+                onClick={() => setShowEditProfileModal(false)}
+                className="saro-btn saro-btn-secondary saro-btn-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveResidentProfile}
+                disabled={resSaving}
+                className="saro-btn saro-btn-primary saro-btn-sm"
+              >
+                {resSaving ? "Saving..." : "Save Profile"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <nav className="sticky bottom-0 z-30 shrink-0 border-t border-line bg-surface" aria-label="Main">
-        <div className="mx-auto flex max-w-md items-stretch justify-around">
-          {TABS.map(({ to, end, Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                `relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-2 py-1.5 ${
-                  isActive ? "text-brand" : "text-ink-faint"
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {/* Active tab marked by a rule on the top edge — the index-tab
-                      idea from the queue, at navigation scale. */}
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-3 top-0 h-0.5"
-                    style={{ background: isActive ? "var(--color-brand)" : "transparent" }}
-                  />
-                  <Icon width={20} height={20} strokeWidth={isActive ? 2.4 : 2} aria-hidden="true" />
-                  <span className="t-micro">{label}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
+      {/* Delete Resident Account Modal */}
+      {showDeleteProfileModal && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans">
+          <div className="w-full max-w-sm border border-line bg-surface p-5 shadow-sheet animate-fade-in rounded-lg space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-alert" />
+                <h3 className="text-base font-bold text-ink">Delete Account</h3>
+              </div>
+              <button
+                onClick={() => setShowDeleteProfileModal(false)}
+                className="saro-btn saro-btn-ghost saro-btn-sm"
+              >
+                <X width={16} height={16} />
+              </button>
+            </div>
 
-          <NavLink
-            to="/report"
-            className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 bg-brand px-2 py-1.5 text-white"
-          >
-            <PlusCircle width={20} height={20} strokeWidth={2.4} aria-hidden="true" />
-            <span className="t-micro">Report</span>
-          </NavLink>
+            <div className="space-y-3 text-xs">
+              <div className="p-3 rounded border border-alert/30 bg-alert-wash/50 text-ink leading-relaxed">
+                <span className="font-bold text-alert block mb-1">Notice: Account Removal</span>
+                <p>
+                  Your account login and synced "My Reports" list will be deleted. <strong>Reports you've filed will stay with the city and remain checkable by their tracking codes</strong>, they just won't be linked to an account anymore.
+                </p>
+              </div>
+
+              <label className="block">
+                <span className="t-label text-ink-faint block mb-1">Confirm Password</span>
+                <input
+                  type="password"
+                  placeholder="Re-enter password to confirm"
+                  value={deleteConfirmPassword}
+                  onChange={(e) => setDeleteConfirmPassword(e.target.value)}
+                  className="saro-input w-full text-xs"
+                />
+              </label>
+
+              {resMsg.text && (
+                <p className="text-xs p-2 rounded bg-alert-wash text-alert border border-alert font-bold">
+                  {resMsg.text}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
+              <button
+                onClick={() => setShowDeleteProfileModal(false)}
+                className="saro-btn saro-btn-secondary saro-btn-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteResidentAccount}
+                disabled={resDeleting}
+                className="saro-btn saro-btn-sm bg-alert hover:bg-alert-strong text-white font-bold"
+              >
+                {resDeleting ? "Deleting..." : "Delete Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <nav className="sticky bottom-0 z-30 shrink-0 border-t border-line bg-surface font-sans" aria-label="Main">
+        <div className="mx-auto flex max-w-md items-end justify-around relative px-1 h-[56px]">
+          {TABS.map(({ to, end, Icon, label, isPrimary }) => {
+            if (isPrimary) {
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  className="relative flex-1 flex flex-col items-center z-40 focus:outline-none"
+                  style={{ marginBottom: '4px' }}
+                >
+                  {({ isActive }) => (
+                    <div className="flex flex-col items-center -mt-10">
+                      {/* FAB circle */}
+                      <div
+                        className={`w-14 h-14 rounded-full flex items-center justify-center transition-shadow duration-150 ${
+                          isActive
+                            ? "bg-brand text-white shadow-[0_4px_16px_rgba(27,46,107,0.45)]"
+                            : "bg-brand text-white shadow-[0_2px_10px_rgba(27,46,107,0.3)] hover:shadow-[0_4px_14px_rgba(27,46,107,0.4)] active:shadow-[0_2px_6px_rgba(27,46,107,0.35)]"
+                        }`}
+                      >
+                        <Icon className="w-[22px] h-[22px] stroke-[2.2]" aria-hidden="true" />
+                      </div>
+                      {/* Label below circle */}
+                      <span className={`text-[10px] font-bold uppercase tracking-wide leading-none mt-1 ${
+                        isActive ? "text-brand" : "text-ink-faint"
+                      }`}>
+                        {label}
+                      </span>
+                    </div>
+                  )}
+                </NavLink>
+              );
+            }
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={({ isActive }) =>
+                  `relative flex h-full flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 transition-colors ${
+                    isActive ? "text-brand" : "text-ink-faint hover:text-ink"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-x-3 top-0 h-0.5 transition-all"
+                      style={{ background: isActive ? "var(--color-brand)" : "transparent" }}
+                    />
+                    <Icon width={20} height={20} strokeWidth={isActive ? 2.4 : 1.8} aria-hidden="true" />
+                    <span className="t-micro text-[10px]">{label}</span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </div>
       </nav>
     </div>

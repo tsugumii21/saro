@@ -46,6 +46,22 @@ export default function AlertLevelBadge({ alert, compact = false }) {
   const color = TONE_COLOR[level.tone];
   const age = ageLabel(alert.last_verified_at);
 
+  if (compact) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono max-w-full shrink min-w-0"
+        style={{
+          background: `color-mix(in srgb, ${color} 12%, transparent)`,
+          color: color,
+          border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+        }}
+      >
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+        <span className="truncate">Level {alert.alert_level} · {level.name}</span>
+      </span>
+    );
+  }
+
   return (
     <div
       className="saro-card flex flex-col gap-1 p-3"
@@ -64,9 +80,7 @@ export default function AlertLevelBadge({ alert, compact = false }) {
         <span className="t-body-sm font-bold" style={{ color }}>{level.name}</span>
       </div>
 
-      {!compact && (
-        <p className="t-body-sm text-ink-muted">{alert.summary?.trim() || level.meaning}</p>
-      )}
+      <p className="t-body-sm text-ink-muted">{alert.summary?.trim() || level.meaning}</p>
 
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-rule pt-1.5">
         <span

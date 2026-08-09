@@ -163,7 +163,7 @@ export default function QueueTable({
             <th className="t-label px-3 py-2.5 text-left" style={{ color: "var(--color-ink-faint)" }}>Code</th>
             <th className="t-label px-3 py-2.5 text-left" style={{ color: "var(--color-ink-faint)" }}>Incident</th>
             <th className="t-label px-3 py-2.5 text-left" style={{ color: "var(--color-ink-faint)" }}>Barangay</th>
-            <th className="t-label px-3 py-2.5 text-left" style={{ color: "var(--color-ink-faint)" }}>Time left</th>
+            <th className="t-label px-3 py-2.5 text-left" style={{ color: "var(--color-ink-faint)" }}>Time Left</th>
             <th className="t-label px-3 py-2.5 text-left" style={{ color: "var(--color-ink-faint)" }}>Status</th>
           </tr>
         </thead>

@@ -1,32 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, PhoneCall, ShieldAlert, X, Lock } from "lucide-react";
 
-const HOLD_MS = 1200;
+const HOLD_MS = 2000; // 2.0 seconds deliberate hold requirement
 
-/**
- * The Panic control.
- *
- * Design decisions, all of them about one moment: someone frightened, holding
- * a phone in one hand, possibly in the dark, possibly in rain.
- *
- * - It is the largest object on the screen by a wide margin. Under stress the
- *   eye does not search; it takes whatever is biggest. Nothing else on the
- *   home screen is allowed to compete with it.
- * - Hold, not tap. A tap fires in a pocket and floods dispatch with ghosts; a
- *   1.2s hold cannot happen by accident but costs a frightened person nothing
- *   they will notice. The fill sweep is the receipt that the hold is working,
- *   which is why it is one slow deliberate sweep and not a decorative pulse.
- * - Releasing early cancels and says so. No silent failure — the worst
- *   possible outcome here is believing you called for help when you did not.
- * - The whole control is one button, not a button inside a card. There is
- *   nothing to aim at.
- * - It is the only vermilion object in the product.
- */
 export default function PanicControl({ onFire, onHoldStart, disabled, state = "idle" }) {
+  // Stage 1: "disarmed" | Stage 2: "armed"
+  const [stage, setStage] = useState("disarmed");
   const [held, setHeld] = useState(false);
   const [progress, setProgress] = useState(0);
   const [cancelled, setCancelled] = useState(false);
   const raf = useRef(null);
   const start = useRef(0);
+  const autoDisarmTimer = useRef(null);
 
   const stop = useCallback(() => {
     if (raf.current) cancelAnimationFrame(raf.current);
@@ -44,21 +29,35 @@ export default function PanicControl({ onFire, onHoldStart, disabled, state = "i
     setProgress(0);
   }, [held, progress, stop]);
 
+  const handleArm = () => {
+    setStage("armed");
+    setCancelled(false);
+    // Auto-disarm back to disarmed stage after 8s of inactivity to prevent accidental pocket press later
+    if (autoDisarmTimer.current) clearTimeout(autoDisarmTimer.current);
+    autoDisarmTimer.current = setTimeout(() => {
+      setStage("disarmed");
+      setProgress(0);
+      setHeld(false);
+    }, 8000);
+  };
+
+  const handleDisarm = () => {
+    stop();
+    setStage("disarmed");
+    setHeld(false);
+    setProgress(0);
+    setCancelled(false);
+    if (autoDisarmTimer.current) clearTimeout(autoDisarmTimer.current);
+  };
+
   const begin = useCallback(() => {
     if (disabled || state === "sending") return;
     setCancelled(false);
     setHeld(true);
     start.current = performance.now();
 
-    // The hold is 1.2 seconds of otherwise-idle time, and getting a GPS fix is
-    // the slowest thing in this flow. Starting it here means the fix is usually
-    // already in hand when the hold completes, so the alert carries a real
-    // location instead of the city-centre fallback — without adding a single
-    // millisecond to how long the person waits.
-    //
-    // It runs on every hold, including ones that get cancelled. A cancelled
-    // hold costs a wasted position read; a fix that started too late costs
-    // responders the address.
+    if (autoDisarmTimer.current) clearTimeout(autoDisarmTimer.current);
+
     onHoldStart?.();
 
     const tick = (now) => {
@@ -68,7 +67,8 @@ export default function PanicControl({ onFire, onHoldStart, disabled, state = "i
         stop();
         setHeld(false);
         setProgress(0);
-        if (navigator.vibrate) navigator.vibrate([40, 60, 120]);
+        setStage("disarmed");
+        if (navigator.vibrate) navigator.vibrate([40, 60, 120, 80, 160]);
         onFire?.();
         return;
       }
@@ -77,68 +77,123 @@ export default function PanicControl({ onFire, onHoldStart, disabled, state = "i
     raf.current = requestAnimationFrame(tick);
   }, [disabled, state, onFire, onHoldStart, stop]);
 
-  useEffect(() => stop, [stop]);
+  useEffect(() => {
+    return () => {
+      stop();
+      if (autoDisarmTimer.current) clearTimeout(autoDisarmTimer.current);
+    };
+  }, [stop]);
 
   const sending = state === "sending";
 
   return (
-    <div className="flex flex-col items-stretch gap-3">
-      <button
-        type="button"
-        disabled={disabled || sending}
-        onPointerDown={begin}
-        onPointerUp={release}
-        onPointerLeave={release}
-        onPointerCancel={release}
-        onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) begin(); }}
-        onKeyUp={release}
-        aria-label="Hold to send an emergency alert with your location"
-        aria-describedby="panic-help"
-        className="saro-clip-lg relative flex w-full select-none flex-col items-center justify-center overflow-hidden text-white transition-transform active:scale-[0.995] disabled:opacity-70"
-        style={{
-          background: "var(--color-panic)",
-          minHeight: "min(46vh, 340px)",
-          touchAction: "none",
-        }}
-      >
-        {/* The hold sweep. Sits under the label, fills from the left edge. */}
-        <span
+    <div className="w-full flex flex-col gap-1.5 font-sans">
+      <div className="relative overflow-hidden bg-gradient-to-br from-panic via-panic to-panic-strong text-white shadow-lift border border-white/20 rounded-lg">
+        {/* Fill animation bar during hold */}
+        <div
           aria-hidden="true"
-          className="absolute inset-0 origin-left"
+          className="absolute inset-0 origin-left bg-white/20 transition-all pointer-events-none"
           style={{
-            background: "var(--color-panic-strong)",
             transform: `scaleX(${progress})`,
             transition: held ? "none" : "transform 180ms ease-out",
           }}
         />
 
-        <span className="relative flex flex-col items-center gap-4 px-6">
-          <span
-            className="font-bold"
-            style={{
-              fontFamily: "var(--font-brand)",
-              fontSize: "clamp(44px, 15vw, 68px)",
-              lineHeight: 1,
-              letterSpacing: "0.02em",
-            }}
-          >
-            {sending ? "SENDING" : "PANIC"}
-          </span>
-          <span className="t-label" style={{ color: "rgba(255,255,255,0.82)" }}>
-            {sending ? "Calling 911" : held ? "Keep holding" : "Hold for 1 second"}
-          </span>
-        </span>
-      </button>
+        <div className="relative z-10 flex flex-col p-5 gap-3">
+          {/* Top Label & Icon */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-white/15 backdrop-blur flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-6 h-6 text-white" aria-hidden="true" />
+              </div>
+              <div>
+                <span className="text-sm font-extrabold uppercase tracking-wide text-white block leading-tight">
+                  Emergency Panic
+                </span>
+                <span className="text-[11px] text-white/75 leading-tight block mt-0.5">
+                  Calls 911 &amp; sends your location
+                </span>
+              </div>
+            </div>
 
+            {stage === "armed" && (
+              <button
+                type="button"
+                onClick={handleDisarm}
+                className="px-2.5 py-1 rounded-full bg-black/30 hover:bg-black/40 text-white text-[11px] font-bold flex items-center gap-1 border border-white/20 transition-colors"
+                aria-label="Disarm Panic"
+              >
+                <X className="w-3.5 h-3.5" />
+                Cancel
+              </button>
+            )}
+          </div>
+
+          {/* Stage 1: DISARMED — Tap to Arm Safeguard */}
+          {stage === "disarmed" && (
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={handleArm}
+                disabled={disabled || sending}
+                className="w-full py-3 px-4 rounded-md bg-white text-panic font-extrabold text-xs shadow-md hover:bg-surface active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer border border-white/50"
+              >
+                <Lock className="w-4 h-4 text-panic" />
+                <span>{sending ? "SENDING ALERT…" : "TAP TO UNLOCK PANIC BUTTON"}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Stage 2: ARMED — Hold 2s to Confirm Trigger */}
+          {stage === "armed" && (
+            <div className="pt-0.5 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                disabled={disabled || sending}
+                onPointerDown={begin}
+                onPointerUp={release}
+                onPointerLeave={release}
+                onPointerCancel={release}
+                onKeyDown={(e) => {
+                  if ((e.key === " " || e.key === "Enter") && !e.repeat) begin();
+                }}
+                onKeyUp={release}
+                className="w-full py-3.5 px-4 rounded-md bg-white text-panic font-extrabold text-xs shadow-lg hover:bg-surface active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer select-none touch-none border-2 border-white"
+                style={{ touchAction: "none" }}
+              >
+                <PhoneCall className="w-4.5 h-4.5 text-panic animate-bounce" />
+                <span>
+                  {sending
+                    ? "CALLING 911 NOW…"
+                    : held
+                    ? `HOLDING... ${Math.round(progress * 100)}%`
+                    : "PRESS & HOLD 2 SECONDS TO CALL 911"}
+                </span>
+              </button>
+
+              {/* Real-time Progress Bar Indicator */}
+              <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden mt-1">
+                <div
+                  className="bg-white h-full transition-all duration-75"
+                  style={{ width: `${progress * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Guidance and Cancel Notice */}
       <p
-        id="panic-help"
-        className="t-body-sm px-1"
+        className="text-[11px] px-1 font-medium leading-relaxed"
         style={{ color: cancelled ? "var(--color-panic-strong)" : "var(--color-ink-muted)" }}
         role={cancelled ? "alert" : undefined}
       >
         {cancelled
-          ? "Released too early — nothing was sent and no call was placed. Hold until the button fills."
-          : "Calls 911 and sends your location at the same time. No account, no form, no name required."}
+          ? "⚠️ Released too early — no call was placed. Hold for full 2 seconds."
+          : stage === "armed"
+          ? "🔒 Button unlocked. Press & hold for 2 full seconds to connect 911."
+          : "Protected against accidental touch. Tap to unlock, then hold to call."}
       </p>
     </div>
   );

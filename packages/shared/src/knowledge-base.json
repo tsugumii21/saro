@@ -112,13 +112,6 @@
     "category": "Reporting Procedure"
   },
   {
-    "id": "doc_proxy_reporting",
-    "question": "Pwede ba akong mag-report para sa ibang tao?",
-    "answer": "Oo! Sa Report form, i-check ang 'Reporting for someone else' (Proxy Report). Kailangan lang maglagay ng callback number ng taong tinutulungan mo para matawagan ng responder.",
-    "source": "SARO User Guide",
-    "category": "Reporting Procedure"
-  },
-  {
     "id": "doc_about_saro",
     "question": "Ano ang SARO app at ano ang ibig sabihin ng pangalan nito?",
     "answer": "Ang SARO ay ang nag-iisang reporting front door para sa Legazpi City na awtomatikong nagr-route ng hazard reports sa tamang tanggapan. Ang 'Saro' ay salitang Bikol na nangangahulugang 'isa' (one).",

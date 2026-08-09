@@ -54,8 +54,8 @@ const STAFF = [
 ];
 
 function generatePassword() {
-  // 24 URL-safe characters. Staff are expected to change this on first login.
-  return randomBytes(18).toString("base64url");
+  // Default prototype password for easy local/demo access
+  return process.env.DEMO_PASSWORD || "demo123";
 }
 
 async function resolveScope() {

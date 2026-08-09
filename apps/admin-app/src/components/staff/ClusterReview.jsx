@@ -51,7 +51,7 @@ function HotspotMap({ reports }) {
   return (
     <div className="saro-card overflow-hidden">
       <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
-        <h2 className="t-label text-ink-faint">Recurring spots</h2>
+        <h2 className="t-label text-ink-faint">Recurring Spots</h2>
         <span className="t-body-sm text-ink-muted">
           {spots.length} location{spots.length === 1 ? "" : "s"} · larger circle means more reports
         </span>
@@ -113,7 +113,7 @@ export default function ClusterReview() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="t-heading">Duplicate review</h1>
+        <h1 className="t-heading">Duplicate Review</h1>
         <p className="t-body-sm mt-1 text-ink-muted">
           Reports of the same category within {CLUSTER_RADIUS_METERS}m and{" "}
           {CLUSTER_WINDOW_MINUTES} minutes of each other are grouped as one incident. More
@@ -130,7 +130,7 @@ export default function ClusterReview() {
       {clusters.length === 0 ? (
         <div className="saro-card flex flex-col items-center gap-2 px-6 py-14 text-center">
           <Layers width={24} height={24} className="text-ink-faint" aria-hidden="true" />
-          <span className="t-subhead">No duplicate groups right now</span>
+          <span className="t-subhead">No Duplicate Groups Right Now</span>
           <span className="t-body-sm max-w-[46ch] text-ink-muted">
             Groups appear on their own when several people report the same thing in the same
             place at the same time.
@@ -181,7 +181,7 @@ export default function ClusterReview() {
                         title="Not the same incident — separate this report"
                       >
                         <Split width={13} height={13} />
-                        {busy === report.id ? "Splitting…" : "Not the same"}
+                        {busy === report.id ? "Splitting…" : "Not the Same"}
                       </button>
                     )}
                   </li>

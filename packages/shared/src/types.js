@@ -101,12 +101,7 @@
  * @property {string|null} barangay_id
  * @property {ReportStatus} status
  * @property {string|null} reporter_id    Profile id, or null for anonymous/guest reports.
- * @property {string|null} callback_number
  * @property {string} device_fingerprint  Local device id; "dev_anon" when unavailable.
- * @property {boolean} is_proxy_report    A resident filed this for a neighbour
- *                                        from their own phone. Forces a callback
- *                                        number. Not the removed admin-side
- *                                        File on Behalf feature.
  * @property {string|null} cluster_id     Set when this report joined a duplicate cluster.
  * @property {number} confidence_score    Member count of the cluster; 1 when unclustered.
  * @property {boolean} is_false_report
@@ -123,9 +118,7 @@
  * @property {number|string} lng
  * @property {string|null} [barangay_id]
  * @property {string|null} [reporter_id]
- * @property {string|null} [callback_number]
  * @property {string} [device_fingerprint]
- * @property {boolean} [is_proxy_report]
  * @property {string} [office_id]         Overrides category-based routing.
  */
 

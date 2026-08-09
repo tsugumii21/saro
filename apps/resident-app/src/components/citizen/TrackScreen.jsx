@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search, Inbox, MapPin, Building2, ChevronRight, ThumbsUp, RotateCcw,
-  CloudOff, Info,
+  CloudOff, Info, UserPlus, X, MessageSquare, Image as ImageIcon,
 } from "lucide-react";
-import { StatusTag, TrackingCode } from "@saro/ui";
+import { StatusTag, TrackingCode, HazardMap } from "@saro/ui";
 import {
-  getReportByTrackingCode, getStatusHistory, getOffices,
+  getReportByTrackingCode, getStatusHistory, getOffices, getReportMedia,
   getReportsByDevice, getMyReports, saroEvents,
   confirmReport, disputeReport,
   listRememberedReports, updateRememberedStatus, listOutbox,
@@ -14,6 +14,68 @@ import {
   CLOSED_STATUSES, AUTO_CLOSE_DAYS,
 } from "@saro/shared";
 import ReportTicket from "./ReportTicket";
+import ResidentAuthScreen from "./ResidentAuthScreen";
+
+const DEMO_RESIDENT_REPORTS = [
+  {
+    id: "demo-101",
+    tracking_code: "SR-8F2K",
+    category: "flood",
+    category_label: "Flooding & Water Inundation",
+    status: "in_progress",
+    lat: 13.1438,
+    lng: 123.7448,
+    created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+    description: "Flooding near Bitano market line. Water level rising fast by the bakery.",
+    barangay: "Bitano",
+    assigned_office: "CDRRMO",
+    priority: "high",
+    photo_url: "https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=800&q=80"
+  },
+  {
+    id: "demo-102",
+    tracking_code: "SR-3M9P",
+    category: "open_drain",
+    category_label: "Uncovered Drain & Broken Manhole",
+    status: "assigned",
+    lat: 13.1415,
+    lng: 123.7410,
+    created_at: new Date(Date.now() - 3600000 * 18).toISOString(),
+    description: "Manhole cover missing outside the elementary school gate.",
+    barangay: "Em's Barrio",
+    assigned_office: "City Engineering",
+    priority: "medium",
+    photo_url: "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80"
+  },
+  {
+    id: "demo-103",
+    tracking_code: "SR-7N4L",
+    category: "pothole",
+    category_label: "Road Pothole & Surface Damage",
+    status: "resolved",
+    lat: 13.1490,
+    lng: 123.7380,
+    created_at: new Date(Date.now() - 3600000 * 48).toISOString(),
+    description: "Deep pothole on the northbound lane, two tricycles already damaged.",
+    barangay: "Gogon",
+    assigned_office: "City Engineering",
+    priority: "low"
+  },
+  {
+    id: "demo-104",
+    tracking_code: "SR-1B9Q",
+    category: "typhoon_debris",
+    category_label: "Typhoon Debris & Structural Damage",
+    status: "received",
+    lat: 13.1395,
+    lng: 123.7465,
+    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    description: "Fallen acacia branch blocking half the road after last night's wind.",
+    barangay: "Oro Site",
+    assigned_office: "CDRRMO",
+    priority: "medium"
+  }
+];
 
 /**
  * Track — "one code, one place to check".
@@ -59,6 +121,18 @@ function tabKey(status) {
   return status;
 }
 
+function formatTimelineDate(entry) {
+  if (!entry) return "";
+  const raw = entry.changed_at || entry.created_at || entry.timestamp || entry.updated_at;
+  if (!raw) return "Recorded";
+  const date = new Date(raw);
+  if (isNaN(date.getTime())) return "Recorded";
+  return date.toLocaleString("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 export default function TrackScreen() {
   const [searchParams] = useSearchParams();
   const { isResident } = useAuth();
@@ -72,6 +146,7 @@ export default function TrackScreen() {
   const [searching, setSearching] = useState(false);
   const [mine, setMine] = useState([]);
   const [queued, setQueued] = useState([]);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Confirm / dispute
   const [disputing, setDisputing] = useState(false);
@@ -88,6 +163,13 @@ export default function TrackScreen() {
 
   const loadMine = useCallback(async () => {
     const merged = new Map();
+
+    // Include demo resident reports for prototype tracking & map visualization
+    if (isResident) {
+      for (const r of DEMO_RESIDENT_REPORTS) {
+        merged.set(r.tracking_code, { ...r, origin: "account" });
+      }
+    }
 
     for (const row of await listRememberedReports()) {
       merged.set(row.tracking_code, { ...row, origin: "device" });
@@ -122,9 +204,19 @@ export default function TrackScreen() {
     setClosureNote("");
     setDisputing(false);
 
-    // The RPC, not a table read. Anonymous callers have no SELECT on reports at
-    // all; this returns a narrow public projection with no description, photo,
-    // contact number or device id in it.
+    // Check demo resident reports list
+    const demoMatch = DEMO_RESIDENT_REPORTS.find((r) => r.tracking_code === c);
+    if (demoMatch) {
+      setReport(demoMatch);
+      updateRememberedStatus(demoMatch.tracking_code, demoMatch.status);
+      setHistory([
+        { status: "received", changed_at: demoMatch.created_at, note: "Report received by Legazpi Command Center" },
+        { status: demoMatch.status, changed_at: new Date(Date.now() - 1800000).toISOString(), note: `Status updated to ${demoMatch.status}` }
+      ]);
+      setSearching(false);
+      return;
+    }
+
     const { data, error: err } = await getReportByTrackingCode(c);
     if (err || !data) {
       setError(`No report found for ${c}. Check the code and try again.`);
@@ -169,19 +261,50 @@ export default function TrackScreen() {
     loadMine();
   };
 
-  const stepIndex = report ? STATUS_PIPELINE.indexOf(report.status) : -1;
-  const isClosed = report && CLOSED_STATUSES.includes(report.status);
+  const [reportMedia, setReportMedia] = useState([]);
+
+  useEffect(() => {
+    if (!report?.id) {
+      setReportMedia([]);
+      return;
+    }
+    (async () => {
+      const { data } = await getReportMedia(report.id);
+      setReportMedia(data ?? []);
+    })();
+  }, [report?.id]);
+
+  const allPhotos = useMemo(() => {
+    if (!report) return [];
+    const list = [];
+    if (report.photo_url) list.push(report.photo_url);
+    if (Array.isArray(report.photos)) {
+      for (const p of report.photos) {
+        if (typeof p === "string") list.push(p);
+        else if (p?.signed_url || p?.url) list.push(p.signed_url || p.url);
+      }
+    }
+    for (const m of reportMedia) {
+      if (m?.signed_url || m?.url) list.push(m.signed_url || m.url);
+    }
+    return [...new Set(list)].filter(Boolean);
+  }, [report, reportMedia]);
+
+  const canDispute =
+    report &&
+    (report.status === "resolved" ||
+      report.status === "closed_unconfirmed" ||
+      report.status === "closed_confirmed");
+
   const awaitingAnswer = report?.status === "resolved";
-  // A report the city closed without hearing back can still be disputed —
-  // coming back after nine days and finding the drain still blocked must not be
-  // a dead end.
-  const canDispute = awaitingAnswer || report?.status === "closed_unconfirmed";
-  const daysLeft = awaitingAnswer ? daysLeftToConfirm(report.resolved_at) : null;
+  const stepIndex = STATUS_PIPELINE.indexOf(report?.status);
+  const isClosed = CLOSED_STATUSES.includes(report?.status);
+  const daysLeft = awaitingAnswer ? daysLeftToConfirm(report?.resolved_at) : null;
 
   return (
     <div className="flex flex-col gap-6 px-4 pb-8 pt-5">
       <div>
-        <h1 className="t-title">Check a report</h1>
+        <h1 className="t-title">Check a Report</h1>
         <p className="t-body-sm mt-1 text-ink-muted">
           Enter the code you were given when you filed.
         </p>
@@ -233,13 +356,15 @@ export default function TrackScreen() {
 
           <dl className="grid grid-cols-1 gap-3 border-b border-rule p-5">
             <div>
-              <dt className="t-label text-ink-faint">What was reported</dt>
-              <dd className="t-body mt-1">{report.category_label ?? report.category}</dd>
+              <dt className="t-label text-ink-faint">What Was Reported</dt>
+              <dd className="t-body mt-1 font-bold text-ink leading-normal">
+                {report.category_label ?? report.category}
+              </dd>
             </div>
             <div>
-              <dt className="t-label text-ink-faint">Handled by</dt>
-              <dd className="t-body mt-1 flex items-center gap-1.5">
-                <Building2 width={14} height={14} className="text-ink-faint" aria-hidden="true" />
+              <dt className="t-label text-ink-faint">Handled By</dt>
+              <dd className="t-body mt-1 flex items-center gap-1.5 font-medium">
+                <Building2 width={14} height={14} className="text-ink-faint shrink-0" aria-hidden="true" />
                 {offices.find((o) => o.short_name === report.assigned_office)?.full_name
                   ?? report.assigned_office ?? "Being routed"}
               </dd>
@@ -247,20 +372,78 @@ export default function TrackScreen() {
             {report.barangay && (
               <div>
                 <dt className="t-label text-ink-faint">Where</dt>
-                <dd className="t-body mt-1 flex items-center gap-1.5">
-                  <MapPin width={14} height={14} className="text-ink-faint" aria-hidden="true" />
+                <dd className="t-body mt-1 flex items-center gap-1.5 font-medium">
+                  <MapPin width={14} height={14} className="text-ink-faint shrink-0" aria-hidden="true" />
                   {report.barangay}
                 </dd>
               </div>
             )}
           </dl>
 
-          {/* ── Confirm / Dispute ────────────────────────────────────────
-           * The one moment SARO asks the resident for something. It appears
-           * only when the city says the work is done, and it is a genuine
-           * question rather than a satisfaction survey: answering "no" puts
-           * the report back in front of the office that closed it.
-           */}
+          {/* ── Resident Description (What You Wrote) ────────────────────── */}
+          {report.description && (
+            <div className="border-b border-rule p-5 bg-raised/30">
+              <span className="t-label text-ink-faint flex items-center gap-1.5 font-bold mb-2">
+                <MessageSquare width={13} height={13} className="text-brand shrink-0" aria-hidden="true" />
+                What You Wrote (Your Description)
+              </span>
+              <p className="t-body text-ink leading-relaxed bg-surface p-3.5 rounded-xs border border-line shadow-xs font-sans whitespace-pre-wrap font-medium">
+                "{report.description}"
+              </p>
+            </div>
+          )}
+
+          {/* ── Submitted Photo Evidence ──────────────────────────────────── */}
+          {allPhotos.length > 0 && (
+            <div className="border-b border-rule p-5 bg-raised/20">
+              <span className="t-label text-ink-faint flex items-center gap-1.5 font-bold mb-3">
+                <ImageIcon width={13} height={13} className="text-brand shrink-0" aria-hidden="true" />
+                Submitted Photo Evidence ({allPhotos.length})
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {allPhotos.map((imgUrl, i) => (
+                  <div key={i} className="relative rounded-xs overflow-hidden border border-line bg-sunken aspect-video shadow-xs group">
+                    <img
+                      src={imgUrl}
+                      alt={`Photo evidence ${i + 1}`}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Consolidated Single Map for Report Details */}
+          {report.lat && report.lng && (
+            <div className="border-b border-rule p-4 bg-raised">
+              <span className="t-label text-ink-faint block mb-2 flex items-center gap-1.5 font-bold">
+                <MapPin width={13} height={13} className="text-brand shrink-0" aria-hidden="true" />
+                Reported Location Map
+              </span>
+              <div className="h-[200px] w-full rounded-xs overflow-hidden border border-line">
+                <HazardMap
+                  className="h-full w-full"
+                  center={[
+                    typeof report.lng === "string" ? parseFloat(report.lng) : report.lng,
+                    typeof report.lat === "string" ? parseFloat(report.lat) : report.lat
+                  ]}
+                  zoom={15}
+                  showToggles={false}
+                  reports={[{
+                    id: report.tracking_code,
+                    lat: typeof report.lat === "string" ? parseFloat(report.lat) : report.lat,
+                    lng: typeof report.lng === "string" ? parseFloat(report.lng) : report.lng,
+                    priority: report.priority || "medium",
+                    color: `var(--color-status-${tabKey(report.status)}-tab)`,
+                  }]}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ── Confirm / Dispute ──────────────────────────────────────── */}
           {canDispute && (
             <div
               className="border-b border-rule p-5"
@@ -276,26 +459,26 @@ export default function TrackScreen() {
               </p>
 
               {!disputing ? (
-                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <div className="mt-4 flex flex-col sm:flex-row gap-2.5 w-full">
                   {awaitingAnswer && (
                     <button
                       type="button"
                       onClick={handleConfirm}
                       disabled={closureBusy}
-                      className="saro-btn saro-btn-primary saro-btn-lg flex-1"
+                      className="saro-btn saro-btn-primary saro-btn-lg flex-1 min-h-[44px] justify-center text-xs font-bold whitespace-nowrap px-4"
                     >
-                      <ThumbsUp width={16} height={16} />
-                      Yes, it is fixed
+                      <ThumbsUp width={16} height={16} className="shrink-0" />
+                      <span>Yes, it is fixed</span>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => setDisputing(true)}
                     disabled={closureBusy}
-                    className="saro-btn saro-btn-secondary saro-btn-lg flex-1"
+                    className="saro-btn saro-btn-secondary saro-btn-lg flex-1 min-h-[44px] justify-center text-xs font-bold whitespace-nowrap px-4"
                   >
-                    <RotateCcw width={16} height={16} />
-                    No, it is not
+                    <RotateCcw width={16} height={16} className="shrink-0" />
+                    <span>No, it is not fixed</span>
                   </button>
                 </div>
               ) : (
@@ -347,24 +530,19 @@ export default function TrackScreen() {
             </p>
           )}
 
-          {/* Progress as stamped steps. Closure is shown as an outcome below
-              the pipeline, not as a fifth dot — "closed" is an ending, and
-              rendering it as progress would imply it was a good one. */}
+          {/* Progress Timeline */}
           <div className="p-5">
             <span className="t-label text-ink-faint">Progress</span>
             <ol className="mt-3 flex flex-col">
               {STATUS_PIPELINE.map((step, i) => {
                 const entry = history.find((h) => h.status === step);
-                // Once a report is closed or reopened it has been through the
-                // whole pipeline, so every step reads as done rather than the
-                // list appearing to have gone backwards.
                 const done = isClosed || report.status === "reopened" ? true : i <= stepIndex;
                 const current = i === stepIndex;
                 return (
                   <li key={step} className="flex gap-3">
                     <span className="flex flex-col items-center">
                       <span
-                        className="mt-1 h-2.5 w-2.5 shrink-0"
+                        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{
                           background: done
                             ? `var(--color-status-${tabKey(step)}-tab)`
@@ -385,9 +563,7 @@ export default function TrackScreen() {
                       {entry ? (
                         <>
                           <span className="t-data-sm block text-ink-faint">
-                            {new Date(entry.changed_at).toLocaleString("en-PH", {
-                              dateStyle: "medium", timeStyle: "short",
-                            })}
+                            {formatTimelineDate(entry)}
                           </span>
                           {entry.note && (
                             <span className="t-body-sm block text-ink-muted">{entry.note}</span>
@@ -420,8 +596,7 @@ export default function TrackScreen() {
             )}
           </div>
 
-          {/* Everything needed to hold on to the code, on the screen where
-              somebody has just looked it up. */}
+          {/* Report Ticket */}
           <div className="border-t border-rule p-5">
             <ReportTicket
               code={report.tracking_code}
@@ -437,7 +612,7 @@ export default function TrackScreen() {
         <section>
           <h2 className="t-label flex items-center gap-2 text-ink-faint">
             <CloudOff width={13} height={13} aria-hidden="true" />
-            Waiting to send ({queued.length})
+            Waiting to Send ({queued.length})
           </h2>
           <ul className="mt-3 flex flex-col">
             {queued.map((row) => (
@@ -459,56 +634,148 @@ export default function TrackScreen() {
         </section>
       )}
 
-      {/* ── Your own reports ─────────────────────────────────────────────── */}
+      {/* ── Single Consolidated Map of Reported Hazards (Shown when no report card is open) ── */}
+      {!report && mine.length > 0 && (
+        <section className="saro-card overflow-hidden shadow-xs border border-line">
+          <div className="border-b border-line bg-raised px-4 py-3 flex items-center justify-between">
+            <span className="t-label text-ink-faint flex items-center gap-1.5 font-bold">
+              <MapPin width={14} height={14} className="text-brand shrink-0" aria-hidden="true" />
+              Map of Your Reported Hazards ({mine.filter((r) => r.lat && r.lng).length})
+            </span>
+            <span className="t-micro text-ink-muted font-mono">Legazpi City</span>
+          </div>
+          <div className="h-[240px] w-full relative">
+            <HazardMap
+              className="h-full w-full"
+              center={[123.7430, 13.1420]}
+              zoom={13}
+              showToggles={false}
+              reports={mine
+                .filter((r) => r.lat && r.lng)
+                .map((r) => ({
+                  id: r.tracking_code,
+                  lat: typeof r.lat === "string" ? parseFloat(r.lat) : r.lat,
+                  lng: typeof r.lng === "string" ? parseFloat(r.lng) : r.lng,
+                  priority: r.priority || "medium",
+                  color: `var(--color-status-${tabKey(r.status)}-tab)`,
+                  onSelect: () => {
+                    setCode(r.tracking_code);
+                    search(r.tracking_code);
+                  },
+                }))}
+            />
+          </div>
+          <div className="p-2.5 bg-surface border-t border-line text-center">
+            <span className="t-micro text-ink-muted font-medium">Tap any pin to view tracking status & details</span>
+          </div>
+        </section>
+      )}
+
+      {/* ── Your own reports List ─────────────────────────────────────────────── */}
       {mine.length > 0 && (
         <section>
-          <h2 className="t-label text-ink-faint">
-            {isResident ? "Your reports" : "Reports from this device"}
+          <h2 className="t-label text-ink-faint uppercase tracking-wider font-bold">
+            {isResident ? "Your Reports" : "Reports From This Device"}
           </h2>
-          <ul className="mt-3 flex flex-col">
+          <ul className="mt-3 flex flex-col border-t border-line">
             {mine.slice(0, 12).map((r) => (
               <li key={r.tracking_code}>
                 <button
                   onClick={() => { setCode(r.tracking_code); search(r.tracking_code); }}
-                  className="flex w-full items-center gap-3 border-b border-line py-3 text-left"
+                  className="flex w-full items-start gap-3 border-b border-line py-3.5 text-left hover:bg-raised/50 px-1 rounded-xs transition-colors"
                 >
                   <span
-                    className="h-8 w-1 shrink-0"
+                    className="h-9 w-1 shrink-0 rounded-full mt-0.5"
                     style={{ background: `var(--color-status-${tabKey(r.status)}-tab)` }}
                     aria-hidden="true"
                   />
-                  <span className="min-w-0 flex-1">
-                    <TrackingCode code={r.tracking_code} />
-                    <span className="t-body-sm block truncate text-ink-muted">
-                      {r.category_label ?? r.category} · {timeSince(r.created_at)}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <TrackingCode code={r.tracking_code} />
+                      <span className="t-micro text-ink-faint font-medium">· {timeSince(r.created_at)}</span>
+                    </div>
+                    <span className="t-body-sm block font-semibold text-ink mt-0.5 leading-snug break-words">
+                      {r.category_label ?? r.category}
                     </span>
-                  </span>
+                  </div>
                   <StatusTag status={r.status} size="sm" />
-                  <ChevronRight width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />
+                  <ChevronRight width={16} height={16} className="shrink-0 text-ink-faint mt-1" aria-hidden="true" />
                 </button>
               </li>
             ))}
           </ul>
 
-          <p className="t-body-sm mt-3 flex items-start gap-2 text-ink-faint">
-            <Info width={14} height={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-            <span>
-              This list is a bookmark kept on this phone. Clearing your browser removes the
-              list, <strong className="font-bold">not the reports</strong> — every one of
-              them stays with the city and comes back the moment you type its code.
-              {!isResident && " Create an account and the list follows you to a new phone."}
-            </span>
-          </p>
+          <div className="mt-4 p-3.5 rounded-lg border flex flex-col gap-2"
+               style={{ borderColor: 'var(--color-brand-edge)', background: 'var(--color-brand-wash)' }}>
+            <div className="flex items-start gap-2.5">
+              <Info width={15} height={15} className="mt-0.5 shrink-0 text-brand" aria-hidden="true" />
+              <div className="text-xs text-ink-muted leading-relaxed">
+                This list is saved locally on this phone. Clearing your browser removes the bookmark list, <strong className="font-bold text-ink">not the reports</strong> — every report stays with the city and can be searched by code.
+              </div>
+            </div>
+            {!isResident && (
+              <div className="pt-1 border-t border-brand-edge/50 flex items-center justify-between gap-2 mt-1">
+                <span className="text-[11px] font-semibold text-brand">Keep history across devices?</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAuthModal(true)}
+                  className="saro-btn saro-btn-primary saro-btn-sm text-xs py-1 px-2.5 flex items-center gap-1 shrink-0"
+                >
+                  <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
+                  Sign In / Create Account
+                </button>
+              </div>
+            )}
+          </div>
         </section>
       )}
 
       {!report && !error && mine.length === 0 && queued.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
           <Inbox width={26} height={26} className="text-ink-faint" aria-hidden="true" />
-          <p className="t-subhead">Nothing to show yet</p>
+          <p className="t-subhead">Nothing to Show Yet</p>
           <p className="t-body-sm max-w-[34ch] text-ink-muted">
             Reports you file will appear here, and you can always look one up with its code.
           </p>
+          {!isResident && (
+            <button
+              type="button"
+              onClick={() => setShowAuthModal(true)}
+              className="saro-btn saro-btn-ghost saro-btn-sm mt-2 flex items-center gap-1.5"
+            >
+              <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
+              Sign in to sync your report history
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Auth Modal Overlay */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-ink/50 backdrop-blur-sm"
+            onClick={() => setShowAuthModal(false)}
+          />
+          <div className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 pt-4 pb-2 bg-surface rounded-t-2xl">
+              <span className="text-xs font-bold text-ink-muted uppercase tracking-wider">Resident Account</span>
+              <button
+                type="button"
+                onClick={() => setShowAuthModal(false)}
+                className="p-1.5 rounded-full hover:bg-raised transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4 text-ink-muted" />
+              </button>
+            </div>
+            <ResidentAuthScreen
+              mode="sign-in"
+              reason="Create an account or sign in to sync your report tracking history across all your devices."
+              onCancel={() => setShowAuthModal(false)}
+              onSignedIn={() => setShowAuthModal(false)}
+            />
+          </div>
         </div>
       )}
     </div>

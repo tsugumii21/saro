@@ -39,24 +39,17 @@ export function isValidTrackingCode(code) {
  * @param {string} [draft.categoryId]
  * @param {{lat:number,lng:number}|null} [draft.coords]
  * @param {string} [draft.description]
- * @param {boolean} [draft.isProxy]      True when filed on behalf of someone else.
- * @param {string} [draft.callbackNumber]
  * @returns {Record<string,string>} field -> message; empty when valid.
  */
 export function validateReportDraft({
   categoryId,
   coords,
   description,
-  isProxy = false,
-  callbackNumber = ""
 } = {}) {
   const errors = {};
   if (!categoryId) errors.category = "Please select a hazard category.";
   if (!coords) errors.coords = "Please set the location on the map.";
   if (!description || !description.trim()) errors.description = "Please describe what happened.";
-  if (isProxy && !callbackNumber.trim()) {
-    errors.callback = "Callback number is required for proxy reports.";
-  }
   return errors;
 }
 

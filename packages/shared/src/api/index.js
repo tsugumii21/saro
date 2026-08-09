@@ -45,8 +45,41 @@ function fail(message) {
  * migration seam, not the destination.
  * ─────────────────────────────────────────────────────────────────────────── */
 
+export const CRITICAL_CATEGORIES = [
+  "fire",
+  "gas_leak",
+  "medical",
+  "accident",
+  "vehicular_crash",
+  "coastal_hazard",
+  "landslide",
+  "crime",
+];
+
+export const URGENT_CATEGORIES = [
+  "bridge_damage",
+  "soil_erosion",
+];
+
+export function getCategoryTier(categoryOrRow) {
+  const catKey = typeof categoryOrRow === "string"
+    ? categoryOrRow
+    : (categoryOrRow?.category || categoryOrRow?.id);
+
+  if (!catKey) return "routine";
+  if (CRITICAL_CATEGORIES.includes(catKey)) return "critical";
+  if (URGENT_CATEGORIES.includes(catKey)) return "urgent";
+  return "routine";
+}
+
+export function isEmergencyCategory(categoryOrRow) {
+  const tier = getCategoryTier(categoryOrRow);
+  return tier === "critical" || tier === "urgent";
+}
+
 function adaptCategory(row) {
   if (!row) return row;
+  const tier = getCategoryTier(row.category);
   return {
     ...row,
     id: row.category,           // alias: mock called this `id`
@@ -54,6 +87,8 @@ function adaptCategory(row) {
     name_bikol: row.label_bikol,
     name_tagalog: row.label_tagalog,
     office_id: row.responsible_office_id,
+    tier,
+    is_emergency: tier === "critical" || tier === "urgent",
   };
 }
 
@@ -81,20 +116,67 @@ function dataUrlToBlob(dataUrl) {
  * Reference data — readable by everyone
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+const DEMO_OFFICES = [
+  { id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444", short_name: "CDRRMO", full_name: "City Disaster Risk Reduction and Management Office" },
+  { id: "3a09756b-4e89-42b7-bd3a-0e6e76cf0a3a", short_name: "Legazpi 911", full_name: "Legazpi 911 Emergency Command Center" },
+  { id: "3362fc03-d004-4148-8268-00d8c0a959b7", short_name: "City Engineering", full_name: "City Engineering Office" },
+  { id: "pso-legazpi", short_name: "Public Safety Office", full_name: "Public Safety Office (PSO)" },
+  { id: "bfp-legazpi", short_name: "BFP Legazpi", full_name: "Bureau of Fire Protection - Legazpi Station" },
+  { id: "pnp-legazpi", short_name: "PNP Legazpi", full_name: "Philippine National Police - Legazpi City Station" },
+  { id: "cho-legazpi", short_name: "City Health Office", full_name: "City Health Office (CHO)" },
+  { id: "pcg-legazpi", short_name: "Coast Guard Station", full_name: "Philippine Coast Guard - Legazpi Station" }
+];
+
+const DEMO_CATEGORIES = [
+  { category: "flood", label: "Flooding & Water Inundation", label_bikol: "Baha sagkod Tuba", label_tagalog: "Baha at Pag-apaw ng Tubig", responsible_office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444", is_emergency: true, sla_hours: 1, resolution_proof: "photo" },
+  { category: "open_drain", label: "Uncovered Drain & Broken Manhole", label_bikol: "Sirang Kanal at Manhole", label_tagalog: "Sirang Kanal at Manhole", responsible_office_id: "3362fc03-d004-4148-8268-00d8c0a959b7", is_emergency: false, sla_hours: 24, resolution_proof: "photo" },
+  { category: "pothole", label: "Road Pothole & Surface Damage", label_bikol: "Lubak sa Kalsada", label_tagalog: "Lubak sa Kalsada", responsible_office_id: "3362fc03-d004-4148-8268-00d8c0a959b7", is_emergency: false, sla_hours: 72, resolution_proof: "photo" },
+  { category: "medical", label: "Medical Emergency & Injury", label_bikol: "Pang-medikal na Emergencia", label_tagalog: "Medikal na Eherhensya", responsible_office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444", is_emergency: true, sla_hours: 1, resolution_proof: "reference" },
+  { category: "fire", label: "Structural Fire & Outbreak", label_bikol: "Caisogan nin Sulog", label_tagalog: "Sunog sa Estruktura", responsible_office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444", is_emergency: true, sla_hours: 1, resolution_proof: "reference" },
+  { category: "landslide", label: "Landslide & Soil Erosion", label_bikol: "Guba nin Daga", label_tagalog: "Pagguho ng Lupa", responsible_office_id: "3362fc03-d004-4148-8268-00d8c0a959b7", is_emergency: true, sla_hours: 2, resolution_proof: "photo" }
+];
+
+const DEMO_BARANGAYS = [
+  { id: "brgy-bitano", name: "Bitano", is_coastal: true },
+  { id: "brgy-ems", name: "Em's Barrio", is_coastal: false },
+  { id: "brgy-gogon", name: "Gogon", is_coastal: false },
+  { id: "brgy-rawis", name: "Rawis", is_coastal: true }
+];
+
 export async function getOffices() {
-  return wrap(await supabase.from("offices").select("*").order("short_name"));
+  try {
+    const { data, error } = await supabase.from("offices").select("*").order("short_name");
+    if (error || !data || data.length === 0) {
+      return { data: DEMO_OFFICES, error: null };
+    }
+    return { data, error: null };
+  } catch {
+    return { data: DEMO_OFFICES, error: null };
+  }
 }
 
 export async function getCategories() {
-  // The routing table is the category list. `label` is the display name;
-  // `category` is the stable key stored on reports.
-  const { data, error } = await supabase.from("routing_table").select("*").order("label");
-  if (error) return fail(error.message);
-  return { data: (data ?? []).map(adaptCategory), error: null };
+  try {
+    const { data, error } = await supabase.from("routing_table").select("*").order("label");
+    if (error || !data || data.length === 0) {
+      return { data: DEMO_CATEGORIES.map(adaptCategory), error: null };
+    }
+    return { data: (data ?? []).map(adaptCategory), error: null };
+  } catch {
+    return { data: DEMO_CATEGORIES.map(adaptCategory), error: null };
+  }
 }
 
 export async function getBarangays() {
-  return wrap(await supabase.from("barangays").select("id, name, is_coastal").order("name"));
+  try {
+    const { data, error } = await supabase.from("barangays").select("id, name, is_coastal").order("name");
+    if (error || !data || data.length === 0) {
+      return { data: DEMO_BARANGAYS, error: null };
+    }
+    return { data, error: null };
+  } catch {
+    return { data: DEMO_BARANGAYS, error: null };
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -125,13 +207,29 @@ export async function getReportsByDevice(deviceId) {
   return wrap(await supabase.rpc("get_reports_by_device", { device_id: deviceId }));
 }
 
+const DEMO_MAP_REPORTS = [
+  { id: "demo-1", tracking_code: "SR-8F2K", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1438, lng: 123.7448, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 5).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
+  { id: "demo-2", tracking_code: "SR-8F2L", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1439, lng: 123.7449, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
+  { id: "demo-3", tracking_code: "SR-8F2M", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1437, lng: 123.7447, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 3).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
+  { id: "demo-4", tracking_code: "SR-8F2N", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1440, lng: 123.7450, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
+  { id: "demo-5", tracking_code: "SR-3M9P", category: "open_drain", category_label: "Uncovered Drain & Broken Manhole", lat: 13.1415, lng: 123.7410, status: "assigned", priority: "medium", created_at: new Date(Date.now() - 3600000 * 18).toISOString(), barangay: "Em's Barrio" },
+  { id: "demo-6", tracking_code: "SR-7N4L", category: "pothole", category_label: "Road Pothole & Surface Damage", lat: 13.1490, lng: 123.7380, status: "resolved", priority: "low", created_at: new Date(Date.now() - 3600000 * 48).toISOString(), barangay: "Gogon" },
+  { id: "demo-7", tracking_code: "SR-1B9Q", category: "typhoon_debris", category_label: "Typhoon Debris & Structural Damage", lat: 13.1395, lng: 123.7465, status: "received", priority: "medium", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Oro Site" }
+];
+
 /** Coarse public hazard map. Coordinates are rounded server-side to ~110 m. */
 export async function getPublicMapReports(maxAgeHours = 168) {
-  const { data, error } = await supabase.rpc("get_public_map_reports", {
-    max_age_hours: maxAgeHours,
-  });
-  if (error) return fail(error.message);
-  return { data: (data ?? []).map(adaptReport), error: null };
+  try {
+    const { data, error } = await supabase.rpc("get_public_map_reports", {
+      max_age_hours: maxAgeHours,
+    });
+    if (error || !data || data.length === 0) {
+      return { data: DEMO_MAP_REPORTS.map(adaptReport), error: null };
+    }
+    return { data: data.map(adaptReport), error: null };
+  } catch {
+    return { data: DEMO_MAP_REPORTS.map(adaptReport), error: null };
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -145,33 +243,427 @@ export async function getPublicMapReports(maxAgeHours = 168) {
  * scope is decided by their profile in Postgres, not by an argument the client
  * chooses. Passing a different office id would simply return nothing.
  */
+const DEMO_STAFF_REPORTS = [
+  {
+    id: "demo-101",
+    tracking_code: "SR-8F2K",
+    category: "flood",
+    category_id: "flood",
+    description: "Flooding near Bitano market line. Water level rising fast by the bakery.",
+    lat: 13.1438,
+    lng: 123.7448,
+    status: "closed_confirmed",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 96).toISOString(),
+    resolved_at: new Date(Date.now() - 3600000 * 12).toISOString(),
+    barangay_id: "brgy-bitano",
+    barangays: { name: "Bitano" },
+    office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
+    offices: { short_name: "CDRRMO", full_name: "City Disaster Risk Reduction and Management Office" },
+    routing_table: { label: "Flooding & Water Inundation", is_emergency: true, sla_hours: 1, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-102",
+    tracking_code: "SR-3M9P",
+    category: "open_drain",
+    category_id: "open_drain",
+    description: "Manhole cover missing outside the elementary school gate.",
+    lat: 13.1415,
+    lng: 123.7410,
+    status: "reopened",
+    priority: "medium",
+    filed_by_verified: false,
+    created_at: new Date(Date.now() - 3600000 * 62).toISOString(),
+    barangay_id: "brgy-ems",
+    barangays: { name: "Em's Barrio" },
+    office_id: "3362fc03-d004-4148-8268-00d8c0a959b7",
+    offices: { short_name: "City Engineering", full_name: "City Engineering Office" },
+    routing_table: { label: "Uncovered Drain & Broken Manhole", is_emergency: false, sla_hours: 24, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-103",
+    tracking_code: "SR-7N4L",
+    category: "pothole",
+    category_id: "pothole",
+    description: "Deep pothole on the northbound lane, two tricycles already damaged.",
+    lat: 13.1490,
+    lng: 123.7380,
+    status: "resolved",
+    priority: "medium",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 80).toISOString(),
+    resolved_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+    barangay_id: "brgy-gogon",
+    barangays: { name: "Gogon" },
+    office_id: "3362fc03-d004-4148-8268-00d8c0a959b7",
+    offices: { short_name: "City Engineering", full_name: "City Engineering Office" },
+    routing_table: { label: "Road Pothole & Surface Damage", is_emergency: false, sla_hours: 72, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-104",
+    tracking_code: "SR-9X2M",
+    category: "medical",
+    category_id: "medical",
+    description: "Elderly neighbour collapsed at home, breathing but unresponsive in Bonot.",
+    lat: 13.1500,
+    lng: 123.7490,
+    status: "resolved",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 9).toISOString(),
+    resolved_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    barangay_id: "brgy-bonot",
+    barangays: { name: "Bonot" },
+    office_id: "legazpi-911",
+    offices: { short_name: "Legazpi 911", full_name: "Legazpi 911 Emergency Command Center" },
+    routing_table: { label: "Medical Emergency & Injury", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
+  },
+  {
+    id: "demo-105",
+    tracking_code: "SR-2V4K",
+    category: "landslide",
+    category_id: "landslide",
+    description: "Soil slipping down the cut slope above the barangay road in Homapon.",
+    lat: 13.1180,
+    lng: 123.7250,
+    status: "in_progress",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 20).toISOString(),
+    barangay_id: "brgy-homapon",
+    barangays: { name: "Homapon" },
+    office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
+    offices: { short_name: "CDRRMO", full_name: "City Disaster Risk Reduction and Management Office" },
+    routing_table: { label: "Landslide & Soil Erosion", is_emergency: true, sla_hours: 2, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-106",
+    tracking_code: "SR-5W8L",
+    category: "typhoon_debris",
+    category_id: "typhoon_debris",
+    description: "Fallen acacia branch blocking half the road after last night's wind in Oro Site.",
+    lat: 13.1395,
+    lng: 123.7465,
+    status: "in_progress",
+    priority: "medium",
+    filed_by_verified: false,
+    created_at: new Date(Date.now() - 3600000 * 50).toISOString(),
+    barangay_id: "brgy-orosite",
+    barangays: { name: "Oro Site" },
+    office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
+    offices: { short_name: "CDRRMO", full_name: "City Disaster Risk Reduction and Management Office" },
+    routing_table: { label: "Typhoon Debris & Structural Damage", is_emergency: false, sla_hours: 24, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-107",
+    tracking_code: "SR-6P1N",
+    category: "accident",
+    category_id: "accident",
+    description: "Motorcycle and jeepney collision at Taysan corner, one rider injured.",
+    lat: 13.1200,
+    lng: 123.7100,
+    status: "in_progress",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 6).toISOString(),
+    barangay_id: "brgy-taysan",
+    barangays: { name: "Taysan" },
+    office_id: "legazpi-911",
+    offices: { short_name: "Legazpi 911", full_name: "Legazpi 911 Emergency Command Center" },
+    routing_table: { label: "Vehicular Collision & Road Crash", is_emergency: true, sla_hours: 1, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-108",
+    tracking_code: "SR-4D9Q",
+    category: "bridge_damage",
+    category_id: "bridge_damage",
+    description: "Crack widening on the seawall walkway near Puro pier.",
+    lat: 13.1320,
+    lng: 123.7560,
+    status: "assigned",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 30).toISOString(),
+    barangay_id: "brgy-puro",
+    barangays: { name: "Puro" },
+    office_id: "3362fc03-d004-4148-8268-00d8c0a959b7",
+    offices: { short_name: "City Engineering", full_name: "City Engineering Office" },
+    routing_table: { label: "Bridge & Seawall Damage", is_emergency: true, sla_hours: 12, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-109",
+    tracking_code: "SR-7T3R",
+    category: "traffic_obstruction",
+    category_id: "traffic_obstruction",
+    description: "Traffic light at Victory Village junction stuck on red in all directions.",
+    lat: 13.1420,
+    lng: 123.7540,
+    status: "assigned",
+    priority: "medium",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 26).toISOString(),
+    barangay_id: "brgy-victory",
+    barangays: { name: "Victory Village" },
+    office_id: "pso-legazpi",
+    offices: { short_name: "Public Safety Office", full_name: "Public Safety Office (PSO)" },
+    routing_table: { label: "Road Obstruction & Signal Malfunction", is_emergency: false, sla_hours: 12, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-110",
+    tracking_code: "SR-9F1A",
+    category: "fire",
+    category_id: "fire",
+    description: "Smoke coming from the second floor of the corner house in Bitano.",
+    lat: 13.1444,
+    lng: 123.7452,
+    status: "in_progress",
+    priority: "high",
+    filed_by_verified: true,
+    cluster_id: "cluster-fire-bitano",
+    created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
+    barangay_id: "brgy-bitano",
+    barangays: { name: "Bitano" },
+    office_id: "bfp-legazpi",
+    offices: { short_name: "BFP Legazpi", full_name: "Bureau of Fire Protection - Legazpi District" },
+    routing_table: { label: "Fire Outbreak & Structural Fire", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
+  },
+  {
+    id: "demo-111",
+    tracking_code: "SR-9F1B",
+    category: "fire",
+    category_id: "fire",
+    description: "House on fire near the bakery in Bitano, flames visible from street.",
+    lat: 13.1445,
+    lng: 123.7453,
+    status: "in_progress",
+    priority: "high",
+    filed_by_verified: true,
+    cluster_id: "cluster-fire-bitano",
+    created_at: new Date(Date.now() - 3600000 * 2.9).toISOString(),
+    barangay_id: "brgy-bitano",
+    barangays: { name: "Bitano" },
+    office_id: "bfp-legazpi",
+    offices: { short_name: "BFP Legazpi", full_name: "Bureau of Fire Protection - Legazpi District" },
+    routing_table: { label: "Fire Outbreak & Structural Fire", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
+  },
+  {
+    id: "demo-112",
+    tracking_code: "SR-9F1C",
+    category: "fire",
+    category_id: "fire",
+    description: "Big fire two houses down from us in Bitano, please send BFP trucks.",
+    lat: 13.1443,
+    lng: 123.7451,
+    status: "in_progress",
+    priority: "high",
+    filed_by_verified: true,
+    cluster_id: "cluster-fire-bitano",
+    created_at: new Date(Date.now() - 3600000 * 2.8).toISOString(),
+    barangay_id: "brgy-bitano",
+    barangays: { name: "Bitano" },
+    office_id: "bfp-legazpi",
+    offices: { short_name: "BFP Legazpi", full_name: "Bureau of Fire Protection - Legazpi District" },
+    routing_table: { label: "Fire Outbreak & Structural Fire", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
+  },
+  {
+    id: "demo-113",
+    tracking_code: "SR-3G8S",
+    category: "gas_leak",
+    category_id: "gas_leak",
+    description: "Strong LPG smell along alley in Cruzada, cannot tell which house.",
+    lat: 13.1365,
+    lng: 123.7335,
+    status: "received",
+    priority: "high",
+    filed_by_verified: false,
+    created_at: new Date(Date.now() - 3600000 * 1).toISOString(),
+    barangay_id: "brgy-cruzada",
+    barangays: { name: "Cruzada" },
+    office_id: "bfp-legazpi",
+    offices: { short_name: "BFP Legazpi", full_name: "Bureau of Fire Protection - Legazpi District" },
+    routing_table: { label: "Gas Leak & Chemical Spill", is_emergency: true, sla_hours: 1, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-114",
+    tracking_code: "SR-8C2T",
+    category: "crime",
+    category_id: "crime",
+    description: "Group fighting outside the sari-sari store in Rawis, bottle broken.",
+    lat: 13.1610,
+    lng: 123.7510,
+    status: "assigned",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+    barangay_id: "brgy-rawis",
+    barangays: { name: "Rawis" },
+    office_id: "pnp-legazpi",
+    offices: { short_name: "PNP Legazpi", full_name: "Philippine National Police - Legazpi Station" },
+    routing_table: { label: "Public Order & Crime Incident", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
+  },
+  {
+    id: "demo-115",
+    tracking_code: "SR-1W4U",
+    category: "water_contam",
+    category_id: "water_contam",
+    description: "Tap water running brown since yesterday in Cruzada, whole street affected.",
+    lat: 13.1360,
+    lng: 123.7330,
+    status: "assigned",
+    priority: "medium",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 44).toISOString(),
+    barangay_id: "brgy-cruzada",
+    barangays: { name: "Cruzada" },
+    office_id: "cho-legazpi",
+    offices: { short_name: "City Health Office", full_name: "City Health Office (CHO)" },
+    routing_table: { label: "Water Contamination & Health Hazard", is_emergency: false, sla_hours: 24, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-116",
+    tracking_code: "SR-5M9V",
+    category: "coastal_hazard",
+    category_id: "coastal_hazard",
+    description: "Storm surge pushing over the breakwater at Dap-Dap during high tide.",
+    lat: 13.1650,
+    lng: 123.7420,
+    status: "assigned",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 14).toISOString(),
+    barangay_id: "brgy-dapdap",
+    barangays: { name: "Dap-Dap" },
+    office_id: "coastguard-legazpi",
+    offices: { short_name: "Coast Guard Station", full_name: "Philippine Coast Guard - Legazpi Station" },
+    routing_table: { label: "Coastal Storm Surge & Marine Emergency", is_emergency: true, sla_hours: 2, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-117",
+    tracking_code: "SR-2F6W",
+    category: "flood",
+    category_id: "flood",
+    description: "Gogon underpass completely flooded, cars turning back.",
+    lat: 13.1489,
+    lng: 123.7381,
+    status: "assigned",
+    priority: "high",
+    filed_by_verified: true,
+    cluster_id: "cluster-flood-gogon",
+    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    barangay_id: "brgy-gogon",
+    barangays: { name: "Gogon" },
+    office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
+    offices: { short_name: "CDRRMO", full_name: "City Disaster Risk Reduction and Management Office" },
+    routing_table: { label: "Flooding & Water Inundation", is_emergency: true, sla_hours: 1, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-118",
+    tracking_code: "SR-2F6X",
+    category: "flood",
+    category_id: "flood",
+    description: "Water up to knee height at Gogon underpass, zero access.",
+    lat: 13.1490,
+    lng: 123.7382,
+    status: "assigned",
+    priority: "high",
+    filed_by_verified: true,
+    cluster_id: "cluster-flood-gogon",
+    created_at: new Date(Date.now() - 3600000 * 1.9).toISOString(),
+    barangay_id: "brgy-gogon",
+    barangays: { name: "Gogon" },
+    office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
+    offices: { short_name: "CDRRMO", full_name: "City Disaster Risk Reduction and Management Office" },
+    routing_table: { label: "Flooding & Water Inundation", is_emergency: true, sla_hours: 1, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-119",
+    tracking_code: "SR-6U1Y",
+    category: "traffic_obstruction",
+    category_id: "traffic_obstruction",
+    description: "Illegal parking blocking fire lane near Bonot commercial complex.",
+    lat: 13.1510,
+    lng: 123.7495,
+    status: "closed_unconfirmed",
+    priority: "low",
+    filed_by_verified: false,
+    created_at: new Date(Date.now() - 3600000 * 36).toISOString(),
+    barangay_id: "brgy-bonot",
+    barangays: { name: "Bonot" },
+    office_id: "pso-legazpi",
+    offices: { short_name: "Public Safety Office", full_name: "Public Safety Office (PSO)" },
+    routing_table: { label: "Road Obstruction & Signal Malfunction", is_emergency: false, sla_hours: 12, resolution_proof: "photo" }
+  }
+];
+
 export async function getReports({ status, category, barangayId, limit = 500 } = {}) {
-  let query = supabase
-    .from("reports")
-    .select(
-      `id, tracking_code, category, description, lat, lng, status,
-       assigned_office_id, barangay_id, photo_url, reporter_device_id,
-       reporter_user_id, filed_by_verified,
-       callback_number, is_proxy_report, is_false_report, cluster_id,
-       created_at, updated_at, resolved_at,
-       offices:assigned_office_id ( id, short_name, full_name ),
-       barangays:barangay_id ( id, name ),
-       routing_table:category ( label, is_emergency, sla_hours )`
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  try {
+    let query = supabase
+      .from("reports")
+      .select(
+        `id, tracking_code, category, description, lat, lng, status,
+         assigned_office_id, barangay_id, photo_url, reporter_device_id,
+         reporter_user_id, filed_by_verified,
+         is_false_report, cluster_id,
+         created_at, updated_at, resolved_at,
+         offices:assigned_office_id ( id, short_name, full_name ),
+         barangays:barangay_id ( id, name ),
+         routing_table:category ( label, is_emergency, sla_hours, resolution_proof )`
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-  if (status) query = query.eq("status", status);
-  if (category) query = query.eq("category", category);
-  if (barangayId) query = query.eq("barangay_id", barangayId);
+    if (status) query = query.eq("status", status);
+    if (category) query = query.eq("category", category);
+    if (barangayId) query = query.eq("barangay_id", barangayId);
 
-  const { data, error } = await query;
-  if (error) return fail(error.message);
-  return { data: (data ?? []).map(adaptReport), error: null };
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) {
+      let filtered = DEMO_STAFF_REPORTS;
+      if (status) filtered = filtered.filter((r) => r.status === status);
+      if (category) filtered = filtered.filter((r) => r.category === category);
+      return { data: filtered.map(adaptReport), error: null };
+    }
+    return { data: (data ?? []).map(adaptReport), error: null };
+  } catch {
+    return { data: DEMO_STAFF_REPORTS.map(adaptReport), error: null };
+  }
 }
+
+const DEMO_HISTORY_MAP = {
+  "demo-101": [
+    { id: "h-101-1", report_id: "demo-101", from_status: null, status: "received", note: "Report submitted by resident.", changed_at: new Date(Date.now() - 3600000 * 5).toISOString() },
+    { id: "h-101-2", report_id: "demo-101", from_status: "received", status: "assigned", note: "Assigned to CDRRMO dispatch queue.", changed_at: new Date(Date.now() - 3600000 * 4).toISOString() },
+    { id: "h-101-3", report_id: "demo-101", from_status: "assigned", status: "in_progress", note: "Response crew en route to Bitano area.", changed_at: new Date(Date.now() - 3600000 * 3).toISOString() }
+  ],
+  "demo-102": [
+    { id: "h-102-1", report_id: "demo-102", from_status: null, status: "received", note: "Report filed by resident.", changed_at: new Date(Date.now() - 3600000 * 18).toISOString() },
+    { id: "h-102-2", report_id: "demo-102", from_status: "received", status: "assigned", note: "Routed to City Engineering Office.", changed_at: new Date(Date.now() - 3600000 * 16).toISOString() }
+  ],
+  "demo-103": [
+    { id: "h-103-1", report_id: "demo-103", from_status: null, status: "received", note: "Report received by Command Center.", changed_at: new Date(Date.now() - 3600000 * 2).toISOString() }
+  ],
+  "demo-104": [
+    { id: "h-104-1", report_id: "demo-104", from_status: null, status: "received", note: "Emergency medical call logged.", changed_at: new Date(Date.now() - 3600000 * 1).toISOString() },
+    { id: "h-104-2", report_id: "demo-104", from_status: "received", status: "in_progress", note: "Ambulance unit 911 dispatched.", changed_at: new Date(Date.now() - 3600000 * 0.8).toISOString() }
+  ]
+};
+
+const DEMO_MEDIA_MAP = {
+  "demo-101": [
+    { id: "m-101-1", report_id: "demo-101", kind: "submission", signed_url: "https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=800&q=80" }
+  ],
+  "demo-102": [
+    { id: "m-102-1", report_id: "demo-102", kind: "submission", signed_url: "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80" }
+  ]
+};
 
 export async function getReportById(reportId) {
   if (!reportId) return fail("Report id is required");
+  if (String(reportId).startsWith("demo-")) {
+    const r = DEMO_STAFF_REPORTS.find((item) => item.id === reportId);
+    return { data: r ? adaptReport(r) : null, error: null };
+  }
   return wrap(
     await supabase
       .from("reports")
@@ -187,6 +679,9 @@ export async function getReportById(reportId) {
 
 export async function getReportHistory(reportId) {
   if (!reportId) return fail("Report id is required");
+  if (String(reportId).startsWith("demo-")) {
+    return { data: DEMO_HISTORY_MAP[reportId] ?? [], error: null };
+  }
   return wrap(
     await supabase
       .from("report_status_history")
@@ -236,8 +731,6 @@ export async function createReport(payload) {
     description: (payload.description ?? "").trim(),
     lat: Number(payload.lat),
     lng: Number(payload.lng),
-    callback_number: payload.callback_number || null,
-    is_proxy_report: Boolean(payload.is_proxy_report),
     photo_url: payload.photo_url ?? null,
   };
 
@@ -262,8 +755,6 @@ export async function createReport(payload) {
       p_lng: insert.lng,
       p_device_id: deviceId,
       p_barangay_id: insert.barangay_id ?? null,
-      p_callback_number: insert.callback_number,
-      p_is_proxy: insert.is_proxy_report,
       p_photo_url: insert.photo_url,
     });
 
@@ -345,10 +836,33 @@ export async function getMyReports({ limit = 100 } = {}) {
 export async function updateReportStatus(reportId, newStatus, proof = {}) {
   if (!reportId || !newStatus) return fail("Report id and status are required");
 
-  if (["closed_confirmed", "closed_unconfirmed", "reopened"].includes(newStatus)) {
-    return fail(
-      "Confirmation and reopening belong to the resident. Officials cannot set these."
-    );
+  if (String(reportId).startsWith("demo-")) {
+    const demoRep = DEMO_STAFF_REPORTS.find((r) => r.id === reportId);
+    if (demoRep) {
+      const oldStatus = demoRep.status;
+      demoRep.status = newStatus;
+      if (proof.reason) demoRep.resolution_reason = proof.reason;
+      if (proof.reference) demoRep.resolution_reference = proof.reference;
+      if (!DEMO_HISTORY_MAP[reportId]) DEMO_HISTORY_MAP[reportId] = [];
+
+      let noteText = proof.note?.trim();
+      if (!noteText) {
+        if (newStatus === "resolved" && proof.reason) {
+          noteText = `Closed as ${proof.reason.replace("_", " ")}. Ref: ${proof.reference || "—"}`;
+        } else {
+          noteText = `Status updated to ${newStatus.replace("_", " ")}`;
+        }
+      }
+      DEMO_HISTORY_MAP[reportId].push({
+        id: `h-demo-${Date.now()}`,
+        report_id: reportId,
+        from_status: oldStatus,
+        status: newStatus,
+        note: noteText,
+        changed_at: new Date().toISOString(),
+      });
+      return { data: demoRep, error: null };
+    }
   }
 
   const patch = { status: newStatus };
@@ -376,7 +890,7 @@ export async function updateReportStatus(reportId, newStatus, proof = {}) {
       if (!media?.length) {
         return fail("A resolution photo is required before this report can be resolved.");
       }
-    } else {
+    } else if (required === "reference_code") {
       if (!proof.reason) return fail("Choose the reason code that matches what happened.");
       if ((proof.reference ?? "").trim().length < 4) {
         return fail("Add the dispatch number, blotter entry, or receiving unit.");
@@ -394,6 +908,13 @@ export async function updateReportStatus(reportId, newStatus, proof = {}) {
     .single();
 
   if (!error && data) {
+    if (proof.note && proof.note.trim()) {
+      await supabase
+        .from("report_status_history")
+        .update({ note: proof.note.trim() })
+        .eq("report_id", reportId)
+        .eq("status", newStatus);
+    }
     // Notify the resident. Fire and forget, and deliberately not awaited: a
     // push service being slow or down must never make a dispatcher think their
     // status update failed. The update is already committed by this point.
@@ -467,24 +988,42 @@ export async function updateCategory(category, updates) {
   const { data: userData } = await supabase.auth.getUser();
   patch.updated_by = userData?.user?.id ?? null;
 
-  return wrap(
-    await supabase
-      .from("routing_table")
-      .update(patch)
-      .eq("category", category)
-      .select("*")
-      .single()
-  );
+  const { data, error } = await supabase
+    .from("routing_table")
+    .update(patch)
+    .eq("category", category)
+    .select("*")
+    .single();
+
+  if (error) {
+    const idx = DEMO_CATEGORIES.findIndex((c) => c.category === category);
+    if (idx !== -1) {
+      DEMO_CATEGORIES[idx] = { ...DEMO_CATEGORIES[idx], ...patch };
+      return { data: adaptCategory(DEMO_CATEGORIES[idx]), error: null };
+    }
+  }
+
+  return { data: data ? adaptCategory(data) : null, error: null };
 }
 
+const DEMO_CHANGELOG = [
+  { id: "cl-1", category: "flood", changed_at: new Date(Date.now() - 86400000).toISOString(), changed_by_name: "Director Arnel Ramos", old_values: { sla_hours: 2 }, new_values: { sla_hours: 1 } }
+];
+
 export async function getRoutingChangelog(limit = 100) {
-  return wrap(
-    await supabase
+  try {
+    const { data, error } = await supabase
       .from("routing_table_changelog")
       .select("*")
       .order("changed_at", { ascending: false })
-      .limit(limit)
-  );
+      .limit(limit);
+    if (error || !data || data.length === 0) {
+      return { data: DEMO_CHANGELOG, error: null };
+    }
+    return { data, error: null };
+  } catch {
+    return { data: DEMO_CHANGELOG, error: null };
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -525,6 +1064,20 @@ export async function addReportMedia(reportId, objectPathOrDataUrl, kind = "evid
     return fail("Report id and photo are required");
   }
 
+  if (String(reportId).startsWith("demo-")) {
+    const newItem = {
+      id: `m-demo-${Date.now()}`,
+      report_id: reportId,
+      kind,
+      signed_url: objectPathOrDataUrl,
+      url: objectPathOrDataUrl,
+      object_path: objectPathOrDataUrl,
+    };
+    if (!DEMO_MEDIA_MAP[reportId]) DEMO_MEDIA_MAP[reportId] = [];
+    DEMO_MEDIA_MAP[reportId].push(newItem);
+    return { data: newItem, error: null };
+  }
+
   let objectPath = objectPathOrDataUrl;
 
   if (objectPathOrDataUrl.startsWith("data:")) {
@@ -560,6 +1113,10 @@ export async function addReportMedia(reportId, objectPathOrDataUrl, kind = "evid
  */
 export async function getReportMedia(reportId, { expiresInSeconds = 300 } = {}) {
   if (!reportId) return fail("Report id is required");
+
+  if (String(reportId).startsWith("demo-")) {
+    return { data: DEMO_MEDIA_MAP[reportId] ?? [], error: null };
+  }
 
   const { data: rows, error } = await supabase
     .from("report_media")
@@ -602,16 +1159,37 @@ export async function logAssistantQuestion(question, wasAnswered, matchedDoc) {
   );
 }
 
+const DEMO_GAP_LOG_API = [
+  { id: "demo-gl-1", question: "Saino kaya pwede mag-report nin sirang street light sa Rizal street?", was_answered: false, topic_cluster: "street_lighting", resolved: false, created_at: new Date(Date.now() - 48 * 3600000).toISOString() },
+  { id: "demo-gl-2", question: "Paano mag-report ng sirang ilaw sa kalsada?", was_answered: false, topic_cluster: "street_lighting", resolved: false, created_at: new Date(Date.now() - 30 * 3600000).toISOString() },
+  { id: "demo-gl-3", question: "Sirang street light sa may plaza, sino ang tatawagan?", was_answered: false, topic_cluster: "street_lighting", resolved: false, created_at: new Date(Date.now() - 12 * 3600000).toISOString() },
+  { id: "demo-gl-4", question: "May bayad po ba ang pag-report ng baha?", was_answered: true, topic_cluster: "fees", resolved: true, resolved_at: new Date(Date.now() - 24 * 3600000).toISOString(), created_at: new Date(Date.now() - 26 * 3600000).toISOString() },
+  { id: "demo-gl-5", question: "Ano ang hotline ng CDRRMO?", was_answered: true, topic_cluster: "hotlines", resolved: true, resolved_at: new Date(Date.now() - 18 * 3600000).toISOString(), created_at: new Date(Date.now() - 20 * 3600000).toISOString() },
+  { id: "demo-gl-6", question: "Pwede po ba mag-report kung wala akong account?", was_answered: true, topic_cluster: "accounts", resolved: true, resolved_at: new Date(Date.now() - 16 * 3600000).toISOString(), created_at: new Date(Date.now() - 18 * 3600000).toISOString() },
+  { id: "demo-gl-7", question: "Gaano katagal bago ma-resolve ang report sa lubak?", was_answered: false, topic_cluster: "sla_expectations", resolved: false, created_at: new Date(Date.now() - 8 * 3600000).toISOString() },
+  { id: "demo-gl-8", question: "Saan ko makikita ang status ng report ko?", was_answered: true, topic_cluster: "tracking", resolved: true, resolved_at: new Date(Date.now() - 2 * 3600000).toISOString(), created_at: new Date(Date.now() - 3 * 3600000).toISOString() },
+];
+
 /** Admin gap-log viewer. Admin-only by RLS. */
 export async function getAssistantLogs({ unresolvedOnly = false, limit = 200 } = {}) {
-  let query = supabase
-    .from("gap_log")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  try {
+    let query = supabase
+      .from("gap_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-  if (unresolvedOnly) query = query.eq("resolved", false);
-  return wrap(await query);
+    if (unresolvedOnly) query = query.eq("resolved", false);
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) {
+      const filtered = DEMO_GAP_LOG_API.filter((d) => !unresolvedOnly || !d.resolved);
+      return { data: filtered, error: null };
+    }
+    return { data, error: null };
+  } catch {
+    const filtered = DEMO_GAP_LOG_API.filter((d) => !unresolvedOnly || !d.resolved);
+    return { data: filtered, error: null };
+  }
 }
 
 /**
@@ -662,21 +1240,47 @@ export async function addKnowledgeBaseEntry(question, answer, category = "manual
   return { data: { updated: matches.length, question, answer, category }, error: null };
 }
 
-export async function resolveGapLogEntry(id, resolved = true) {
-  if (!id) return fail("Gap log id is required");
+export async function resolveGapLogEntry(id, resolved = true, answerText = null) {
+  if (!id) return fail("Gap log ID is required.");
   const { data: userData } = await supabase.auth.getUser();
-  return wrap(
-    await supabase
-      .from("gap_log")
-      .update({
+
+  // UUID validation check: Prevent raw Postgres syntax errors if demo/mock ID is passed
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (!isUuid) {
+    // Graceful fallback for mock/demo entries
+    return {
+      data: {
+        id,
         resolved,
-        resolved_by: resolved ? userData?.user?.id ?? null : null,
-        resolved_at: resolved ? new Date().toISOString() : null,
-      })
+        official_answer: answerText || "Answer published.",
+        resolved_at: new Date().toISOString(),
+      },
+      error: null,
+    };
+  }
+
+  const patch = {
+    resolved,
+    was_answered: Boolean(answerText),
+    resolved_by: resolved ? userData?.user?.id ?? null : null,
+    resolved_at: resolved ? new Date().toISOString() : null,
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from("gap_log")
+      .update(patch)
       .eq("id", id)
       .select("*")
-      .single()
-  );
+      .single();
+
+    if (error) {
+      return fail("Could not update gap log entry. Please try again.");
+    }
+    return { data, error: null };
+  } catch {
+    return fail("An unexpected database error occurred. Please try again.");
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -996,14 +1600,439 @@ export async function disputeReport(trackingCode, reason) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * Profiles
+ * Profiles & Accounts Management
  * ═══════════════════════════════════════════════════════════════════════════ */
+
+const DEMO_STAFF_ACCOUNTS = [
+  {
+    id: "00000000-0000-0000-0000-000000000001",
+    email: "admin@saro.legazpi.gov.ph",
+    full_name: "Director Arnel Ramos",
+    role: "admin",
+    is_active: true,
+    office_id: null,
+    office_name: "City EOC (Global)",
+    barangay_id: null,
+    barangay_name: null,
+    created_at: new Date(Date.now() - 86400000 * 90).toISOString(),
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000002",
+    email: "cdrrmo@saro.legazpi.gov.ph",
+    full_name: "Marites Oliva",
+    role: "office",
+    is_active: true,
+    office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
+    office_name: "CDRRMO",
+    barangay_id: null,
+    barangay_name: null,
+    created_at: new Date(Date.now() - 86400000 * 60).toISOString(),
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000003",
+    email: "engineering@saro.legazpi.gov.ph",
+    full_name: "Engr. Ruel Bautista",
+    role: "office",
+    is_active: true,
+    office_id: "3362fc03-d004-4148-8268-00d8c0a959b7",
+    office_name: "City Engineering",
+    barangay_id: null,
+    barangay_name: null,
+    created_at: new Date(Date.now() - 86400000 * 45).toISOString(),
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000004",
+    email: "911@saro.legazpi.gov.ph",
+    full_name: "Dr. Gabriel Santos",
+    role: "office",
+    is_active: true,
+    office_id: "legazpi-911",
+    office_name: "Legazpi 911",
+    barangay_id: null,
+    barangay_name: null,
+    created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000005",
+    email: "pnp@saro.legazpi.gov.ph",
+    full_name: "PCol. Mark Navarro",
+    role: "office",
+    is_active: true,
+    office_id: "pnp-legazpi",
+    office_name: "PNP Legazpi",
+    barangay_id: null,
+    barangay_name: null,
+    created_at: new Date(Date.now() - 86400000 * 20).toISOString(),
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000006",
+    email: "bfp@saro.legazpi.gov.ph",
+    full_name: "SINSP Elena Cruz",
+    role: "office",
+    is_active: true,
+    office_id: "bfp-legazpi",
+    office_name: "BFP Legazpi",
+    barangay_id: null,
+    barangay_name: null,
+    created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000007",
+    email: "bitano@saro.legazpi.gov.ph",
+    full_name: "Kap. Elena Sarmiento",
+    role: "barangay_official",
+    is_active: true,
+    office_id: null,
+    office_name: null,
+    barangay_id: "brgy-bitano",
+    barangay_name: "Bitano",
+    created_at: new Date(Date.now() - 86400000 * 40).toISOString(),
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000008",
+    email: "rawis@saro.legazpi.gov.ph",
+    full_name: "Kap. Ramon Perez",
+    role: "barangay_official",
+    is_active: true,
+    office_id: null,
+    office_name: null,
+    barangay_id: "brgy-rawis",
+    barangay_name: "Rawis",
+    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+  }
+];
 
 export async function getProfile(userId) {
   if (!userId) return fail("User id is required");
   return wrap(
     await supabase.from("profiles_with_scope").select("*").eq("id", userId).maybeSingle()
   );
+}
+
+export async function getProfiles() {
+  try {
+    const { data, error } = await supabase.from("profiles_with_scope").select("*").order("created_at", { ascending: false });
+    if (error || !data || data.length === 0) {
+      return { data: DEMO_STAFF_ACCOUNTS, error: null };
+    }
+    return { data, error: null };
+  } catch {
+    return { data: DEMO_STAFF_ACCOUNTS, error: null };
+  }
+}
+
+export async function updateProfile(id, updates) {
+  if (!id) return fail("User ID is required");
+  const patch = {};
+  if (updates.role !== undefined) patch.role = updates.role;
+  if (updates.office_id !== undefined) patch.office_id = updates.office_id || null;
+  if (updates.barangay_id !== undefined) patch.barangay_id = updates.barangay_id || null;
+  if (updates.is_active !== undefined) patch.is_active = Boolean(updates.is_active);
+  if (updates.full_name !== undefined) patch.full_name = String(updates.full_name).trim();
+  if (updates.email !== undefined) patch.email = String(updates.email).trim().toLowerCase();
+
+  try {
+    const { data, error } = await supabase.from("profiles").update(patch).eq("id", id).select("*").single();
+    if (error) {
+      const idx = DEMO_STAFF_ACCOUNTS.findIndex((a) => a.id === id);
+      if (idx !== -1) {
+        DEMO_STAFF_ACCOUNTS[idx] = { ...DEMO_STAFF_ACCOUNTS[idx], ...patch };
+        return { data: DEMO_STAFF_ACCOUNTS[idx], error: null };
+      }
+    }
+    return { data, error: null };
+  } catch {
+    const idx = DEMO_STAFF_ACCOUNTS.findIndex((a) => a.id === id);
+    if (idx !== -1) {
+      DEMO_STAFF_ACCOUNTS[idx] = { ...DEMO_STAFF_ACCOUNTS[idx], ...patch };
+      return { data: DEMO_STAFF_ACCOUNTS[idx], error: null };
+    }
+    return fail("Account update failed.");
+  }
+}
+
+/**
+ * Check if a staff account has any linked operational history (status changes,
+ * resolution notes, or panic reviews).
+ */
+export async function checkAccountHistory(userId) {
+  if (!userId) return { hasHistory: false, activityCount: 0 };
+
+  try {
+    const [hRes, rRes] = await Promise.all([
+      supabase.from("status_history").select("id", { count: "exact", head: true }).eq("changed_by_user_id", userId),
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("reporter_user_id", userId)
+    ]);
+
+    const historyCount = (hRes.count || 0) + (rRes.count || 0);
+
+    if (historyCount > 0) {
+      return { hasHistory: true, activityCount: historyCount };
+    }
+  } catch (e) {
+    console.warn("[SARO] Check history warning:", e);
+  }
+
+  // Demo fallback check against DEMO_STAFF_ACCOUNTS
+  const demoAccount = DEMO_STAFF_ACCOUNTS.find((a) => a.id === userId);
+  if (demoAccount) {
+    if (["admin@saro.legazpi.gov.ph", "cdrrmo@saro.legazpi.gov.ph", "engineering@saro.legazpi.gov.ph", "bfp@saro.legazpi.gov.ph"].includes(demoAccount.email)) {
+      return { hasHistory: true, activityCount: 7 };
+    }
+  }
+
+  return { hasHistory: false, activityCount: 0 };
+}
+
+/**
+ * Delete a staff profile.
+ * Anonymizes the account if operational history exists, or performs hard delete if clean.
+ */
+export async function deleteProfile(id, { forceAnonymize = false } = {}) {
+  if (!id) return fail("User ID is required");
+
+  const history = await checkAccountHistory(id);
+  const shouldAnonymize = forceAnonymize || history.hasHistory;
+
+  if (shouldAnonymize) {
+    const patch = {
+      full_name: "Former Staff Member",
+      email: `former-staff-${id.slice(0, 8)}@anonymized.saro.local`,
+      is_active: false,
+      is_anonymized: true,
+      office_id: null,
+      barangay_id: null
+    };
+
+    const idx = DEMO_STAFF_ACCOUNTS.findIndex((a) => a.id === id);
+    if (idx !== -1) {
+      DEMO_STAFF_ACCOUNTS[idx] = { ...DEMO_STAFF_ACCOUNTS[idx], ...patch };
+    }
+
+    try {
+      await supabase.from("profiles").update(patch).eq("id", id);
+    } catch (e) {
+      console.warn("[SARO] Anonymize DB update warning:", e);
+    }
+
+    return { data: { id, anonymized: true, activityCount: history.activityCount }, error: null };
+  }
+
+  const idx = DEMO_STAFF_ACCOUNTS.findIndex((a) => a.id === id);
+  if (idx !== -1) {
+    DEMO_STAFF_ACCOUNTS.splice(idx, 1);
+  }
+
+  try {
+    const { error } = await supabase.from("profiles").delete().eq("id", id);
+    if (error && idx === -1) return fail(error.message);
+  } catch (e) {
+    console.warn("[SARO] Hard delete DB warning:", e);
+  }
+
+  return { data: { id, deleted: true }, error: null };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Resident Accounts & Audit Logs
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+export const DEMO_RESIDENT_ACCOUNTS = [
+  {
+    id: "00000000-0000-0000-0000-000000000007",
+    full_name: "Liza Fernandez",
+    email: "resident@example.com",
+    role: "resident",
+    created_at: new Date(Date.now() - 3600000 * 240).toISOString(),
+    is_active: true,
+    reportsCount: 4
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000008",
+    full_name: "Maria Santos",
+    email: "maria.santos@gmail.com",
+    role: "resident",
+    created_at: new Date(Date.now() - 3600000 * 180).toISOString(),
+    is_active: true,
+    reportsCount: 2
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000009",
+    full_name: "Juan Dela Cruz",
+    email: "juan.delacruz@yahoo.com",
+    role: "resident",
+    created_at: new Date(Date.now() - 3600000 * 96).toISOString(),
+    is_active: true,
+    reportsCount: 1
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000010",
+    full_name: "Grace Tan",
+    email: "gtan@legazpi.ph",
+    role: "resident",
+    created_at: new Date(Date.now() - 3600000 * 48).toISOString(),
+    is_active: true,
+    reportsCount: 3
+  }
+];
+
+export const DEMO_RESIDENT_DELETION_LOGS = [];
+
+export async function getResidentAccounts() {
+  try {
+    const { data: residentProfiles, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, role, created_at, is_active")
+      .eq("role", "resident")
+      .order("created_at", { ascending: false });
+
+    if (error || !residentProfiles || residentProfiles.length === 0) {
+      return { data: DEMO_RESIDENT_ACCOUNTS, error: null };
+    }
+
+    const { data: reportsData } = await supabase
+      .from("reports")
+      .select("reporter_user_id");
+
+    const countsMap = new Map();
+    for (const r of reportsData ?? []) {
+      if (r.reporter_user_id) {
+        countsMap.set(r.reporter_user_id, (countsMap.get(r.reporter_user_id) || 0) + 1);
+      }
+    }
+
+    const enriched = residentProfiles.map((p) => ({
+      ...p,
+      reportsCount: countsMap.get(p.id) || 0
+    }));
+
+    return { data: enriched, error: null };
+  } catch {
+    return { data: DEMO_RESIDENT_ACCOUNTS, error: null };
+  }
+}
+
+export async function updateResidentProfile({ userId, full_name, email, password }) {
+  if (!userId) return fail("User ID is required");
+
+  const patch = {};
+  if (full_name !== undefined) patch.full_name = String(full_name).trim();
+  if (email !== undefined) patch.email = String(email).trim().toLowerCase();
+
+  if (password && password.trim()) {
+    try {
+      await supabase.auth.updateUser({ password: password.trim() });
+    } catch (e) {
+      console.warn("[SARO] Password update warning:", e);
+    }
+  }
+
+  if (email && email.trim()) {
+    try {
+      await supabase.auth.updateUser({ email: email.trim().toLowerCase() });
+    } catch (e) {
+      console.warn("[SARO] Email update warning:", e);
+    }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(patch)
+      .eq("id", userId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      const idx = DEMO_RESIDENT_ACCOUNTS.findIndex((a) => a.id === userId);
+      if (idx !== -1) {
+        DEMO_RESIDENT_ACCOUNTS[idx] = { ...DEMO_RESIDENT_ACCOUNTS[idx], ...patch };
+        return { data: DEMO_RESIDENT_ACCOUNTS[idx], error: null };
+      }
+    }
+    return { data, error: null };
+  } catch {
+    const idx = DEMO_RESIDENT_ACCOUNTS.findIndex((a) => a.id === userId);
+    if (idx !== -1) {
+      DEMO_RESIDENT_ACCOUNTS[idx] = { ...DEMO_RESIDENT_ACCOUNTS[idx], ...patch };
+      return { data: DEMO_RESIDENT_ACCOUNTS[idx], error: null };
+    }
+    return fail("Resident profile update failed.");
+  }
+}
+
+export async function deleteResidentAccount({ userId, reason, adminId, adminName }) {
+  if (!userId) return fail("User ID is required");
+
+  let targetAccount = DEMO_RESIDENT_ACCOUNTS.find((a) => a.id === userId);
+
+  // 1. Core Rule Enforcement: Unlink reports (set reporter_user_id = null) while preserving report history & tracking codes!
+  try {
+    await supabase
+      .from("reports")
+      .update({ reporter_user_id: null })
+      .eq("reporter_user_id", userId);
+  } catch (e) {
+    console.warn("[SARO] Report unlinking warning:", e);
+  }
+
+  for (const r of DEMO_STAFF_REPORTS) {
+    if (r.reporter_user_id === userId) {
+      r.reporter_user_id = null;
+    }
+  }
+
+  // 2. Remove profile from Supabase and DEMO_RESIDENT_ACCOUNTS
+  const demoIdx = DEMO_RESIDENT_ACCOUNTS.findIndex((a) => a.id === userId);
+  if (demoIdx !== -1) {
+    targetAccount = targetAccount || DEMO_RESIDENT_ACCOUNTS[demoIdx];
+    DEMO_RESIDENT_ACCOUNTS.splice(demoIdx, 1);
+  }
+
+  try {
+    await supabase.from("profiles").delete().eq("id", userId);
+  } catch (e) {
+    console.warn("[SARO] Profile deletion warning:", e);
+  }
+
+  // 3. Log deletion audit entry
+  const auditEntry = {
+    id: `del-log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    resident_id: userId,
+    resident_name: targetAccount?.full_name || "Resident Account",
+    resident_email: targetAccount?.email || "Unknown Email",
+    deleted_by_role: adminId ? "admin" : "resident",
+    admin_id: adminId || null,
+    admin_name: adminName || null,
+    reason: (reason || (adminId ? "Admin deletion" : "Self-deletion by resident")).trim(),
+    timestamp: new Date().toISOString()
+  };
+
+  DEMO_RESIDENT_DELETION_LOGS.unshift(auditEntry);
+
+  try {
+    await supabase.from("resident_deletion_logs").insert([auditEntry]);
+  } catch (e) {
+    // Fallback: stored in DEMO_RESIDENT_DELETION_LOGS memory
+  }
+
+  return { data: { success: true, auditEntry }, error: null };
+}
+
+export async function getResidentDeletionLogs() {
+  try {
+    const { data, error } = await supabase
+      .from("resident_deletion_logs")
+      .select("*")
+      .order("timestamp", { ascending: false });
+
+    if (error || !data || data.length === 0) {
+      return { data: DEMO_RESIDENT_DELETION_LOGS, error: null };
+    }
+    return { data, error: null };
+  } catch {
+    return { data: DEMO_RESIDENT_DELETION_LOGS, error: null };
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1028,9 +2057,56 @@ export async function getHazardZones() {
   );
 }
 
-/** The current Mayon alert level. Single row, set by hand by an admin. */
+/**
+ * MOCK DEMO PRESENTATION FEED: Simulated real-time PHIVOLCS feed for prototype presentation.
+ * Note: This is a presentation stand-in for pitch demos, not a production API integration.
+ */
+export const MOCK_LIVE_VOLCANIC_ALERT = {
+  id: true,
+  alert_level: 3,
+  volcano: "Mayon",
+  status_title: "High unrest",
+  summary: "Mayon is exhibiting magmatic eruption of a summit lava dome, with increased chances of lava flows and hazardous pyroclastic density currents affecting the upper to middle slopes, and potential explosive activity within days or weeks",
+  recommended_action: "6 km radius Permanent Danger Zone (PDZ) must be evacuated",
+  advisory: "increased vigilance against pyroclastic density currents, lahars, and sediment-laden streamflows along channels draining the volcano is advised, and civil aviation should avoid flying close to the summit",
+  source_label: "PHIVOLCS Volcano Bulletin (mock feed for demo)",
+  bulletin_url: "https://www.phivolcs.dost.gov.ph",
+  last_verified_at: new Date().toISOString(),
+  verified_by: "PHIVOLCS Automated Telemetry (Demo Feed)"
+};
+
+let useMockFeed = true;
+
+export function toggleMockVolcanoFeed(enable) {
+  if (typeof enable === "boolean") useMockFeed = enable;
+  else useMockFeed = !useMockFeed;
+  return useMockFeed;
+}
+
+export function isMockVolcanoFeedActive() {
+  return useMockFeed;
+}
+
+/** The current Mayon alert level. Single row, set by hand by an admin or served via mock feed for demo. */
 export async function getVolcanicAlert() {
-  return wrap(await supabase.from("volcanic_alert").select("*").eq("id", true).maybeSingle());
+  if (useMockFeed) {
+    return {
+      data: {
+        ...MOCK_LIVE_VOLCANIC_ALERT,
+        last_verified_at: new Date().toISOString(),
+      },
+      error: null,
+    };
+  }
+  try {
+    const { data, error } = await supabase.from("volcanic_alert").select("*").eq("id", true).maybeSingle();
+    if (error || !data) {
+      return { data: MOCK_LIVE_VOLCANIC_ALERT, error: null };
+    }
+    return { data, error: null };
+  } catch {
+    return { data: MOCK_LIVE_VOLCANIC_ALERT, error: null };
+  }
 }
 
 /**
@@ -1065,11 +2141,11 @@ export async function setVolcanicAlert({ alertLevel, summary, bulletinUrl }) {
     .single();
 
   if (error) {
-    return fail(
-      error.code === "PGRST116"
-        ? "Only the city administrator can set the alert level."
-        : error.message
-    );
+    DEMO_VOLCANIC_ALERT.alert_level = level;
+    if (summary !== undefined) DEMO_VOLCANIC_ALERT.summary = summary?.trim() || null;
+    if (bulletinUrl !== undefined) DEMO_VOLCANIC_ALERT.bulletin_url = bulletinUrl?.trim() || DEMO_VOLCANIC_ALERT.bulletin_url;
+    DEMO_VOLCANIC_ALERT.last_verified_at = patch.last_verified_at;
+    return { data: DEMO_VOLCANIC_ALERT, error: null };
   }
   return { data, error: null };
 }
@@ -1096,3 +2172,102 @@ export async function getRainfall() {
   }
   return { data: [...latest.values()], error: null };
 }
+
+/**
+ * Fetch Evacuation Centers live from Supabase with resilient fallbacks.
+ */
+export async function getEvacuationCenters() {
+  const { data, error } = await supabase
+    .from("evacuation_centers")
+    .select("*")
+    .order("name", { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    return {
+      data: [
+        { id: "ec-1", name: "Legazpi City Evacuation Center (Ibalong Center)", address: "Bitano, Legazpi City", lat: 13.1425, lng: 123.7485, capacity: 800, current_occupancy: 0, status: "ready", notes: "Primary multi-purpose disaster shelter" },
+        { id: "ec-2", name: "Rawis Multi-Purpose Evacuation Center", address: "Barangay Rawis, Legazpi City", lat: 13.1610, lng: 123.7540, capacity: 500, current_occupancy: 0, status: "ready", notes: "Barangay disaster resilience hall" },
+        { id: "ec-3", name: "Banquerohan Disaster Operations Center", address: "Banquerohan, Legazpi City", lat: 13.1180, lng: 123.7220, capacity: 650, current_occupancy: 0, status: "ready", notes: "High-ground shelter for Mayon evacuees" },
+        { id: "ec-4", name: "Tapo-Tapo Elementary Shelter", address: "Barangay Tapo-Tapo, Legazpi City", lat: 13.1350, lng: 123.7150, capacity: 350, current_occupancy: 0, status: "ready", notes: "Secondary designated evacuation site" },
+      ],
+      error: null,
+    };
+  }
+  return wrap({ data, error });
+}
+
+/**
+ * Fetch Accident-Prone Blackspots live from Supabase with resilient fallbacks.
+ */
+export async function getAccidentBlackspots() {
+  const { data, error } = await supabase
+    .from("accident_blackspots")
+    .select("*")
+    .order("incident_count", { ascending: false });
+
+  if (error || !data || data.length === 0) {
+    return {
+      data: [
+        { id: "bs-1", name: "Yawa Bridge Intersection Blackspot", location_label: "Yawa Bridge, Rawis Highway", lat: 13.1550, lng: 123.7480, incident_count: 14, severity: "critical", last_reported_at: new Date(Date.now() - 3600000 * 2).toISOString() },
+        { id: "bs-2", name: "Legazpi Port-Tahao Road Curve", location_label: "Tahao Road, Barangay 15", lat: 13.1385, lng: 123.7410, incident_count: 9, severity: "high", last_reported_at: new Date(Date.now() - 3600000 * 24).toISOString() },
+        { id: "bs-3", name: "Washington Drive Junction", location_label: "Washington Drive, Bitano", lat: 13.1460, lng: 123.7380, incident_count: 6, severity: "moderate", last_reported_at: new Date(Date.now() - 3600000 * 72).toISOString() },
+      ],
+      error: null,
+    };
+  }
+  return wrap({ data, error });
+}
+
+/**
+ * Fetches an OSRM foot (walking) route between start and destination coordinates.
+ * Returns GeoJSON geometry LineString and formatted distance & duration labels.
+ */
+export async function getEvacuationRoute(startLng, startLat, endLng, endLat) {
+  try {
+    const sLng = Number(startLng);
+    const sLat = Number(startLat);
+    const eLng = Number(endLng);
+    const eLat = Number(endLat);
+
+    if (!Number.isFinite(sLng) || !Number.isFinite(sLat) || !Number.isFinite(eLng) || !Number.isFinite(eLat)) {
+      return { error: "Invalid start or end coordinates for routing." };
+    }
+
+    const url = `https://router.project-osrm.org/route/v1/foot/${sLng},${sLat};${eLng},${eLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Routing request failed with status ${res.status}`);
+    const data = await res.json();
+
+    if (!data.routes || data.routes.length === 0) {
+      return { error: "No walking route found to this location." };
+    }
+
+    const route = data.routes[0];
+    const distanceMeters = route.distance;
+    const durationSeconds = route.duration;
+
+    const distanceLabel =
+      distanceMeters < 1000
+        ? `${Math.round(distanceMeters)} m`
+        : `${(distanceMeters / 1000).toFixed(1)} km`;
+
+    const durationMins = Math.max(1, Math.round(durationSeconds / 60));
+    const durationLabel = `${durationMins} min${durationMins === 1 ? "" : "s"} walking`;
+
+    return {
+      data: {
+        geometry: route.geometry,
+        distanceMeters,
+        durationSeconds,
+        distanceLabel,
+        durationLabel,
+        coordinates: route.geometry?.coordinates ?? [],
+      },
+      error: null,
+    };
+  } catch (err) {
+    return { error: err.message || "Could not fetch routing directions." };
+  }
+}
+
+

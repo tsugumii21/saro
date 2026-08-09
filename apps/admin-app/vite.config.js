@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   // Workspace packages are consumed as source, not prebundled deps.
   optimizeDeps: {
-    exclude: ['@saro/shared', '@saro/ui'],
+    exclude: ['@saro/shared', '@saro/ui', 'maplibre-gl'],
   },
   build: {
     chunkSizeWarningLimit: 1200,

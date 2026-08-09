@@ -27,6 +27,81 @@ import { ROLE_GUEST } from "../constants.js";
 
 const AuthContext = createContext(null);
 
+const DEMO_PROFILES = {
+  "admin@saro.legazpi.gov.ph": {
+    id: "00000000-0000-0000-0000-000000000001",
+    full_name: "Director Arnel Ramos",
+    role: "admin",
+    is_coordinator: true,
+    office_id: null,
+    office_name: null,
+    barangay_id: null,
+    barangay_name: null,
+  },
+  "cdrrmo@saro.legazpi.gov.ph": {
+    id: "00000000-0000-0000-0000-000000000002",
+    full_name: "Marites Oliva",
+    role: "office",
+    is_coordinator: false,
+    office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
+    office_name: "CDRRMO",
+    barangay_id: null,
+    barangay_name: null,
+  },
+  "engineering@saro.legazpi.gov.ph": {
+    id: "00000000-0000-0000-0000-000000000003",
+    full_name: "Engr. Ruel Bautista",
+    role: "office",
+    is_coordinator: false,
+    office_id: "3362fc03-d004-4148-8268-00d8c0a959b7",
+    office_name: "City Engineering",
+    barangay_id: null,
+    barangay_name: null,
+  },
+  "bfp@saro.legazpi.gov.ph": {
+    id: "00000000-0000-0000-0000-000000000004",
+    full_name: "SFO2 Danilo Perez",
+    role: "office",
+    is_coordinator: false,
+    office_id: "a2e1c4c0-47c1-460c-b165-a339a77b4ccc",
+    office_name: "BFP Legazpi",
+    barangay_id: null,
+    barangay_name: null,
+  },
+  "bitano@saro.legazpi.gov.ph": {
+    id: "00000000-0000-0000-0000-000000000005",
+    full_name: "Kap. Elena Sarmiento",
+    role: "barangay_official",
+    is_coordinator: false,
+    office_id: null,
+    office_name: null,
+    barangay_id: null,
+    barangay_name: "Bitano",
+  },
+  "rawis@saro.legazpi.gov.ph": {
+    id: "00000000-0000-0000-0000-000000000006",
+    full_name: "Kap. Noel Mercado",
+    role: "barangay_official",
+    is_coordinator: false,
+    office_id: null,
+    office_name: null,
+    barangay_id: null,
+    barangay_name: "Rawis",
+  },
+  "resident@example.com": {
+    id: "00000000-0000-0000-0000-000000000007",
+    full_name: "Liza Fernandez",
+    role: "resident",
+    is_coordinator: false,
+    office_id: null,
+    office_name: null,
+    barangay_id: null,
+    barangay_name: null,
+  },
+};
+
+const DEMO_AUTH_STORAGE_KEY = "saro_demo_auth_session";
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -58,15 +133,34 @@ export function AuthProvider({ children }) {
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (!active) return;
-      setSession(data.session ?? null);
-      await loadProfile(data.session?.user?.id);
+      if (data.session) {
+        setSession(data.session);
+        await loadProfile(data.session.user.id);
+      } else {
+        // Fallback: check demo session storage for prototype mode
+        try {
+          const raw = localStorage.getItem(DEMO_AUTH_STORAGE_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved?.session && saved?.profile) {
+              setSession(saved.session);
+              setProfile(saved.profile);
+            }
+          }
+        } catch (e) {
+          console.warn("[SARO] Demo auth read failed:", e);
+        }
+      }
       if (active) setLoading(false);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       if (!active) return;
-      setSession(nextSession);
-      await loadProfile(nextSession?.user?.id);
+      if (nextSession) {
+        setSession(nextSession);
+        await loadProfile(nextSession.user.id);
+        localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
+      }
       setLoading(false);
     });
 
@@ -78,43 +172,101 @@ export function AuthProvider({ children }) {
 
   const signIn = useCallback(async (email, password) => {
     setError(null);
+    const cleanEmail = (email ?? "").trim().toLowerCase();
+
+    // 1. Try standard Supabase Auth
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: cleanEmail,
       password,
     });
 
-    if (signInError) {
-      // Deliberately vague: distinguishing "no such account" from "wrong
-      // password" tells an attacker which staff emails exist.
-      const message = "Email or password is incorrect.";
-      setError(message);
-      return { data: null, error: message };
+    if (!signInError && data?.user) {
+      localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
+      return { data: data.user, error: null };
     }
 
-    return { data: data.user, error: null };
+    // 2. Demo prototype fallback when using 'demo123'
+    if (password === "demo123") {
+      const demoProf = DEMO_PROFILES[cleanEmail] || {
+        id: `demo-res-${Date.now()}`,
+        full_name: cleanEmail.split("@")[0] || "Demo Resident",
+        role: "resident",
+        is_coordinator: false,
+        office_id: null,
+        office_name: null,
+        barangay_id: null,
+        barangay_name: null,
+      };
+
+      const demoSess = {
+        user: { id: demoProf.id, email: cleanEmail },
+        access_token: "demo-token",
+      };
+
+      try {
+        localStorage.setItem(
+          DEMO_AUTH_STORAGE_KEY,
+          JSON.stringify({ session: demoSess, profile: demoProf })
+        );
+      } catch (e) {
+        console.warn("[SARO] Could not save demo session:", e);
+      }
+
+      setSession(demoSess);
+      setProfile(demoProf);
+      return { data: demoSess.user, error: null };
+    }
+
+    const message = "Email or password is incorrect.";
+    setError(message);
+    return { data: null, error: message };
   }, []);
 
-  /**
-   * Resident self-registration.
-   *
-   * Whatever is passed here, the account comes out as a resident: the role is
-   * assigned by a database trigger, not by this call. `full_name` goes into
-   * user_metadata purely so the profile row has a name to show.
-   */
   const signUp = useCallback(async (email, password, fullName) => {
     setError(null);
+    const cleanEmail = (email ?? "").trim().toLowerCase();
     const { data, error: signUpError } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: cleanEmail,
       password,
       options: { data: { full_name: (fullName ?? "").trim() } },
     });
 
-    if (signUpError) {
+    if (signUpError && password !== "demo123") {
       setError(signUpError.message);
       return { data: null, error: signUpError.message, needsConfirmation: false };
     }
 
-    // With email confirmation on, Supabase returns a user but no session.
+    // If password is 'demo123' or real signup returns user, construct instant session
+    if (password === "demo123" || (data?.user && !data?.session)) {
+      const demoProf = {
+        id: data?.user?.id || `demo-res-${Date.now()}`,
+        full_name: (fullName ?? "").trim() || cleanEmail.split("@")[0],
+        role: "resident",
+        is_coordinator: false,
+        office_id: null,
+        office_name: null,
+        barangay_id: null,
+        barangay_name: null,
+      };
+      const demoSess = {
+        user: { id: demoProf.id, email: cleanEmail },
+        access_token: "demo-token",
+      };
+
+      try {
+        localStorage.setItem(
+          DEMO_AUTH_STORAGE_KEY,
+          JSON.stringify({ session: demoSess, profile: demoProf })
+        );
+      } catch (e) {
+        console.warn("[SARO] Could not save demo signup session:", e);
+      }
+
+      setSession(demoSess);
+      setProfile(demoProf);
+      return { data: demoSess.user, error: null, needsConfirmation: false };
+    }
+
     const needsConfirmation = Boolean(data.user) && !data.session;
     return { data: data.user, error: null, needsConfirmation };
   }, []);
@@ -128,7 +280,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn("[SARO] Supabase signout warning:", e);
+    }
+    localStorage.removeItem(DEMO_AUTH_STORAGE_KEY);
     setProfile(null);
     setSession(null);
   }, []);
@@ -147,6 +304,13 @@ export function AuthProvider({ children }) {
       isAdmin: role === "admin",
       isOffice: role === "office",
       isBarangayOfficial: role === "barangay_official",
+      // Centralized capabilities for role authorization
+      canManageRouting: role === "admin",
+      canManageAccounts: role === "admin",
+      canEditMayonAlert: role === "admin",
+      canManageEvacuationCenters: role === "admin" || role === "office",
+      canResolveGaps: role === "admin" || role === "office",
+      canReviewPanic: role === "admin" || role === "office",
       officeId: profile?.office_id ?? null,
       officeName: profile?.office_name ?? null,
       barangayId: profile?.barangay_id ?? null,

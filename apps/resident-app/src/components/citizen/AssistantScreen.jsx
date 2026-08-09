@@ -10,16 +10,16 @@ import { askAssistant } from "@saro/shared";
 // owns that now — one place that knows what a device id is, rather than four
 // copies of the same eight lines drifting apart.
 
-// Quick prompt chips
+// Quick prompt chips — query text must match label language
 const QUICK_PROMPTS = [
-  { label: "CDRRMO hotline?", text: "Ano ang emergency hotline ng CDRRMO?" },
-  { label: "How to report?", text: "Paano mag-report ng hazard?" },
-  { label: "Track my report", text: "Paano mag-track ng report gamit ang tracking code?" },
-  { label: "Evacuation center?", text: "Saan ang pinakamalapit na evacuation center?" },
-  { label: "BFP fire hotline?", text: "Ano ang hotline ng Bureau of Fire Protection?" },
-  { label: "What is SARO?", text: "Ano ang SARO app?" },
-  { label: "Coast Guard hours?", text: "May duty ba ang Coast Guard sa gabi?" },
-  { label: "Gas leak safety?", text: "Ano ang gagawin kapag may gas leak?" }
+  { label: "CDRRMO hotline?", text: "What is the emergency hotline for CDRRMO?" },
+  { label: "How to report?", text: "How do I file a hazard report in SARO?" },
+  { label: "Track my report", text: "How do I track my report with a tracking code?" },
+  { label: "Evacuation center?", text: "Where is the nearest evacuation center in Legazpi City?" },
+  { label: "BFP fire hotline?", text: "What is the hotline for the Bureau of Fire Protection?" },
+  { label: "What is SARO?", text: "What is the SARO app and how does it work?" },
+  { label: "Coast Guard hours?", text: "What are the operating hours for the Coast Guard station?" },
+  { label: "Gas leak safety?", text: "What safety measures should I take if I suspect a gas leak?" }
 ];
 
 export default function AssistantScreen() {
@@ -134,22 +134,20 @@ export default function AssistantScreen() {
 
   return (
     <div className="flex flex-col h-full bg-canvas font-sans">
-      
+
       {/* Scrollable Message List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex flex-col ${
-              msg.role === "user" ? "items-end" : "items-start"
-            }`}
+            className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"
+              }`}
           >
             <div
-              className={`max-w-[85%] rounded-xs px-4 py-3 text-xs sm:text-sm leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-brand text-white rounded-br-none shadow-xs font-medium"
-                  : "bg-white text-ink border border-line rounded-bl-none shadow-xs"
-              }`}
+              className={`max-w-[85%] rounded-xs px-4 py-3 text-xs sm:text-sm leading-relaxed ${msg.role === "user"
+                ? "bg-brand text-white rounded-br-none shadow-xs font-medium"
+                : "bg-white text-ink border border-line rounded-bl-none shadow-xs"
+                }`}
             >
               {msg.text}
             </div>
@@ -225,11 +223,11 @@ export default function AssistantScreen() {
       </div>
 
       {/* Quick Prompt Chips */}
-      <div className="border-t border-line bg-white/80 backdrop-blur px-3 py-2 shrink-0">
-        <div className="relative">
+      <div className="border-t border-line bg-white/80 backdrop-blur px-3 py-2 shrink-0 w-full max-w-full overflow-hidden">
+        <div className="relative w-full overflow-hidden">
           <div
             ref={chipsRef}
-            className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none"
+            className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar w-full touch-pan-x"
           >
             {QUICK_PROMPTS.map((prompt, i) => (
               <button
@@ -247,7 +245,7 @@ export default function AssistantScreen() {
 
       {/* Input Bar with Voice Message Icon Button */}
       <div className="border-t border-line bg-white px-3.5 py-2.5 shrink-0">
-        
+
         {/* Pulsing Voice Recording Indicator */}
         {isRecording && (
           <div className="mb-2 t-label font-bold text-alert bg-alert-wash border border-alert px-3 py-1 rounded-full flex items-center justify-between animate-pulse">
@@ -265,16 +263,15 @@ export default function AssistantScreen() {
         )}
 
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          
+
           {/* Voice Message Microphone Button */}
           <button
             type="button"
             onClick={toggleVoiceRecording}
-            className={`p-2.5 rounded-xs border transition-all min-w-[44px] min-h-[44px] flex items-center justify-center ${
-              isRecording
-                ? "bg-alert text-white border-alert animate-pulse shadow-md"
-                : "bg-sunken hover:bg-brand-wash text-ink-muted hover:text-brand border-line hover:border-brand-edge"
-            }`}
+            className={`p-2.5 rounded-xs border transition-all min-w-[44px] min-h-[44px] flex items-center justify-center ${isRecording
+              ? "bg-alert text-white border-alert animate-pulse shadow-md"
+              : "bg-sunken hover:bg-brand-wash text-ink-muted hover:text-brand border-line hover:border-brand-edge"
+              }`}
             title={isRecording ? "Stop recording" : "Voice Message / Dictation"}
             aria-label="Voice Message"
           >

@@ -56,7 +56,7 @@ export default function PanicReview() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="t-heading">Panic press review</h1>
+        <h1 className="t-heading">Panic Press Review</h1>
         <p className="t-body-sm mt-1 text-ink-muted">
           Devices that have pressed Panic repeatedly. For a person to look at — SARO never
           blocks a panic press, and nothing here does either.
@@ -77,7 +77,7 @@ export default function PanicReview() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-raised">
-                {["Device", "Presses", "Rapid repeats", "Last press", ""].map((h) => (
+                {["Device", "Presses", "Rapid Repeats", "Last Press", ""].map((h) => (
                   <th key={h} className="t-label px-3 py-2.5 text-left text-ink-faint">{h}</th>
                 ))}
               </tr>

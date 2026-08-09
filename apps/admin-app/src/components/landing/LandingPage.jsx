@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
-import {Shield, AlertTriangle, ArrowRight, Phone, Clock, MapPin, Radio, Flame, Waves, Construction, Activity, HeartPulse, Droplet, Anchor, Share2, X} from "lucide-react";
+import { Shield, ArrowRight, Phone, Clock, MapPin, Radio, Flame, Waves, Construction, Activity, HeartPulse, Droplet, Anchor, Share2, X, Lock } from "lucide-react";
 import { Wordmark, StatusTag, HazardMap } from "@saro/ui";
-import { getPublicMapReports, getCategories, LEGAZPI_CENTER } from "@saro/shared";
+import { getPublicMapReports, getCategories, LEGAZPI_CENTER, saroEvents } from "@saro/shared";
 
 /** MapLibre takes [lng, lat]. */
 const LEGAZPI_CENTER_LNGLAT = [LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]];
-import { saroEvents } from "@saro/shared";
-
 
 const STATUS_COLORS = {
   received: "#94A3B8",
@@ -15,7 +13,7 @@ const STATUS_COLORS = {
   resolved: "#22C55E"
 };
 
-export default function LandingPage({ onSelectResident, onSelectOfficer }) {
+export default function LandingPage({ onOpenLogin }) {
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
@@ -70,22 +68,14 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
             </nav>
           </div>
 
-          {/* Action CTAs */}
+          {/* Single Generalized Login Action for Staff & Officials */}
           <div className="flex items-center gap-3">
             <button
-              onClick={onSelectOfficer}
-              className="text-xs font-bold text-ink-muted hover:text-ink bg-raised hover:bg-line border border-line px-3.5 py-2 rounded-xs transition-colors flex items-center gap-1.5 min-h-[40px]"
+              onClick={onOpenLogin}
+              className="saro-btn-primary text-xs py-2 px-4 shadow-sm min-h-[40px] font-bold inline-flex items-center gap-2"
             >
-              <Shield className="w-3.5 h-3.5 text-brand" />
-              <span>Officer Portal</span>
-            </button>
-
-            <button
-              onClick={onSelectResident}
-              className="saro-btn-primary text-xs py-2 px-4 shadow-sm min-h-[40px]"
-            >
-              <span>Report a Hazard</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <Lock className="w-3.5 h-3.5" />
+              <span>Login</span>
             </button>
           </div>
         </div>
@@ -94,9 +84,9 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
       {/* Main Landing Page Content */}
       <main className="flex-1">
 
-        {/* Hero Section with Live Dark Map Preview & Single Primary CTA */}
+        {/* Hero Section with Live Dark Map Preview & Single Login Primary CTA */}
         <section className="bg-gradient-to-br from-ink via-brand-strong to-ink text-white relative overflow-hidden py-14 md:py-24 border-b border-brand-strong/50">
-          
+
           {/* Legazpi Contour Lines SVG Background Overlay */}
           <svg className="absolute inset-0 w-full h-full opacity-20 pointer-events-none stroke-brand-edge/40" fill="none" strokeWidth="1.2">
             <path d="M-100 180 C 150 120, 350 420, 700 220 C 1000 80, 1300 320, 1700 180" />
@@ -107,30 +97,30 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
           </svg>
 
           <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 grid md:grid-cols-12 gap-10 items-center">
-            
+
             {/* Left Hero Text Column */}
             <div className="md:col-span-6 space-y-6">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-bright/20 text-brand-edge border border-brand-bright/30 text-xs font-bold shadow-xs">
                 <Radio className="w-3.5 h-3.5 text-brand-edge animate-pulse" />
-                Legazpi City Official Civic Hazard Portal
+                Legazpi City Operations & Dispatch Portal
               </div>
 
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight">
-                One front door for civic hazard & emergency reporting.
+                Unified Operations for City Emergency Response.
               </h1>
 
               <p className="text-sm sm:text-base text-brand-wash/90 leading-relaxed max-w-xl font-normal">
-                <strong className="text-white font-semibold">"SARO"</strong> means <strong className="text-brand-edge font-semibold italic">"One"</strong> in Bikol. We replace disconnected hotlines with automated department routing and end-to-end report transparency for all Legazpi residents.
+                <strong className="text-white font-semibold">"SARO"</strong> means <strong className="text-brand-edge font-semibold italic">"One"</strong> in Bikol. Streamlining automated department routing, real-time incident triage, and transparent coordination across all Legazpi offices.
               </p>
 
-              {/* Single Confident Primary CTA (Officer login moved to top nav / footer per request) */}
+              {/* Generalized Login Primary CTA */}
               <div className="pt-2">
                 <button
-                  onClick={onSelectResident}
+                  onClick={onOpenLogin}
                   className="saro-btn-primary text-sm py-4 px-8 shadow-none rounded-xs font-extrabold inline-flex items-center gap-3 transition-transform hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  <AlertTriangle className="w-5 h-5" />
-                  <span>Report a Hazard (Public)</span>
+                  <Shield className="w-5 h-5" />
+                  <span>Login to Operations Portal</span>
                   <ArrowRight className="w-5 h-5 ml-1" />
                 </button>
               </div>
@@ -140,7 +130,7 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
             {/* Right Side: Real Live Dark Map Preview */}
             <div className="md:col-span-6">
               <div className="bg-ink/90 backdrop-blur-xl border border-brand-bright/30 rounded-xs shadow-none overflow-hidden relative flex flex-col h-[360px] sm:h-[420px]">
-                
+
                 {/* Live EOC Overlay Header */}
                 <div className="bg-ink/95 border-b border-brand-bright/30 px-4 py-3 z-[500] flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2">
@@ -154,17 +144,21 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                   </span>
                 </div>
 
-                {/* Dark CartoDB Leaflet Map */}
+                {/* Dark Map Preview */}
                 <div className="flex-1 relative w-full h-full">
                   <HazardMap
                     className="h-full w-full"
                     center={LEGAZPI_CENTER_LNGLAT}
-                    zoom={12}
+                    zoom={13}
                     showToggles={false}
                     hidden={["rain"]}
-                    reports={displayReports.map((r) => ({
-                      id: r.id, lat: r.lat, lng: r.lng, priority: r.priority,
+                    reports={displayReports.map(({ report: r, count }) => ({
+                      id: r.cluster_id || r.id,
+                      lat: typeof r.lat === "string" ? parseFloat(r.lat) : r.lat,
+                      lng: typeof r.lng === "string" ? parseFloat(r.lng) : r.lng,
+                      priority: r.priority,
                       color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
+                      onSelect: () => setSelectedReport({ ...r, clusterCount: count }),
                     }))}
                   />
 
@@ -183,15 +177,9 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                       <div className="font-bold text-white text-xs mb-1">
                         {getCatName(selectedReport.category_id)}
                       </div>
-                      <div className="t-label text-brand-edge/70 mb-2 truncate">
+                      <div className="t-label text-brand-edge/70 truncate">
                         {selectedReport.description}
                       </div>
-                      <button
-                        onClick={onSelectResident}
-                        className="saro-btn-primary w-full t-label py-1.5"
-                      >
-                        Report in this area →
-                      </button>
                     </div>
                   ) : (
                     <div className="absolute bottom-3 left-3 z-[500] bg-ink/80 backdrop-blur-md border border-white/10 rounded-xs px-3 py-1.5 t-label text-brand-edge/80 font-mono pointer-events-none">
@@ -206,12 +194,12 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
           </div>
         </section>
 
-        {/* Editorial Focal Stats Banner (Non-Uniform Asymmetric Layout) */}
+        {/* Editorial Focal Stats Banner */}
         <section className="bg-raised border-b border-line py-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="grid md:grid-cols-12 gap-4 items-center">
-              
-              {/* Highlighted Hero Focal Metric: SLA Speed */}
+
+              {/* SLA Speed Metric */}
               <div className="md:col-span-5 bg-gradient-to-br from-ink to-brand-strong text-white rounded-xs p-6 border border-brand/60 shadow-md relative overflow-hidden flex flex-col justify-between">
                 <div className="flex items-center justify-between mb-3">
                   <span className="t-label font-mono uppercase tracking-wider text-brand-edge font-bold flex items-center gap-1.5">
@@ -224,7 +212,7 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                   &lt; 60 Mins
                 </div>
                 <p className="text-xs text-brand-wash/80 leading-relaxed">
-                  Maximum response window for critical emergency hazard reports across all 12 Legazpi barangays.
+                  Maximum response window for critical emergency hazard reports across all Legazpi barangays.
                 </p>
               </div>
 
@@ -245,7 +233,7 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                 <div className="bg-white border border-line rounded-xs p-4 shadow-2xs space-y-1">
                   <div className="text-2xl font-black text-brand font-mono">100%</div>
                   <div className="text-xs font-bold text-ink">Transparent Tracking</div>
-                  <div className="t-label text-ink-muted leading-tight">Unique tracking codes for residents</div>
+                  <div className="t-label text-ink-muted leading-tight">Automated audit log & verification</div>
                 </div>
               </div>
 
@@ -257,16 +245,14 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
         <section id="how-it-works" className="py-16 max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center max-w-xl mx-auto mb-12">
             <span className="text-xs font-bold text-brand uppercase tracking-wider block mb-1">Simple & Direct</span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-ink">How SARO processes citizen hazard reports</h2>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-ink">How SARO Dispatch Workflow Works</h2>
           </div>
 
           <div className="relative">
-            {/* Desktop Connecting Line */}
             <div className="hidden md:block absolute top-1/2 left-10 right-10 h-0.5 bg-gradient-to-r from-brand-edge via-brand to-ink-faint -translate-y-6 z-0" />
 
             <div className="grid md:grid-cols-3 gap-6 relative z-10">
-              
-              {/* Step 1: Report */}
+
               <div className="bg-white border border-line rounded-xs p-6 shadow-xs space-y-4 hover:border-brand/40 transition-all">
                 <div className="flex items-center justify-between">
                   <div className="w-12 h-12 rounded-xs bg-brand-wash text-brand border border-brand-wash flex items-center justify-center">
@@ -274,13 +260,12 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                   </div>
                   <span className="text-xs font-mono font-bold text-ink-muted bg-raised px-2.5 py-1 rounded-full border border-line">STEP 01</span>
                 </div>
-                <h3 className="text-base font-bold text-ink">1. Pin & Describe Hazard</h3>
+                <h3 className="text-base font-bold text-ink">1. Incident Arrival</h3>
                 <p className="text-xs text-ink-muted leading-relaxed">
-                  Pin exact location on the Legazpi map, attach photo evidence, or use voice dictation. Works offline if disconnected.
+                  Citizen reports land with geo-location, photos, or voice notes. Duplicates are auto-clustered within 150m.
                 </p>
               </div>
 
-              {/* Step 2: Route */}
               <div className="bg-brand-wash/40 border-2 border-brand/30 rounded-xs p-6 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="w-12 h-12 rounded-xs bg-brand text-white flex items-center justify-center shadow-md">
@@ -290,11 +275,10 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                 </div>
                 <h3 className="text-base font-bold text-ink">2. Automated Smart Dispatch</h3>
                 <p className="text-xs text-ink-muted leading-relaxed">
-                  SARO's routing engine instantly assigns the report to CDRRMO, BFP, 911, or City Engineering based on hazard type and barangay.
+                  SARO's routing engine assigns incidents to CDRRMO, BFP, 911, or City Engineering based on hazard type and barangay.
                 </p>
               </div>
 
-              {/* Step 3: Track */}
               <div className="bg-ink text-white border border-ink rounded-xs p-6 shadow-md space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="w-12 h-12 rounded-xs bg-ink text-brand-edge border border-brand-bright/30 flex items-center justify-center">
@@ -302,9 +286,9 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                   </div>
                   <span className="text-xs font-mono font-bold text-brand-edge bg-ink px-2.5 py-1 rounded-full border border-brand-bright/30">STEP 03</span>
                 </div>
-                <h3 className="text-base font-bold text-white">3. Track Until Resolved</h3>
+                <h3 className="text-base font-bold text-white">3. Resolution & Audit</h3>
                 <p className="text-xs text-brand-wash/80 leading-relaxed">
-                  Follow live responder status updates with your unique tracking code until the hazard is verified resolved.
+                  Responders attach photo proof to close incidents. City directors inspect live SLA metrics and aging queues.
                 </p>
               </div>
 
@@ -312,7 +296,7 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
           </div>
         </section>
 
-        {/* Connected Agencies with Category Color-Coded Accents */}
+        {/* Connected Agencies */}
         <section id="agencies" className="py-16 bg-white border-y border-line">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="text-center max-w-xl mx-auto mb-10">
@@ -320,35 +304,24 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
               <h2 className="text-2xl sm:text-3xl font-extrabold text-ink">Connected Legazpi City Emergency Offices</h2>
             </div>
 
-            {/* Primary Responders (Prominent Highlight Cards) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-              
-              {/* A directory, not a set of status objects.
-               *
-               * These four cards each used to carry a tinted wash, a full
-               * coloured border AND a 4px coloured left edge — three devices
-               * saying the same thing, which is one of the clearest tells of
-               * generated UI. Worse, the colours were borrowed from tokens that
-               * mean something else: --color-alert is for errors, not for the
-               * 911 command centre, and --color-status-assigned-* belongs to a
-               * report's pipeline state, not to the fire service. The fourth
-               * card was raw `indigo-50 / indigo-200 / indigo-600 / indigo-900`
-               * — off-palette entirely, and the last hardcoded colour left in
-               * either app.
-               *
-               * An office directory has to answer "who handles what". The name
-               * and the icon do that. So all four are now the same plain card,
-               * and nothing is colour-coded, because there was never anything
-               * for the colour to encode. */}
               {[
-                { name: "CDRRMO", Icon: Waves, full: "City Disaster Risk Reduction",
-                  handles: "Flooding, Landslides & Typhoon Debris" },
-                { name: "Legazpi 911", Icon: HeartPulse, full: "911 Command Center",
-                  handles: "Medical Emergency & Vehicular Collisions" },
-                { name: "BFP Legazpi", Icon: Flame, full: "Bureau of Fire Protection",
-                  handles: "Fire Outbreaks & Gas Leaks" },
-                { name: "PNP Legazpi", Icon: Shield, full: "National Police Station",
-                  handles: "Public Order & Crime Incidents" },
+                {
+                  name: "CDRRMO", Icon: Waves, full: "City Disaster Risk Reduction",
+                  handles: "Flooding, Landslides & Typhoon Debris"
+                },
+                {
+                  name: "Legazpi 911", Icon: HeartPulse, full: "911 Command Center",
+                  handles: "Medical Emergency & Vehicular Collisions"
+                },
+                {
+                  name: "BFP Legazpi", Icon: Flame, full: "Bureau of Fire Protection",
+                  handles: "Fire Outbreaks & Gas Leaks"
+                },
+                {
+                  name: "PNP Legazpi", Icon: Shield, full: "National Police Station",
+                  handles: "Public Order & Crime Incidents"
+                },
               ].map(({ name, Icon, full, handles }) => (
                 <div key={name} className="saro-card space-y-2 p-4">
                   <div className="flex items-center justify-between">
@@ -359,10 +332,8 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                   <div className="t-label leading-tight text-ink-muted">{handles}</div>
                 </div>
               ))}
-
             </div>
 
-            {/* Secondary Support Offices */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { name: "City Engineering", desc: "Road Potholes, Bridges & Drainage", icon: Construction },
@@ -393,7 +364,7 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
               <div className="text-xs font-bold text-brand-edge uppercase tracking-wider">Immediate Life Threat?</div>
               <h3 className="text-xl sm:text-2xl font-extrabold">Call Legazpi City Emergency Hotlines</h3>
               <p className="text-xs text-brand-wash/80 max-w-lg">
-                For life-threatening emergencies requiring immediate rescue or fire response, call hotlines directly or file a report.
+                For life-threatening emergencies requiring immediate rescue or fire response, call hotlines directly or sign in to dispatch.
               </p>
             </div>
 
@@ -406,10 +377,11 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
                 Call 911
               </a>
               <button
-                onClick={onSelectResident}
-                className="saro-btn-primary py-3 px-5 text-xs font-bold"
+                onClick={onOpenLogin}
+                className="saro-btn-primary py-3 px-5 text-xs font-bold flex items-center gap-2"
               >
-                File Emergency Report
+                <Lock className="w-4 h-4" />
+                <span>Staff Login</span>
               </button>
             </div>
           </div>
@@ -423,8 +395,10 @@ export default function LandingPage({ onSelectResident, onSelectOfficer }) {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <Wordmark variant="white" size="md" />
             <div className="flex items-center gap-6 text-line-strong font-semibold">
-              <button onClick={onSelectResident} className="hover:text-white transition-colors">Resident Portal</button>
-              <button onClick={onSelectOfficer} className="hover:text-white transition-colors">Officer Portal</button>
+              <button onClick={onOpenLogin} className="hover:text-white transition-colors flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-brand-edge" />
+                <span>Staff Login</span>
+              </button>
               <a href="#hotlines" className="hover:text-white transition-colors">Hotlines</a>
             </div>
           </div>

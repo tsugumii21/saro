@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
-import {BarChart3, Settings, HelpCircle, AlertTriangle, TrendingUp, TrendingDown, Edit3, X, Download, Plus, Activity, ChevronRight, Loader2} from "lucide-react";
+import { BarChart3, Settings, HelpCircle, AlertTriangle, TrendingUp, TrendingDown, Edit3, X, Download, Plus, Activity, ChevronRight, Loader2, Building2 } from "lucide-react";
 import {
   getReports, getCategories, getOffices, getBarangays, getAssistantLogs, updateCategory,
   addKnowledgeBaseEntry
 } from "@saro/shared";
 import { saroEvents } from "@saro/shared";
 import { useAuth } from "@saro/shared";
+import EvacuationCentersEditor from "./EvacuationCentersEditor";
 
 function hoursElapsed(dateStr) {
   return (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60);
@@ -296,13 +297,25 @@ function AdminDashboardContent() {
     setKbAnswer("");
   };
 
-  // Report counts per office
+  // Filter out stray "emergency_unspecified" / Panic Alert from hazard category analytics
+  const hazardCategories = categories.filter(
+    (c) => c.category !== "emergency_unspecified" && !c.label?.toLowerCase().includes("panic")
+  );
+
+  // Report counts per office (Incident Volume by Agency)
   const reportsByOffice = offices.map((o) => {
-    const oReports = rangedReports.filter((r) => r.office_id === o.id);
-    const active = oReports.filter((r) => r.status !== "resolved").length;
+    const oReports = rangedReports.filter((r) => {
+      const assignedId = r.assigned_office_id || r.offices?.id || r.office_id;
+      const assignedName = r.offices?.short_name || r.office_name;
+      return (
+        assignedId === o.id ||
+        (assignedName && assignedName.toLowerCase() === o.short_name?.toLowerCase())
+      );
+    });
+    const active = oReports.filter((r) => r.status !== "resolved" && r.status !== "closed_confirmed").length;
     const breached = oReports.filter((r) => {
-      if (r.status === "resolved") return false;
-      const cat = categories.find((c) => c.id === r.category_id);
+      if (r.status === "resolved" || r.status === "closed_confirmed") return false;
+      const cat = hazardCategories.find((c) => c.id === r.category_id || c.category === r.category);
       return cat && hoursElapsed(r.created_at) > cat.sla_hours;
     }).length;
     return { office: o, total: oReports.length, active, breached };
@@ -310,15 +323,17 @@ function AdminDashboardContent() {
 
   const maxOfficeTotal = Math.max(1, ...reportsByOffice.map((o) => o.total));
 
-  // Incident counts per barangay (horizontal bar chart data)
+  // Incident counts per barangay (High Incident Barangays)
   const barangayCounts = barangays.map((b) => {
-    const count = rangedReports.filter((r) => r.barangay_id === b.id).length;
+    const count = rangedReports.filter((r) => {
+      const bId = r.barangay_id || r.barangays?.id;
+      const bName = r.barangays?.name || r.barangay_name;
+      return bId === b.id || (bName && bName.toLowerCase() === b.name?.toLowerCase());
+    }).length;
     return { barangay: b, count };
   }).sort((a, b) => b.count - a.count).slice(0, 6);
 
   const maxBrgyCount = Math.max(1, ...barangayCounts.map((b) => b.count));
-
-  // Explicit, Unambiguous KPI Trend Indicator
 
   const toggleOfficeGroup = (officeId) => {
     setCollapsedOffices((prev) => ({ ...prev, [officeId]: !prev[officeId] }));
@@ -382,32 +397,11 @@ function AdminDashboardContent() {
               </button>
             ))}
           </div>
-
-          {/* Panel Tab Selector */}
-          <div className="flex items-center bg-sunken p-1 rounded-xs border border-line">
-            {[
-              { key: "metrics", label: "Metrics & Analytics", icon: BarChart3 },
-              { key: "routing", label: "Routing & SLA Editor", icon: Settings },
-              { key: "questions", label: "Unanswered Queries", icon: HelpCircle }
-            ].map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActivePanel(key)}
-                className={`px-3 py-1.5 rounded-xs text-xs font-bold flex items-center gap-1.5 transition-colors ${
-                  activePanel === key ? "bg-brand text-white shadow-2xs" : "text-ink-muted hover:text-ink hover:bg-line/60"
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
       {/* METRICS & ANALYTICS PANEL */}
-      {activePanel === "metrics" && (
-        <div className="space-y-4">
+      <div className="space-y-4">
           
           {/* 4 Tight KPI Cards with Sparklines & Explicit Color-Coded Trends */}
           <div className="grid grid-cols-4 gap-3">
@@ -667,196 +661,7 @@ function AdminDashboardContent() {
               })}
             </div>
           </div>
-
         </div>
-      )}
-
-      {/* ROUTING & SLA EDITOR PANEL */}
-      {activePanel === "routing" && (
-        <div className="bg-white rounded-xs border border-line p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-ink">Department Routing & SLA Target Editor</h3>
-              <p className="text-xs text-ink-faint mt-0.5">
-                Configure automatic department dispatch rules and response SLA hours for each hazard category.
-              </p>
-            </div>
-          </div>
-
-          <table className="w-full text-xs border-collapse">
-            <thead className="bg-raised text-ink-muted border-b border-line uppercase t-micro font-bold">
-              <tr>
-                <th className="text-left px-4 py-2.5">Category Name</th>
-                <th className="text-left px-3 py-2.5">Assigned Department</th>
-                <th className="text-center px-3 py-2.5">SLA Target (Hours)</th>
-                <th className="text-right px-4 py-2.5">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-sunken">
-              {categories.map((cat) => {
-                const isEditing = editingCat === cat.id;
-                return (
-                  <tr key={cat.id} className="hover:bg-raised">
-                    <td className="px-4 py-3 text-ink font-semibold">
-                      <div className="flex items-center gap-1.5">
-                        {cat.is_emergency && <AlertTriangle className="w-3.5 h-3.5 text-alert shrink-0" />}
-                        {cat.name}
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-3">
-                      {isEditing ? (
-                        <select
-                          value={editOfficeId}
-                          onChange={(e) => setEditOfficeId(e.target.value)}
-                          className="text-xs py-1 px-2 rounded border border-line bg-white font-medium text-ink"
-                        >
-                          {offices.map((o) => (
-                            <option key={o.id} value={o.id}>{o.full_name} ({o.short_name})</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="font-semibold text-ink">{getOfficeName(cat.office_id)}</span>
-                      )}
-                    </td>
-
-                    <td className="px-3 py-3 text-center">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          min="1"
-                          max="168"
-                          value={editSlaHours}
-                          onChange={(e) => setEditSlaHours(e.target.value)}
-                          className="w-16 text-center text-xs py-1 px-2 rounded border border-line bg-white font-mono font-bold text-ink"
-                        />
-                      ) : (
-                        <span className="font-mono font-bold text-ink">{cat.sla_hours}h</span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3 text-right">
-                      {isEditing ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            disabled={saving}
-                            onClick={handleSaveCategory}
-                            className="bg-brand hover:bg-brand text-white text-xs font-bold px-3 py-1 rounded transition-colors"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingCat(null)}
-                            className="bg-sunken hover:bg-line text-ink-muted text-xs font-semibold px-2 py-1 rounded transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleEditCategory(cat)}
-                          className="text-brand hover:underline font-semibold text-xs flex items-center justify-end gap-1 ml-auto"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          Edit Rules
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* UNANSWERED QUESTIONS PANEL */}
-      {activePanel === "questions" && (
-        <div className="bg-white rounded-xs border border-line p-6 space-y-4">
-          <div>
-            <h3 className="text-sm font-bold text-ink">Unanswered Assistant Queries</h3>
-            <p className="text-xs text-ink-faint mt-0.5">
-              Review frequent questions asked by citizens that were not found in the local knowledge base.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {questionClusters.map((cluster, idx) => (
-              <div key={idx} className="p-4 bg-raised border border-line rounded-xs flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="text-xs font-bold text-ink flex items-center gap-2">
-                    <HelpCircle className="w-4 h-4 text-status-assigned-tab shrink-0" />
-                    "{cluster.representative}"
-                  </div>
-                  <div className="t-label text-ink-faint font-medium">
-                    Asked {cluster.count} time(s) &bull; Latest: {new Date(cluster.latestAt).toLocaleString()}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setKbTarget(cluster)}
-                  className="bg-brand hover:bg-brand text-white text-xs font-bold px-3 py-1.5 rounded-xs transition-colors shrink-0 flex items-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add to Knowledge Base
-                </button>
-              </div>
-            ))}
-            {questionClusters.length === 0 && (
-              <div className="p-8 text-center text-xs text-ink-faint">
-                No unanswered query clusters recorded.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* KB Add Modal */}
-      {kbTarget && (
-        <div className="fixed inset-0 bg-ink-strong/60 z-50 flex items-center justify-center p-6">
-          <div className="bg-white border border-line rounded-xs p-6 w-full max-w-lg shadow-none space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-ink">Add Answer to Knowledge Base</h3>
-              <button onClick={() => setKbTarget(null)} className="text-ink-faint hover:text-ink">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-3 bg-raised border border-line rounded-xs text-xs">
-              <span className="font-bold text-ink-muted block mb-1">Question:</span>
-              <span className="text-ink font-medium">"{kbTarget.representative}"</span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-ink mb-1.5">Official City Answer</label>
-              <textarea
-                rows={4}
-                value={kbAnswer}
-                onChange={(e) => setKbAnswer(e.target.value)}
-                placeholder="Enter official public service response..."
-                className="w-full p-3 bg-raised border border-line rounded-xs text-xs text-ink font-medium focus:border-brand focus:outline-none"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <button
-                onClick={() => setKbTarget(null)}
-                className="px-4 py-2 bg-sunken text-ink-muted text-xs font-bold rounded-xs hover:bg-line"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={!kbAnswer.trim() || kbSaving}
-                onClick={handleAddToKB}
-                className="px-4 py-2 bg-brand text-white text-xs font-bold rounded-xs hover:bg-brand disabled:opacity-40"
-              >
-                {kbSaving ? "Saving..." : "Publish to KB"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-    </div>
-  );
-}
+      </div>
+    );
+  }

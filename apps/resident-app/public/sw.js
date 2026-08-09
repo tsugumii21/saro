@@ -61,18 +61,27 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // Never cache Supabase. A stale report status is worse than no status, and a
-  // cached auth response is a security problem.
+  // Never intercept non-same-origin, Supabase API calls, or Vite dev server internal scripts
   if (url.origin !== self.location.origin) return;
+  if (
+    url.pathname.includes("/@vite") ||
+    url.pathname.includes("/src/") ||
+    url.pathname.includes("/@react-refresh") ||
+    url.pathname.includes("node_modules") ||
+    url.search.includes("t=")
+  ) {
+    return;
+  }
 
-  // Navigations: network first, fall back to the cached shell. A single-page
-  // app means any path can be answered by index.html.
+  // Navigations: network first, fall back to the cached shell.
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put("/index.html", copy));
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put("/index.html", copy));
+          }
           return response;
         })
         .catch(() => caches.match("/index.html").then((r) => r || caches.match("/")))
@@ -80,7 +89,23 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Everything else: cache first, then network, filling the cache as it goes.
+  // JS & CSS Bundles: Network-First to prevent stale build code on normal refresh
+  if (url.pathname.endsWith(".js") || url.pathname.endsWith(".css") || url.pathname.startsWith("/assets/")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok && response.type === "basic") {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Static assets (images, pmtiles, etc.): Cache first, then network fallback
   event.respondWith(
     caches.match(request).then(
       (cached) =>
@@ -161,8 +186,6 @@ async function drainOutbox() {
       p_lng: Number(payload.lng),
       p_device_id: deviceId,
       p_barangay_id: payload.barangay_id || null,
-      p_callback_number: payload.callback_number || null,
-      p_is_proxy: Boolean(payload.is_proxy_report),
       p_photo_url: payload.photo_url || null,
     };
 

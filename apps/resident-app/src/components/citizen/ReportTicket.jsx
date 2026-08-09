@@ -47,7 +47,7 @@ export default function ReportTicket({ code, categoryLabel, filedAt, tone = "sta
       // rain, at an angle, by someone in a hurry.
       errorCorrectionLevel: "H",
       color: { dark: "#101725", light: "#FFFFFF" },
-    }).catch(() => {});
+    }).catch(() => { });
   }, [code]);
 
   const copy = async () => {
@@ -104,37 +104,60 @@ export default function ReportTicket({ code, categoryLabel, filedAt, tone = "sta
 
   return (
     <div className="saro-clip saro-card overflow-hidden" style={{ borderColor: accent }}>
-      <div className="flex items-start justify-between gap-4 border-b border-rule p-5">
-        <div className="min-w-0">
-          <span className="t-label text-ink-faint">Your tracking code</span>
-          <div className="mt-2" id="ticket-code">
-            <TrackingCode code={code} size="xl" />
+      {/* Top Header Card: Tracking Code on One Line + Bounded QR Box */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-rule p-4 sm:p-5 bg-raised/50">
+        <div className="min-w-0 flex-1 flex flex-col gap-2 justify-center">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="t-label text-ink-faint uppercase tracking-wider text-[10px] font-extrabold">
+              YOUR TRACKING CODE:
+            </span>
+            <div id="ticket-code">
+              <TrackingCode code={code} size="lg" />
+            </div>
           </div>
-          {categoryLabel && <p className="t-body-sm mt-2 text-ink-muted">{categoryLabel}</p>}
+          {categoryLabel && (
+            <p className="t-body-sm text-ink-muted font-medium break-words leading-relaxed">
+              {categoryLabel}
+            </p>
+          )}
         </div>
-        <canvas
-          ref={qrRef}
-          width={132}
-          height={132}
-          className="shrink-0 border border-line bg-surface p-1.5"
-          aria-label={`QR code linking to report ${code}`}
-        />
+
+        {/* Bounded QR Code Box */}
+        <div className="shrink-0 bg-white p-2.5 border border-line rounded-md shadow-2xs flex flex-col items-center gap-1 self-start sm:self-center">
+          <canvas
+            ref={qrRef}
+            width={96}
+            height={96}
+            className="block"
+            aria-label={`QR code linking to report ${code}`}
+          />
+          <span className="text-[9px] font-bold text-ink-faint uppercase tracking-widest">
+            Scan to Track
+          </span>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-2 p-5">
-        <div className="flex gap-2">
-          <button type="button" onClick={copy} className="saro-btn saro-btn-secondary saro-btn-lg flex-1">
-            {copied ? <Check width={16} height={16} /> : <Copy width={16} height={16} />}
-            {copied ? "Copied" : "Copy code"}
+      {/* Action Buttons & Description */}
+      <div className="flex flex-col gap-3 p-4 sm:p-5">
+        <div className="grid grid-cols-2 gap-2 w-full">
+          <button
+            type="button"
+            onClick={copy}
+            style={{ whiteSpace: "normal" }}
+            className="saro-btn saro-btn-secondary w-full h-auto min-h-[44px] !px-2 !py-2 flex items-center justify-center gap-1.5 text-xs font-bold text-ink leading-tight text-center overflow-hidden"
+          >
+            {copied ? <Check width={14} height={14} className="shrink-0 text-brand" /> : <Copy width={14} height={14} className="shrink-0 text-ink-muted" />}
+            <span className="text-center">{copied ? "Copied" : "Copy Code"}</span>
           </button>
           <button
             type="button"
             onClick={saveImage}
             disabled={saving}
-            className="saro-btn saro-btn-secondary saro-btn-lg flex-1"
+            style={{ whiteSpace: "normal" }}
+            className="saro-btn saro-btn-secondary w-full h-auto min-h-[44px] !px-2 !py-2 flex items-center justify-center gap-1.5 text-xs font-bold text-ink leading-tight text-center overflow-hidden"
           >
-            <Download width={16} height={16} />
-            {saving ? "Saving…" : "Save to Photos"}
+            <Download width={14} height={14} className="shrink-0 text-ink-muted" />
+            <span className="text-center">{saving ? "Saving…" : "Save to Photos"}</span>
           </button>
         </div>
 
@@ -142,8 +165,10 @@ export default function ReportTicket({ code, categoryLabel, filedAt, tone = "sta
 
         <p className="t-body-sm flex items-start gap-2 text-ink-faint">
           <QrCode width={14} height={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-          Anyone helping you can scan this to see the status. It shows the status only —
-          never your description, photo, or number.
+          <span>
+            Anyone helping you can scan this to see the status. It shows the status only —
+            never your description, photo, or number.
+          </span>
         </p>
       </div>
     </div>
@@ -246,7 +271,7 @@ async function drawTicket({ code, categoryLabel, filedAt, tone }) {
 
   ctx.fillStyle = INK;
   ctx.font = "700 32px 'Public Sans', system-ui, sans-serif";
-  ctx.fillText(`${window.location.host} → Check a report`, TICKET_W / 2, 1276);
+  ctx.fillText(`${window.location.host} → Check a Report`, TICKET_W / 2, 1276);
 
   ctx.textAlign = "left";
 

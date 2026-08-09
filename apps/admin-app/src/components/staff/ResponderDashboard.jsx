@@ -10,6 +10,7 @@ import {
 } from "@saro/shared";
 import { StatusTag, TrackingCode, statusTab, HazardMap } from "@saro/ui";
 import QueueTable from "./QueueTable";
+import ReportDetailPanel from "./ReportDetailPanel";
 
 /**
  * Dispatch — the rack and the card.
@@ -205,7 +206,7 @@ function ResolvePanel({ report, proofKind, busy, onResolve }) {
 }
 
 export default function ResponderDashboard() {
-  const { officeName, isAdmin, isBarangayOfficial, barangayName } = useAuth();
+  const { officeId, officeName, barangayId, barangayName, isAdmin, isOffice, isBarangayOfficial } = useAuth();
 
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -250,17 +251,32 @@ export default function ResponderDashboard() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return reports.filter((r) => {
+      if (!isAdmin) {
+        if (isOffice && (officeId || officeName)) {
+          const rOffId = r.assigned_office_id || r.office_id || r.offices?.id;
+          const rOffName = r.office_name || r.offices?.short_name;
+          const matchId = officeId && rOffId === officeId;
+          const matchName = rOffName && officeName && rOffName.toLowerCase() === officeName.toLowerCase();
+          if (!matchId && !matchName) return false;
+        } else if (isBarangayOfficial && (barangayId || barangayName)) {
+          const rBrgyId = r.barangay_id || r.barangays?.id;
+          const rBrgyName = r.barangay_name || r.barangays?.name;
+          const matchId = barangayId && rBrgyId === barangayId;
+          const matchName = rBrgyName && barangayName && rBrgyName.toLowerCase() === barangayName.toLowerCase();
+          if (!matchId && !matchName) return false;
+        }
+      }
       if (statusFilter && r.status !== statusFilter) return false;
       if (!q) return true;
       const cat = catBy[r.category_id ?? r.category];
       return (
         r.tracking_code.toLowerCase().includes(q) ||
         (r.description || "").toLowerCase().includes(q) ||
-        (cat?.name || "").toLowerCase().includes(q) ||
-        (brgyBy[r.barangay_id]?.name || "").toLowerCase().includes(q)
+        (cat?.label || cat?.name || "").toLowerCase().includes(q) ||
+        (brgyBy[r.barangay_id]?.name || r.barangay_name || "").toLowerCase().includes(q)
       );
     });
-  }, [reports, query, statusFilter, catBy, brgyBy]);
+  }, [reports, query, statusFilter, catBy, brgyBy, isAdmin, isOffice, isBarangayOfficial, officeId, officeName, barangayId, barangayName]);
 
   // A minute clock. SLA countdowns have to keep moving while a dispatcher sits
   // on this screen, and reading Date.now() during render makes the component
@@ -396,7 +412,7 @@ export default function ResponderDashboard() {
       {/* ── The rack, and the card you pulled from it ─────────────────────── */}
       <div
         className="grid min-h-0 flex-1 gap-4"
-        style={{ gridTemplateColumns: sel ? "minmax(0,1fr) 380px" : "minmax(0,1fr)" }}
+        style={{ gridTemplateColumns: sel ? "minmax(0,1fr) 420px" : "minmax(0,1fr)" }}
       >
         <div className="min-w-0 overflow-auto">
           <QueueTable
@@ -404,160 +420,21 @@ export default function ResponderDashboard() {
             categories={categories}
             barangays={barangays}
             selectedId={sel?.id}
-            // key on ResolvePanel below remounts it per report, so a photo or
-            // reason typed for one card can never be submitted against another.
             onSelect={(r) => { setSelected(r); setActionError(""); }}
           />
         </div>
 
         {sel && (
-          <aside className="saro-card saro-rise flex min-h-0 flex-col overflow-hidden">
-            <div
-              className="flex items-start justify-between gap-3 border-b border-line px-4 py-3"
-              style={{ boxShadow: `inset 0 3px 0 0 ${statusTab(sel.status)}` }}
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <TrackingCode code={sel.tracking_code} />
-                  {sel.filed_by_verified ? (
-                    <ShieldCheck width={13} height={13} className="text-status-resolved-ink" aria-label="Verified account" />
-                  ) : (
-                    <UserRound width={13} height={13} className="text-ink-faint" aria-label="Guest report" />
-                  )}
-                </div>
-                <p className="t-body-sm mt-1 truncate font-semibold">{selCat?.name ?? sel.category}</p>
-              </div>
-              <button onClick={() => setSelected(null)} className="saro-btn saro-btn-ghost saro-btn-sm -mr-2" aria-label="Close detail">
-                <X width={16} height={16} />
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="h-44 border-b border-line">
-                <HazardMap
-                  className="h-full w-full"
-                  center={[sel.lng, sel.lat]}
-                  zoom={16}
-                  showToggles={false}
-                  hidden={["rain"]}
-                  reports={[{ id: sel.id, lat: sel.lat, lng: sel.lng,
-                              priority: sel.priority, color: statusTab(sel.status) }]}
-                />
-              </div>
-
-              <div className="flex flex-col gap-4 p-4">
-                <div>
-                  <span className="t-label text-ink-faint">Reported</span>
-                  <p className="t-body mt-1">{sel.description}</p>
-                </div>
-
-                <dl className="grid grid-cols-2 gap-3">
-                  <div>
-                    <dt className="t-label text-ink-faint">Status</dt>
-                    <dd className="mt-1"><StatusTag status={sel.status} /></dd>
-                  </div>
-                  <div>
-                    <dt className="t-label text-ink-faint">Office</dt>
-                    <dd className="t-body-sm mt-1">{officeBy[sel.assigned_office_id]?.short_name ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="t-label text-ink-faint">Barangay</dt>
-                    <dd className="t-body-sm mt-1 flex items-center gap-1">
-                      <MapPin width={12} height={12} className="text-ink-faint" aria-hidden="true" />
-                      {brgyBy[sel.barangay_id]?.name ?? "—"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="t-label text-ink-faint">Filed</dt>
-                    <dd className="t-data mt-1 flex items-center gap-1">
-                      <Clock width={12} height={12} className="text-ink-faint" aria-hidden="true" />
-                      {new Date(sel.created_at).toLocaleString("en-PH", { dateStyle: "short", timeStyle: "short" })}
-                    </dd>
-                  </div>
-                  {sel.callback_number && (
-                    <div className="col-span-2">
-                      <dt className="t-label text-ink-faint">Callback</dt>
-                      <dd className="mt-1">
-                        <a href={`tel:${sel.callback_number}`} className="t-code inline-flex items-center gap-1.5 text-brand">
-                          <Phone width={12} height={12} aria-hidden="true" />
-                          {sel.callback_number}
-                        </a>
-                      </dd>
-                    </div>
-                  )}
-                  {sel.cluster_id && (sel.confidence_score ?? 1) > 1 && (
-                    <div className="col-span-2">
-                      <dt className="t-label text-ink-faint">Corroboration</dt>
-                      <dd className="t-body-sm mt-1 flex items-center gap-1.5">
-                        <Layers width={13} height={13} className="text-brand" aria-hidden="true" />
-                        {sel.confidence_score} independent reports of this
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-
-                {actionError && (
-                  <p role="alert" className="t-body-sm border border-alert bg-alert-wash p-2.5 text-alert">
-                    {actionError}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Actions: never more than the one thing that moves this card on. */}
-            {!isBarangayOfficial && !isTerminal(sel.status) && (
-              <div className="flex flex-col gap-2 border-t border-line p-4">
-                {sel.status === "in_progress" ? (
-                  <ResolvePanel
-                    key={sel.id}
-                    report={sel}
-                    proofKind={catBy[sel.category_id ?? sel.category]?.resolution_proof ?? "photo"}
-                    busy={busy}
-                    onResolve={resolve}
-                  />
-                ) : (
-                  <button onClick={() => advance(sel)} disabled={busy} className="saro-btn saro-btn-primary saro-btn-block capitalize">
-                    Move to {STATUS_PIPELINE[STATUS_PIPELINE.indexOf(sel.status) + 1]?.replace("_", " ")}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Terminal states are shown, never offered. closed_confirmed,
-                closed_unconfirmed and reopened belong to the resident and to
-                the auto-close timer — an office that could set them itself
-                could manufacture a satisfied resident, which is the one thing
-                the confirmed/unconfirmed split exists to prevent. A trigger
-                refuses it too; this is only the explanation. */}
-            {!isBarangayOfficial && isTerminal(sel.status) && (
-              <div className="border-t border-line p-4">
-                <span className="t-label text-ink-faint">Closed</span>
-                <p className="t-body-sm mt-1.5 text-ink-muted">
-                  {sel.status === "resolved" &&
-                    "Waiting for the resident to confirm. It closes itself after 7 days if they do not answer."}
-                  {sel.status === "closed_confirmed" &&
-                    "The resident confirmed the work was done. Nothing further to do."}
-                  {sel.status === "closed_unconfirmed" &&
-                    "Closed automatically with no answer from the resident. They can still reopen it."}
-                  {sel.status === "reopened" &&
-                    "The resident said this was not fixed."}
-                </p>
-                {sel.resolution_reason && (
-                  <p className="t-body-sm mt-2 text-ink-muted">
-                    <span className="t-label text-ink-faint">Closed as </span>
-                    {RESOLUTION_REASON_LABELS[sel.resolution_reason]} · {sel.resolution_reference}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {isBarangayOfficial && (
-              <p className="t-body-sm border-t border-line p-4 text-ink-muted">
-                You have read access to reports in {barangayName}. Status changes are made by the
-                office handling the report — this is enforced by the database, not just hidden here.
-              </p>
-            )}
-          </aside>
+          <ReportDetailPanel
+            key={sel.id}
+            report={sel}
+            category={selCat}
+            barangay={brgyBy[sel.barangay_id]}
+            office={officeBy[sel.assigned_office_id]}
+            isBarangayOfficial={isBarangayOfficial}
+            onClose={() => setSelected(null)}
+            onUpdateSuccess={loadData}
+          />
         )}
       </div>
     </div>

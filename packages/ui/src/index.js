@@ -16,3 +16,4 @@ export { default as StatusTag, STATUS_META, statusTab } from "./StatusTag.jsx";
 export { default as TrackingCode } from "./TrackingCode.jsx";
 export { default as HazardMap, HAZARD_LAYERS } from "./HazardMap.jsx";
 export { default as AlertLevelBadge, ALERT_LEVELS } from "./AlertLevelBadge.jsx";
+export { default as IncidentPinCard } from "./IncidentPinCard.jsx";

@@ -22,9 +22,17 @@ export function registerServiceWorker() {
 
   if (!("serviceWorker" in navigator)) return;
 
-  // After load, so registering never competes with first paint. On a 3G phone
-  // this is the difference between Panic being on screen in two seconds and in
-  // four.
+  // In development mode (localhost), unregister any active service worker to
+  // prevent stale asset caching that causes blank white screen on normal refresh.
+  if (import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister();
+      }
+    });
+    return;
+  }
+
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch((err) => {
       console.warn("Service worker registration failed:", err?.message);

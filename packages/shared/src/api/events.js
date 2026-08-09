@@ -86,7 +86,7 @@ class SaroEvents {
       )
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn(`[SARO] Realtime channel ${status}; falling back to polling.`);
+          console.info(`[SARO] Realtime channel status (${status}); active polling RPC fallback is enabled.`);
         }
       });
   }

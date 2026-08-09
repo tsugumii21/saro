@@ -430,9 +430,11 @@ export default function TrackDesktop() {
         className="min-w-0 flex-1 overflow-y-auto bg-canvas"
         aria-label="Report detail"
       >
-        {/* Option 3A Editorial Guide Empty State */}
+        {/* Idle Guide State — min-h-full + justify-center for true vertical centering
+            inside the overflow-y-auto panel. my-auto was dead code here. */}
         {!report && !searching && (
-          <div className="p-8 max-w-4xl mx-auto flex flex-col gap-6 my-auto">
+          <div className="min-h-full flex flex-col justify-center px-8 py-10">
+          <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
             <div className="border border-line bg-surface p-6 rounded-md shadow-xs flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0">
@@ -467,30 +469,31 @@ export default function TrackDesktop() {
               </div>
             </div>
 
-            {/* 3 Step Guide */}
+            {/* 3 Step Guide — p-5/gap-3 and text-[13px] for desktop scale */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 border border-line bg-surface rounded-md flex flex-col gap-2">
+              <div className="p-5 border border-line bg-surface rounded-md flex flex-col gap-3">
                 <span className="text-xs font-bold text-brand uppercase font-mono">Step 1</span>
                 <span className="text-sm font-bold text-ink">Enter Tracking Code</span>
-                <p className="text-xs text-ink-muted leading-relaxed">
+                <p className="text-[13px] text-ink-muted leading-relaxed">
                   Type your 8-character code (e.g. SR-8F2K) printed on your receipt when filing.
                 </p>
               </div>
-              <div className="p-4 border border-line bg-surface rounded-md flex flex-col gap-2">
+              <div className="p-5 border border-line bg-surface rounded-md flex flex-col gap-3">
                 <span className="text-xs font-bold text-brand uppercase font-mono">Step 2</span>
                 <span className="text-sm font-bold text-ink">View Office Routing</span>
-                <p className="text-xs text-ink-muted leading-relaxed">
+                <p className="text-[13px] text-ink-muted leading-relaxed">
                   See which city department (CDRRMO, Engineering) has been assigned to fix it.
                 </p>
               </div>
-              <div className="p-4 border border-line bg-surface rounded-md flex flex-col gap-2">
+              <div className="p-5 border border-line bg-surface rounded-md flex flex-col gap-3">
                 <span className="text-xs font-bold text-brand uppercase font-mono">Step 3</span>
                 <span className="text-sm font-bold text-ink">Confirm or Dispute</span>
-                <p className="text-xs text-ink-muted leading-relaxed">
+                <p className="text-[13px] text-ink-muted leading-relaxed">
                   Residents get the final vote. Confirm when fixed, or reopen if issue persists.
                 </p>
               </div>
             </div>
+          </div>
           </div>
         )}
 
@@ -607,23 +610,28 @@ export default function TrackDesktop() {
                         <MapPin width={14} height={14} className="text-brand shrink-0" />
                         Reported Location Pin
                       </span>
-                      <div className="h-[220px] w-full rounded border border-line overflow-hidden shadow-2xs">
-                        <HazardMap
-                          className="h-full w-full"
-                          center={[
-                            typeof report.lng === "string" ? parseFloat(report.lng) : report.lng,
-                            typeof report.lat === "string" ? parseFloat(report.lat) : report.lat,
-                          ]}
-                          zoom={15}
-                          showToggles={false}
-                          reports={[{
-                            id: report.tracking_code,
-                            lat: typeof report.lat === "string" ? parseFloat(report.lat) : report.lat,
-                            lng: typeof report.lng === "string" ? parseFloat(report.lng) : report.lng,
-                            priority: report.priority || "medium",
-                            color: `var(--color-status-${tabKey(report.status)}-tab)`,
-                          }]}
-                        />
+                      {/* Outer wrapper: border + rounded + shadow, NO overflow-hidden so
+                          MapLibre zoom controls aren't clipped by the card edge.
+                          Inner absolute div takes overflow-hidden to clip canvas corners. */}
+                      <div className="h-[220px] w-full rounded border border-line shadow-2xs relative">
+                        <div className="absolute inset-0 rounded overflow-hidden">
+                          <HazardMap
+                            className="h-full w-full"
+                            center={[
+                              typeof report.lng === "string" ? parseFloat(report.lng) : report.lng,
+                              typeof report.lat === "string" ? parseFloat(report.lat) : report.lat,
+                            ]}
+                            zoom={15}
+                            showToggles={false}
+                            reports={[{
+                              id: report.tracking_code,
+                              lat: typeof report.lat === "string" ? parseFloat(report.lat) : report.lat,
+                              lng: typeof report.lng === "string" ? parseFloat(report.lng) : report.lng,
+                              priority: report.priority || "medium",
+                              color: `var(--color-status-${tabKey(report.status)}-tab)`,
+                            }]}
+                          />
+                        </div>
                       </div>
                     </div>
                   )}

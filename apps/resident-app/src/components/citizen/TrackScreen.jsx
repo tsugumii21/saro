@@ -707,6 +707,7 @@ export default function TrackScreen() {
                   onSelect: () => {
                     setCode(r.tracking_code);
                     search(r.tracking_code);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
                   },
                 }))}
             />
@@ -730,7 +731,11 @@ export default function TrackScreen() {
                 <button
                   key={r.tracking_code}
                   type="button"
-                  onClick={() => { setCode(r.tracking_code); search(r.tracking_code); }}
+                  onClick={() => {
+                    setCode(r.tracking_code);
+                    search(r.tracking_code);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
                   className={`flex flex-col gap-2.5 p-4 text-left rounded-lg border transition-all shadow-2xs ${
                     isSelected
                       ? "bg-brand-wash border-brand ring-1 ring-brand/30"

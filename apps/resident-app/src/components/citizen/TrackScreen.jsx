@@ -723,7 +723,7 @@ export default function TrackScreen() {
           <h2 className="t-label text-ink-faint uppercase tracking-wider font-bold">
             {isResident ? "Your Reports" : "Reports From This Device"}
           </h2>
-          <div className="mt-3 flex flex-col gap-2.5">
+          <div className="mt-3 flex flex-col gap-3">
             {mine.slice(0, 12).map((r) => {
               const isSelected = report?.tracking_code === r.tracking_code;
               return (
@@ -731,7 +731,7 @@ export default function TrackScreen() {
                   key={r.tracking_code}
                   type="button"
                   onClick={() => { setCode(r.tracking_code); search(r.tracking_code); }}
-                  className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs ${
+                  className={`flex flex-col gap-2.5 p-4 text-left rounded-lg border transition-all shadow-2xs ${
                     isSelected
                       ? "bg-brand-wash border-brand ring-1 ring-brand/30"
                       : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
@@ -751,14 +751,14 @@ export default function TrackScreen() {
 
                   {/* Title & Chevron Row */}
                   <div className="flex items-center justify-between gap-2 w-full">
-                    <span className={`text-xs block leading-snug break-words flex-1 min-w-0 ${
+                    <span className={`text-[13px] block leading-snug break-words flex-1 min-w-0 ${
                       isSelected ? "font-extrabold text-brand" : "font-semibold text-ink"
                     }`}>
                       {r.category_label ?? r.category}
                     </span>
                     <ChevronRight
-                      width={15}
-                      height={15}
+                      width={16}
+                      height={16}
                       className={`shrink-0 transition-colors ${
                         isSelected ? "text-brand" : "text-ink-faint"
                       }`}

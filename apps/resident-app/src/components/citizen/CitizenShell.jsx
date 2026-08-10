@@ -974,7 +974,7 @@ export default function CitizenShell({ onReturnToWelcome }) {
             >
               {isResident ? (
                 <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-brand-wash text-brand font-bold text-xs border border-brand/30 shadow-2xs">
-                  {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : <User className="w-4 h-4 text-brand" />}
+                  <User className="w-4 h-4 text-brand" />
                   <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-emerald-500" aria-hidden="true" />
                 </div>
               ) : (
@@ -1000,38 +1000,35 @@ export default function CitizenShell({ onReturnToWelcome }) {
 
       {showAccountMenu && (
         <div
-          className="absolute inset-0 z-50 flex items-end justify-center bg-ink-strong/50 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 bg-black/5 animate-in fade-in duration-150"
           onClick={() => setShowAccountMenu(false)}
         >
           <div
-            className="saro-rise w-full max-w-sm rounded-t-2xl sm:rounded-2xl border border-line bg-surface p-5 shadow-2xl space-y-4"
+            className="absolute top-[52px] right-3 w-[260px] border border-line bg-surface p-3.5 shadow-2xl rounded-xl space-y-3 font-sans text-ink animate-in slide-in-from-top-2 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-line pb-4">
-              <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2.5 min-w-0">
                 {isResident ? (
-                  <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-wash text-brand font-bold text-sm border border-brand/30">
-                    {profile?.full_name ? profile.full_name.charAt(0).toUpperCase() : <User className="w-5 h-5 text-brand" />}
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface bg-emerald-500" aria-hidden="true" />
+                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-wash text-brand font-bold text-xs border border-brand/30">
+                    <User className="w-4 h-4 text-brand" />
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-emerald-500" aria-hidden="true" />
                   </div>
                 ) : (
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-muted border border-line">
-                    <User className="w-5 h-5 text-ink-muted" />
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-muted border border-line">
+                    <User className="w-4 h-4 text-ink-muted" />
                   </div>
                 )}
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold text-ink truncate">
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="text-xs font-bold text-ink truncate leading-tight">
                       {isResident ? profile?.full_name || "Resident" : "Anonymous Reporter"}
                     </span>
                     {isResident && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                        Verified
-                      </span>
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
                     )}
                   </div>
-                  <span className="text-xs text-ink-muted block truncate mt-0.5">
+                  <span className="text-[10px] text-ink-muted block truncate mt-0.5 leading-none">
                     {isResident ? profile?.email || "Reports follow your account" : "Reports stay on this device"}
                   </span>
                 </div>
@@ -1039,56 +1036,54 @@ export default function CitizenShell({ onReturnToWelcome }) {
               <button
                 onClick={() => setShowAccountMenu(false)}
                 className="saro-btn saro-btn-ghost saro-btn-sm shrink-0 -mr-1 -mt-1 text-ink-muted hover:text-ink"
-                aria-label="Close"
+                aria-label="Close menu"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5 text-xs">
               {!isResident && (
                 <button
                   onClick={() => { setShowAccountMenu(false); setShowAuth(true); }}
-                  className="flex items-center justify-between gap-3 border border-brand-edge bg-brand-wash px-4 py-3 rounded-md text-left transition-colors hover:bg-brand-wash/80"
+                  className="flex items-center justify-between gap-2 border border-brand-edge bg-brand-wash p-2.5 rounded-lg text-left transition-colors hover:bg-brand-wash/80"
                 >
-                  <span>
-                    <span className="t-subhead block text-brand-strong font-bold">Sign In or Create an Account</span>
-                    <span className="t-body-sm block text-ink-muted text-xs">Keeps your history synced if you lose this phone</span>
+                  <span className="min-w-0">
+                    <span className="block font-bold text-brand-strong text-xs">Sign In or Create Account</span>
+                    <span className="block text-[10px] text-ink-muted mt-0.5">Sync history across devices</span>
                   </span>
-                  <ChevronRight width={16} height={16} className="shrink-0 text-brand" aria-hidden="true" />
+                  <ChevronRight width={14} height={14} className="shrink-0 text-brand" aria-hidden="true" />
                 </button>
               )}
 
               {/* 1. Settings Entry */}
               <button
                 onClick={() => { setShowAccountMenu(false); setShowSettings(true); }}
-                className="flex items-center gap-3 border border-line p-3 rounded-md text-left hover:bg-raised transition-colors"
+                className="flex items-center gap-2.5 border border-line p-2.5 rounded-lg text-left transition-colors hover:bg-sunken"
               >
-                <Settings width={18} height={18} className="shrink-0 text-ink-muted" aria-hidden="true" />
+                <Settings width={16} height={16} className="shrink-0 text-ink-muted" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="t-subhead block font-bold text-ink">Settings</span>
-                  <span className="t-body-sm block text-ink-muted text-xs">
-                    Notification preferences & privacy notice
-                  </span>
+                  <span className="block font-bold text-ink text-xs">Settings</span>
+                  <span className="block text-[10px] text-ink-muted mt-0.5">Notifications &amp; privacy notice</span>
                 </span>
-                <ChevronRight width={16} height={16} className="shrink-0 text-ink-faint" aria-hidden="true" />
+                <ChevronRight width={14} height={14} className="shrink-0 text-ink-faint" aria-hidden="true" />
               </button>
 
-              {/* 2. Sign Out (Visually Separated at Bottom) */}
-              <div className="border-t border-line pt-2 mt-1">
+              {/* 2. Sign Out / Forget Device */}
+              <div className="border-t border-line pt-1.5 mt-1">
                 <button
                   onClick={isResident ? handleSignOut : handleForgetDevice}
-                  className="w-full flex items-center gap-3 border border-alert/30 bg-alert-wash/50 p-3 rounded-md text-left hover:bg-alert-wash transition-colors"
+                  className="w-full flex items-center gap-2.5 border border-amber-200/60 bg-amber-50/50 p-2.5 rounded-lg text-left transition-colors hover:bg-amber-100/50"
                 >
-                  <LogOut width={18} height={18} className="shrink-0 text-alert" aria-hidden="true" />
+                  <LogOut width={16} height={16} className="shrink-0 text-amber-700" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
-                    <span className="t-subhead block font-bold text-alert">
+                    <span className="block font-bold text-amber-800 text-xs">
                       {isResident ? "Sign Out" : "Forget This Device"}
                     </span>
-                    <span className="t-body-sm block text-ink-muted text-xs">
+                    <span className="block text-[10px] text-amber-700/80 mt-0.5">
                       {isResident
-                        ? "Your reports stay safely saved on your account"
-                        : "Clears local Track list. Filed reports stay with city."}
+                        ? "Reports stay saved on account"
+                        : "Clears local Track list"}
                     </span>
                   </span>
                 </button>

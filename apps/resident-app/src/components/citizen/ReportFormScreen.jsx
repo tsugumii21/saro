@@ -581,15 +581,10 @@ export default function ReportFormScreen() {
               account will be asked for — the anxiety it removes is the point. */}
           {keywordEmergency && isGuest && (
             <p
-              className="t-body-sm mt-3 flex items-start gap-2 border p-3"
-              style={{
-                borderColor: "var(--color-panic)",
-                background: "var(--color-panic-wash)",
-                color: "var(--color-panic-deep)",
-              }}
+              className="t-body-sm mt-3 flex items-start gap-2 border border-alert bg-alert-wash text-alert rounded-md p-3 font-medium shadow-2xs"
               role="status"
             >
-              <AlertTriangle width={15} height={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <AlertTriangle width={15} height={15} className="mt-0.5 shrink-0 text-alert" aria-hidden="true" />
               <span>
                 Read as an emergency (“{keywordEmergency.matchedPhrase}”). You can file this
                 straight away — no account, no sign-in.
@@ -783,15 +778,18 @@ export default function ReportFormScreen() {
                                   }
                                 }}
                                 aria-pressed={isSelected}
-                                className={`saro-card flex w-full items-start gap-3 p-3.5 pl-4 text-left transition-all duration-150 ease-out active:scale-[0.985] cursor-pointer ${
+                                className={`saro-card flex w-full items-start gap-3 p-3.5 pl-4 text-left transition-all duration-150 ease-out active:scale-[0.985] cursor-pointer rounded-md ${
                                   isSelected
                                     ? "bg-brand-wash border-2 border-brand text-brand font-bold shadow-2xs"
                                     : "bg-surface border-2 border-line hover:border-brand-edge text-ink"
                                 }`}
                               >
                                 <span
-                                  className="flex h-10 w-10 shrink-0 items-center justify-center border rounded-md transition-colors"
-                                  style={isSelected ? { background: "var(--color-brand-wash)", borderColor: "var(--color-brand)", color: "var(--color-brand)" } : section.iconStyle}
+                                  className={`flex h-10 w-10 shrink-0 items-center justify-center border rounded-md transition-colors ${
+                                    isSelected
+                                      ? "bg-brand-wash border-brand text-brand"
+                                      : "bg-sunken border-line text-ink-muted"
+                                  }`}
                                 >
                                   <IconComp width={20} height={20} aria-hidden="true" />
                                 </span>
@@ -806,8 +804,9 @@ export default function ReportFormScreen() {
                                     </span>
                                   )}
                                   <span
-                                    className="t-label mt-1.5 flex items-center gap-1.5 text-[11px] font-bold"
-                                    style={{ color: isSelected ? "var(--color-brand)" : section.tagColor }}
+                                    className={`t-label mt-1.5 flex items-center gap-1.5 text-[11px] font-bold ${
+                                      isSelected ? "text-brand" : "text-ink-muted"
+                                    }`}
                                   >
                                     <AccessIcon width={12} height={12} aria-hidden="true" />
                                     {badgeLabel}
@@ -815,12 +814,11 @@ export default function ReportFormScreen() {
                                 </span>
 
                                 <span
-                                  className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all"
-                                  style={{
-                                    borderColor: isSelected ? "var(--color-brand)" : "var(--color-line-strong)",
-                                    background: isSelected ? "var(--color-brand)" : "var(--color-surface)",
-                                    color: "#fff",
-                                  }}
+                                  className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                                    isSelected
+                                      ? "border-brand bg-brand text-white"
+                                      : "border-line-strong bg-surface text-transparent"
+                                  }`}
                                   aria-hidden="true"
                                 >
                                   {isSelected && <Check width={14} height={14} strokeWidth={3} className="animate-in fade-in zoom-in-75 duration-150" />}
@@ -874,7 +872,7 @@ export default function ReportFormScreen() {
             </p>
           )}
 
-          <div className="h-44 rounded-xs overflow-hidden border border-line relative">
+          <div className="h-48 rounded-md overflow-hidden border border-line relative shadow-2xs">
             {/* Hazard layers are on while picking a location, deliberately.
                 Somebody reporting a blocked drain can see they are inside the
                 5-year flood extent, which is context the office would otherwise
@@ -941,22 +939,22 @@ export default function ReportFormScreen() {
                   <img
                     src={photo}
                     alt={`Evidence ${i + 1}`}
-                    className="w-full h-full object-cover rounded-xs border border-line"
+                    className="w-full h-full object-cover rounded-md border border-line"
                   />
                   <button
                     type="button"
                     onClick={() => removePhoto(i)}
-                    className="absolute -top-1.5 -right-1.5 bg-ink text-white w-5 h-5 rounded-full flex items-center justify-center t-micro"
+                    className="absolute -top-1.5 -right-1.5 bg-ink text-white w-6 h-6 rounded-full flex items-center justify-center t-micro shadow-xs hover:bg-black transition-colors"
                     aria-label={`Remove photo ${i + 1}`}
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ))}
             </div>
           )}
           {photos.length < 5 && (
-            <label className="flex items-center gap-2 px-4 py-3 bg-white border border-line border-dashed rounded-xs cursor-pointer active:bg-raised min-h-[44px]">
+            <label className="flex items-center gap-2 px-4 py-3 bg-white border border-line border-dashed rounded-md cursor-pointer active:bg-raised min-h-[44px]">
               {photos.length > 0 ? (
                 <Plus className="w-5 h-5 text-ink-muted" aria-hidden="true" />
               ) : (
@@ -979,11 +977,9 @@ export default function ReportFormScreen() {
 
         {/* ── Inline account-needed prompt ─────────────────────────────── */}
         {needsAccount && (
-          <div className="mt-4 rounded-lg border p-4 flex flex-col gap-2.5"
-               style={{ borderColor: 'var(--color-brand-edge)', background: 'var(--color-brand-wash)' }}>
+          <div className="mt-4 rounded-md border border-brand-edge bg-brand-wash p-4 flex flex-col gap-2.5 shadow-2xs">
             <div className="flex items-start gap-2.5">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-                   style={{ background: 'var(--color-brand)', color: 'white' }}>
+              <div className="w-8 h-8 rounded-full bg-brand text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                 <UserPlus className="w-4 h-4" aria-hidden="true" />
               </div>
               <div>

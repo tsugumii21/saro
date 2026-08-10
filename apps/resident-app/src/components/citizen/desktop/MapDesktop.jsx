@@ -231,12 +231,15 @@ export default function MapDesktop() {
             <div className="flex flex-col gap-2.5">
               {displayReports.map(({ report: r, count }) => {
                 const isSelected = Boolean(selectedReport) && (
-                  (Boolean(r.id) && selectedReport.id === r.id) ||
-                  (Boolean(r.cluster_id) && selectedReport.cluster_id === r.cluster_id)
+                  selectedReport === r ||
+                  (Boolean(r.id) && Boolean(selectedReport.id) && selectedReport.id === r.id) ||
+                  (Boolean(r.tracking_code) && Boolean(selectedReport.tracking_code) && selectedReport.tracking_code === r.tracking_code) ||
+                  (Boolean(r.created_at) && Boolean(selectedReport.created_at) && selectedReport.created_at === r.created_at) ||
+                  (Boolean(r.cluster_id) && Boolean(selectedReport.cluster_id) && selectedReport.cluster_id === r.cluster_id)
                 );
                 return (
                   <button
-                    key={r.id}
+                    key={r.id || r.tracking_code}
                     type="button"
                     onClick={() => {
                       const lat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
@@ -252,10 +255,10 @@ export default function MapDesktop() {
                         setMapCenter([lng, lat]);
                       }
                     }}
-                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg transition-all cursor-pointer ${
                       isSelected
-                        ? "bg-brand-wash border-brand ring-1 ring-brand/30 shadow-xs"
-                        : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60 active:bg-brand-wash"
+                        ? "bg-brand-wash border-2 border-brand ring-2 ring-brand/40 shadow-md scale-[1.01]"
+                        : "bg-surface border border-line hover:border-brand-edge hover:bg-raised/60 active:bg-brand-wash shadow-2xs"
                     }`}
                   >
                     {/* Header Row: Dot + Title + StatusTag */}
@@ -269,7 +272,9 @@ export default function MapDesktop() {
                           {getCategoryName(r.category_id || r.category)}
                         </span>
                       </div>
-                      <StatusTag status={r.status} size="sm" />
+                      <div className="pointer-events-none shrink-0">
+                        <StatusTag status={r.status} size="sm" />
+                      </div>
                     </div>
 
                     {/* Footer Row: Location + Time + Cluster Pill */}

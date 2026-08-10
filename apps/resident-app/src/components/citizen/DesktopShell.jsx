@@ -164,7 +164,7 @@ export default function DesktopShell({
       </aside>
 
       {/* ── Main content ────────────────────────────────────────────────── */}
-      <main className="min-w-0 flex-1 overflow-hidden">
+      <main className="min-w-0 flex-1 h-full overflow-hidden flex flex-col">
         <Routes>
           <Route path="/"          element={<HomeDesktop onToggleAccount={() => toggleAccountMenu("top-right")} />} />
           <Route path="/map"       element={<MapDesktop onToggleAccount={() => toggleAccountMenu("top-right")} />} />

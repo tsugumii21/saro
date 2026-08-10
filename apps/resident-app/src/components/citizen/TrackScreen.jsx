@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Search, Inbox, MapPin, Building2, ChevronRight, ThumbsUp, RotateCcw,
   CloudOff, Info, UserPlus, X, MessageSquare, Image as ImageIcon,
+  ChevronLeft, Copy, Check, Activity, ShieldCheck,
 } from "lucide-react";
 import { StatusTag, TrackingCode, HazardMap } from "@saro/ui";
 import {
@@ -147,6 +148,15 @@ export default function TrackScreen() {
   const [mine, setMine] = useState([]);
   const [queued, setQueued] = useState([]);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const handleCopyCode = (codeToCopy) => {
+    if (!codeToCopy) return;
+    navigator.clipboard.writeText(codeToCopy);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
 
   // Confirm / dispute
   const [disputing, setDisputing] = useState(false);
@@ -346,8 +356,28 @@ export default function TrackScreen() {
           className="saro-clip saro-rise saro-card overflow-hidden"
           style={{ boxShadow: `inset 0 4px 0 0 var(--color-status-${tabKey(report.status)}-tab)` }}
         >
-          <div className="border-b border-rule p-5">
-            <TrackingCode code={report.tracking_code} size="xl" />
+          <div className="border-b border-rule p-5" style={{ borderTop: `4px solid var(--color-status-${tabKey(report.status)}-tab)` }}>
+            <div className="flex items-center justify-between gap-3">
+              <TrackingCode code={report.tracking_code} size="xl" />
+              <button
+                type="button"
+                onClick={() => handleCopyCode(report.tracking_code)}
+                className="saro-btn saro-btn-secondary saro-btn-sm text-xs py-1 px-2.5 flex items-center gap-1.5 shrink-0"
+                title="Copy tracking code"
+              >
+                {copiedCode ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700 font-bold">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-ink-muted" />
+                    <span>Copy Code</span>
+                  </>
+                )}
+              </button>
+            </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <StatusTag status={report.status} />
               <span className="t-body-sm text-ink-faint">filed {timeSince(report.created_at)}</span>
@@ -403,12 +433,19 @@ export default function TrackScreen() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {allPhotos.map((imgUrl, i) => (
                   <div key={i} className="relative rounded-xs overflow-hidden border border-line bg-sunken aspect-video shadow-xs group">
-                    <img
-                      src={imgUrl}
-                      alt={`Photo evidence ${i + 1}`}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      onError={(e) => { e.currentTarget.style.display = "none"; }}
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setLightboxUrl(imgUrl)}
+                      className="w-full h-full text-left focus:outline-none"
+                      aria-label={`View photo evidence ${i + 1}`}
+                    >
+                      <img
+                        src={imgUrl}
+                        alt={`Photo evidence ${i + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -445,18 +482,22 @@ export default function TrackScreen() {
 
           {/* ── Confirm / Dispute ──────────────────────────────────────── */}
           {canDispute && (
-            <div
-              className="border-b border-rule p-5"
-              style={{ background: "var(--color-status-resolved-wash)" }}
-            >
-              <h2 className="t-subhead font-bold">
-                {awaitingAnswer ? "Was this actually fixed?" : "Was this actually fixed?"}
-              </h2>
-              <p className="t-body-sm mt-1 text-ink-muted">
-                {awaitingAnswer
-                  ? `${report.assigned_office ?? "The office"} marked this resolved. You have the final say.`
-                  : "This closed without an answer from you. If it was never fixed, you can still say so."}
-              </p>
+            <div className="border-b border-rule p-5 bg-emerald-50/60 border-l-4 border-l-emerald-500">
+              <div className="flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-300/60 mt-0.5">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="t-subhead font-bold text-ink">
+                    Was this hazard actually resolved?
+                  </h2>
+                  <p className="t-body-sm mt-1 text-ink-muted leading-relaxed">
+                    {awaitingAnswer
+                      ? `${report.assigned_office ?? "The office"} marked this resolved. You have the final say.`
+                      : "This closed without an answer from you. If it was never fixed, you can still say so."}
+                  </p>
+                </div>
+              </div>
 
               {!disputing ? (
                 <div className="mt-4 flex flex-col sm:flex-row gap-2.5 w-full">
@@ -492,7 +533,7 @@ export default function TrackScreen() {
                     value={disputeReason}
                     onChange={(e) => setDisputeReason(e.target.value)}
                     placeholder="The drain is still blocked at the same spot."
-                    className="saro-field w-full resize-none"
+                    className="saro-field w-full resize-none bg-white"
                   />
                   <div className="flex gap-2">
                     <button
@@ -542,13 +583,18 @@ export default function TrackScreen() {
                   <li key={step} className="flex gap-3">
                     <span className="flex flex-col items-center">
                       <span
-                        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                        className={`mt-0.5 flex items-center justify-center shrink-0 rounded-full border border-white shadow-xs ${
+                          current ? "h-4.5 w-4.5 ring-2 ring-brand/30" : "h-3.5 w-3.5"
+                        }`}
                         style={{
                           background: done
                             ? `var(--color-status-${tabKey(step)}-tab)`
                             : "var(--color-line)",
                         }}
-                      />
+                      >
+                        {done && !current && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                        {current && <Activity className="w-2.5 h-2.5 text-white animate-pulse" strokeWidth={3} />}
+                      </span>
                       {i < STATUS_PIPELINE.length - 1 && (
                         <span
                           className="w-px flex-1"
@@ -665,45 +711,52 @@ export default function TrackScreen() {
                 }))}
             />
           </div>
-          <div className="p-2.5 bg-surface border-t border-line text-center">
-            <span className="t-micro text-ink-muted font-medium">Tap any pin to view tracking status & details</span>
-          </div>
-        </section>
-      )}
-
-      {/* ── Your own reports List ─────────────────────────────────────────────── */}
-      {mine.length > 0 && (
-        <section>
-          <h2 className="t-label text-ink-faint uppercase tracking-wider font-bold">
-            {isResident ? "Your Reports" : "Reports From This Device"}
-          </h2>
-          <ul className="mt-3 flex flex-col border-t border-line">
-            {mine.slice(0, 12).map((r) => (
-              <li key={r.tracking_code}>
+          <div className="mt-3 flex flex-col gap-2.5">
+            {mine.slice(0, 12).map((r) => {
+              const isSelected = report?.tracking_code === r.tracking_code;
+              return (
                 <button
+                  key={r.tracking_code}
+                  type="button"
                   onClick={() => { setCode(r.tracking_code); search(r.tracking_code); }}
-                  className="flex w-full items-start gap-3 border-b border-line py-3.5 text-left hover:bg-raised/50 px-1 rounded-xs transition-colors"
+                  className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs ${
+                    isSelected
+                      ? "bg-brand-wash border-brand ring-1 ring-brand/30"
+                      : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
+                  }`}
+                  aria-current={isSelected ? "true" : undefined}
                 >
-                  <span
-                    className="h-9 w-1 shrink-0 rounded-full mt-0.5"
-                    style={{ background: `var(--color-status-${tabKey(r.status)}-tab)` }}
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
+                  {/* Header Row: Tracking Code + Time + StatusTag */}
+                  <div className="flex items-center justify-between gap-2 w-full">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       <TrackingCode code={r.tracking_code} />
-                      <span className="t-micro text-ink-faint font-medium">· {timeSince(r.created_at)}</span>
+                      <span className="text-[11px] text-ink-faint font-medium">
+                        · {timeSince(r.created_at)}
+                      </span>
                     </div>
-                    <span className="t-body-sm block font-semibold text-ink mt-0.5 leading-snug break-words">
+                    <StatusTag status={r.status} size="sm" />
+                  </div>
+
+                  {/* Title & Chevron Row */}
+                  <div className="flex items-center justify-between gap-2 w-full">
+                    <span className={`text-xs block leading-snug break-words flex-1 min-w-0 ${
+                      isSelected ? "font-extrabold text-brand" : "font-semibold text-ink"
+                    }`}>
                       {r.category_label ?? r.category}
                     </span>
+                    <ChevronRight
+                      width={15}
+                      height={15}
+                      className={`shrink-0 transition-colors ${
+                        isSelected ? "text-brand" : "text-ink-faint"
+                      }`}
+                      aria-hidden="true"
+                    />
                   </div>
-                  <StatusTag status={r.status} size="sm" />
-                  <ChevronRight width={16} height={16} className="shrink-0 text-ink-faint mt-1" aria-hidden="true" />
                 </button>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </div>
 
           <div className="mt-4 p-3.5 rounded-lg border flex flex-col gap-2"
                style={{ borderColor: 'var(--color-brand-edge)', background: 'var(--color-brand-wash)' }}>
@@ -744,26 +797,26 @@ export default function TrackScreen() {
               className="saro-btn saro-btn-ghost saro-btn-sm mt-2 flex items-center gap-1.5"
             >
               <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
-              Sign in to sync your report history
+              Sign in to sync report history
             </button>
           )}
         </div>
       )}
 
-      {/* Auth Modal Overlay */}
+      {/* Auth Modal */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
             className="absolute inset-0 bg-ink/50 backdrop-blur-sm"
             onClick={() => setShowAuthModal(false)}
           />
-          <div className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between px-4 pt-4 pb-2 bg-surface rounded-t-2xl">
-              <span className="text-xs font-bold text-ink-muted uppercase tracking-wider">Resident Account</span>
+          <div className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto bg-surface shadow-xl border border-line rounded-lg">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 pt-4 pb-2 bg-surface border-b border-line">
+              <span className="text-xs font-bold text-ink uppercase tracking-wider">Resident Account</span>
               <button
                 type="button"
                 onClick={() => setShowAuthModal(false)}
-                className="p-1.5 rounded-full hover:bg-raised transition-colors"
+                className="p-1.5 hover:bg-raised transition-colors rounded"
                 aria-label="Close"
               >
                 <X className="w-4 h-4 text-ink-muted" />

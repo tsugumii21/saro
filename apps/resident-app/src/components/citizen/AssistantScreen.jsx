@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Send, AlertTriangle, PlusCircle, Phone, Bot, ArrowRight, Mic, MicOff,
@@ -33,15 +33,26 @@ export default function AssistantScreen() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const chatEndRef = useRef(null);
-  const inputRef = useRef(null);
-  const chipsRef = useRef(null);
-  const recognitionRef = useRef(null);
-  // Monotonic message ids. Date.now() during render is an impure read,
-  // and two messages in the same millisecond would collide anyway.
-  const msgSeq = useRef(0);
-  const nextId = (role) => `${role}_${(msgSeq.current += 1)}`;
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkChipsScroll = useCallback(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    const hasMore = el.scrollWidth > el.clientWidth + el.scrollLeft + 6;
+    setCanScrollRight(hasMore);
+  }, []);
+
+  useEffect(() => {
+    checkChipsScroll();
+    const el = chipsRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", checkChipsScroll, { passive: true });
+    window.addEventListener("resize", checkChipsScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", checkChipsScroll);
+      window.removeEventListener("resize", checkChipsScroll);
+    };
+  }, [checkChipsScroll]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -231,6 +242,12 @@ export default function AssistantScreen() {
       {/* Quick Prompt Chips */}
       <div className="border-t border-line bg-white/80 backdrop-blur px-3 py-2 shrink-0 w-full max-w-full overflow-hidden">
         <div className="relative w-full overflow-hidden">
+          {canScrollRight && (
+            <div
+              className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-white via-white/80 to-transparent z-10"
+              aria-hidden="true"
+            />
+          )}
           <div
             ref={chipsRef}
             className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar w-full touch-pan-x"

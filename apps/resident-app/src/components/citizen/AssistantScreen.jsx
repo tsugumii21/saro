@@ -33,7 +33,14 @@ export default function AssistantScreen() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const chatEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const chipsRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const msgSeq = useRef(0);
+  const nextId = (role) => `${role}_${(msgSeq.current += 1)}`;
 
   const checkChipsScroll = useCallback(() => {
     const el = chipsRef.current;

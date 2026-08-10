@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { PlusCircle, Loader2 } from "lucide-react";
-import { HazardMap, AlertLevelBadge, IncidentPinCard } from "@saro/ui";
+import { Loader2 } from "lucide-react";
+import { HazardMap, IncidentPinCard } from "@saro/ui";
 import {
   getPublicMapReports, getCategories, getBarangays,
   getRainfall, getVolcanicAlert, getEvacuationCenters, getAccidentBlackspots,
@@ -232,27 +232,6 @@ export default function PublicMapScreen() {
           </div>
         </div>
 
-        {/* Bottom Dock: Mayon Alert Badge (Left) + Floating Report Button (Right) */}
-        <div className="absolute bottom-4 left-3 right-[68px] z-20 pointer-events-none flex flex-col sm:flex-row items-start sm:items-end justify-between gap-3">
-          {/* Mayon Alert Level Card */}
-          {alert && (
-            <div className="pointer-events-auto max-w-[240px] sm:max-w-[260px] w-full sm:w-auto">
-              <AlertLevelBadge alert={alert} compact />
-            </div>
-          )}
-
-          {/* Floating Action Button — Report a Hazard */}
-          {!selectedReport && (
-            <button
-              onClick={() => navigate("/report")}
-              className="pointer-events-auto ml-auto shrink-0 bg-brand hover:bg-brand-mid text-white rounded-full px-4.5 py-2.5 shadow-lift flex items-center gap-2 text-xs font-bold active:scale-95 transition-all min-h-[44px]"
-              aria-label="Report a Hazard"
-            >
-              <PlusCircle className="w-4 h-4" aria-hidden="true" />
-              <span>Report a Hazard</span>
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Connected Bottom Sheet for Selected Report / Cluster */}

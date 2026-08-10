@@ -233,9 +233,7 @@ export default function MapDesktop() {
                 const isSelected = Boolean(selectedReport) && (
                   selectedReport === r ||
                   (Boolean(r.id) && Boolean(selectedReport.id) && selectedReport.id === r.id) ||
-                  (Boolean(r.tracking_code) && Boolean(selectedReport.tracking_code) && selectedReport.tracking_code === r.tracking_code) ||
-                  (Boolean(r.created_at) && Boolean(selectedReport.created_at) && selectedReport.created_at === r.created_at) ||
-                  (Boolean(r.cluster_id) && Boolean(selectedReport.cluster_id) && selectedReport.cluster_id === r.cluster_id)
+                  (Boolean(r.tracking_code) && Boolean(selectedReport.tracking_code) && selectedReport.tracking_code === r.tracking_code)
                 );
                 return (
                   <button

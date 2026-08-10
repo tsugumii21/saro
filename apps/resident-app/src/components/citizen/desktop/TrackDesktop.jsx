@@ -331,47 +331,51 @@ export default function TrackDesktop() {
               <h2 className="text-xs font-bold text-ink-muted uppercase tracking-wider mb-2">
                 {isResident ? "Your Reports" : "Reports From This Device"}
               </h2>
-              <ul className="flex flex-col border-t border-line">
+              <div className="flex flex-col gap-2.5">
                 {mine.slice(0, 20).map((r) => {
                   const isSelected = selectedCode === r.tracking_code;
                   return (
-                    <li key={r.tracking_code}>
-                      <button
-                        onClick={() => { setCode(r.tracking_code); search(r.tracking_code); }}
-                        className={`flex w-full items-start gap-3 border-b border-line py-3 px-3 text-left transition-all ${
-                          isSelected
-                            ? "bg-brand-wash border-l-4 border-brand shadow-2xs"
-                            : "hover:bg-raised/60 border-l-4 border-transparent"
-                        }`}
-                        aria-current={isSelected ? "true" : undefined}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <TrackingCode code={r.tracking_code} />
-                            <span className="text-[11px] text-ink-faint font-medium">
-                              · {timeSince(r.created_at)}
-                            </span>
-                          </div>
-                          <span className={`text-xs block mt-1 leading-snug break-words ${
-                            isSelected ? "font-extrabold text-brand" : "font-semibold text-ink"
-                          }`}>
-                            {r.category_label ?? r.category}
+                    <button
+                      key={r.tracking_code}
+                      onClick={() => { setCode(r.tracking_code); search(r.tracking_code); }}
+                      className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs ${
+                        isSelected
+                          ? "bg-brand-wash border-brand ring-1 ring-brand/30"
+                          : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
+                      }`}
+                      aria-current={isSelected ? "true" : undefined}
+                    >
+                      {/* Header Row: Tracking Code + Time + StatusTag */}
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <TrackingCode code={r.tracking_code} />
+                          <span className="text-[11px] text-ink-faint font-medium">
+                            · {timeSince(r.created_at)}
                           </span>
                         </div>
                         <StatusTag status={r.status} size="sm" />
+                      </div>
+
+                      {/* Title & Chevron Row */}
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <span className={`text-xs block leading-snug break-words flex-1 min-w-0 ${
+                          isSelected ? "font-extrabold text-brand" : "font-semibold text-ink"
+                        }`}>
+                          {r.category_label ?? r.category}
+                        </span>
                         <ChevronRight
                           width={15}
                           height={15}
-                          className={`shrink-0 mt-1 transition-colors ${
+                          className={`shrink-0 transition-colors ${
                             isSelected ? "text-brand" : "text-ink-faint"
                           }`}
                           aria-hidden="true"
                         />
-                      </button>
-                    </li>
+                      </div>
+                    </button>
                   );
                 })}
-              </ul>
+              </div>
 
               {/* Local Storage Info Footer */}
               <div

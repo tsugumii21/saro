@@ -230,33 +230,39 @@ export default function MapDesktop() {
 
             <div className="flex flex-col gap-2.5">
               {displayReports.map(({ report: r, count }) => {
-                const isSelected = Boolean(selectedReport) && (
-                  selectedReport === r ||
-                  (Boolean(r.id) && Boolean(selectedReport.id) && selectedReport.id === r.id) ||
-                  (Boolean(r.tracking_code) && Boolean(selectedReport.tracking_code) && selectedReport.tracking_code === r.tracking_code)
-                );
+                const reportKey = r.id || r.tracking_code;
+                const activeKey = selectedReport?.id || selectedReport?.tracking_code;
+                const isSelected = Boolean(activeKey) && activeKey === reportKey;
+
+                const handleCardClick = () => {
+                  if (isSelected) {
+                    setSelectedReport(null);
+                    return;
+                  }
+                  const lat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
+                  const lng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
+                  setSelectedReport({
+                    ...r,
+                    clusterCount: count,
+                    categoryName: getCategoryName(r.category_id || r.category),
+                    barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
+                    timeSinceStr: timeSince(r.created_at),
+                  });
+                  if (!isNaN(lat) && !isNaN(lng) && lat && lng) {
+                    setMapCenter([lng, lat]);
+                  }
+                };
+
                 return (
                   <button
-                    key={r.id || r.tracking_code}
+                    key={reportKey}
                     type="button"
-                    onClick={() => {
-                      const lat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
-                      const lng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
-                      setSelectedReport({
-                        ...r,
-                        clusterCount: count,
-                        categoryName: getCategoryName(r.category_id || r.category),
-                        barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
-                        timeSinceStr: timeSince(r.created_at),
-                      });
-                      if (!isNaN(lat) && !isNaN(lng) && lat && lng) {
-                        setMapCenter([lng, lat]);
-                      }
-                    }}
-                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg transition-all cursor-pointer ${
+                    onClick={handleCardClick}
+                    aria-current={isSelected ? "true" : undefined}
+                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs cursor-pointer ${
                       isSelected
-                        ? "bg-brand-wash border-2 border-brand ring-2 ring-brand/40 shadow-md scale-[1.01]"
-                        : "bg-surface border border-line hover:border-brand-edge hover:bg-raised/60 active:bg-brand-wash shadow-2xs"
+                        ? "bg-brand-wash border-brand ring-1 ring-brand/30"
+                        : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
                     }`}
                   >
                     {/* Header Row: Dot + Title + StatusTag */}
@@ -266,7 +272,9 @@ export default function MapDesktop() {
                           className="w-2 h-2 rounded-full shrink-0"
                           style={{ backgroundColor: STATUS_COLORS[r.status] || STATUS_COLORS.received }}
                         />
-                        <span className="text-xs font-bold text-ink leading-tight truncate">
+                        <span className={`text-xs leading-tight truncate ${
+                          isSelected ? "font-extrabold text-brand" : "font-bold text-ink"
+                        }`}>
                           {getCategoryName(r.category_id || r.category)}
                         </span>
                       </div>

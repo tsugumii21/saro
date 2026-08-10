@@ -58,25 +58,25 @@ export default function IncidentPinCard({
   const displayPhotos = isCluster ? photos.slice(0, 3) : photos.slice(0, 4);
 
   return (
-    <div className="fixed sm:absolute bottom-0 inset-x-0 bg-white border-t border-line shadow-sheet px-4 pt-4 pb-4 animate-slide-up z-[600] rounded-t-lg font-sans max-h-[85vh] overflow-y-auto">
+    <div className="bg-surface border border-line shadow-2xl p-5 rounded-xl font-sans max-h-[85vh] overflow-y-auto space-y-3.5 animate-fade-in">
       {/* Header Bar */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <StatusTag status={report?.status || "received"} />
           {isCluster ? (
-            <span className="t-micro font-bold rounded-xs px-2 py-0.5 bg-ink text-white shadow-2xs flex items-center gap-1">
+            <span className="text-[10px] font-mono font-bold rounded-md px-2 py-0.5 bg-ink text-white shadow-2xs flex items-center gap-1 shrink-0">
               <Sparkles className="w-3 h-3 text-amber-400" />
               {clusterCount} reports in cluster
             </span>
           ) : (
-            <span className="text-[10px] font-mono font-bold text-ink-muted bg-raised px-2 py-0.5 rounded border border-line">
+            <span className="text-[10px] font-mono font-bold text-ink-muted bg-sunken px-2 py-0.5 rounded-md border border-line shrink-0">
               {report?.tracking_code || "SR-PIN"}
             </span>
           )}
         </div>
         <button
           onClick={onClose}
-          className="text-xs text-ink-muted hover:text-ink p-1 rounded-xs transition-colors"
+          className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-sunken transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-brand/30"
           aria-label="Close detail"
         >
           <X className="w-4 h-4" />
@@ -84,27 +84,28 @@ export default function IncidentPinCard({
       </div>
 
       {/* Category Title */}
-      <h3 className="text-base font-bold text-ink mb-1">
+      <h3 className="text-base font-bold text-ink leading-snug">
         {isCluster
           ? `${clusterCount} Reports in this Area (${categoryName || "Hazard"})`
           : categoryName || "Hazard Report"}
       </h3>
 
       {/* Location & Time Subheader */}
-      <div className="flex items-center gap-3 text-xs text-ink-muted mb-3 font-medium">
-        <span className="flex items-center gap-1">
+      <div className="flex items-center gap-2 text-xs text-ink-muted font-medium flex-wrap">
+        <span className="flex items-center gap-1.5 min-w-0">
           <MapPin className="w-3.5 h-3.5 text-brand shrink-0" aria-hidden="true" />
-          <span>{barangayName || report?.barangay || "Legazpi City"}</span>
+          <span className="truncate">{barangayName || report?.barangay || "Legazpi City"}</span>
         </span>
-        <span className="flex items-center gap-1">
-          <Clock className="w-3.5 h-3.5 text-ink-muted shrink-0" aria-hidden="true" />
+        <span className="text-ink-faint">·</span>
+        <span className="flex items-center gap-1.5 shrink-0">
+          <Clock className="w-3.5 h-3.5 text-ink-faint shrink-0" aria-hidden="true" />
           <span>{timeSinceStr || "recently"}</span>
         </span>
       </div>
 
-      {/* Photo Gallery (Only rendered if photos exist - No broken placeholders!) */}
+      {/* Photo Gallery (Only rendered if photos exist) */}
       {displayPhotos.length > 0 && (
-        <div className="mb-3 space-y-1">
+        <div className="space-y-1.5 pt-1">
           <div className="text-[10px] font-bold uppercase text-ink-muted tracking-wider flex items-center gap-1">
             <ImageIcon className="w-3 h-3 text-brand" />
             <span>
@@ -128,9 +129,9 @@ export default function IncidentPinCard({
 
       {/* Description / Summarized Context Box */}
       {clusterSummary ? (
-        <div className="mb-4 bg-sunken/60 p-3 rounded-md border border-line/60 text-xs sm:text-sm text-ink leading-relaxed font-sans">
+        <div className="bg-sunken p-3.5 rounded-lg border border-line text-xs sm:text-sm text-ink leading-relaxed font-sans space-y-1">
           {isCluster && (
-            <span className="font-bold text-brand block mb-1 text-[11px] uppercase tracking-wider">
+            <span className="font-bold text-brand block text-[10px] uppercase tracking-wider">
               Summarized Context
             </span>
           )}
@@ -138,14 +139,16 @@ export default function IncidentPinCard({
         </div>
       ) : null}
 
-      {/* Bottom Action Button */}
+      {/* Bottom Action Footer */}
       {onActionClick && (
-        <button
-          onClick={onActionClick}
-          className="saro-btn saro-btn-primary saro-btn-lg w-full font-bold shadow-xs text-xs sm:text-sm"
-        >
-          {actionLabel}
-        </button>
+        <div className="pt-3 border-t border-line">
+          <button
+            onClick={onActionClick}
+            className="saro-btn saro-btn-primary saro-btn-lg w-full font-bold shadow-md hover:shadow-lg transition-all text-xs sm:text-sm py-3"
+          >
+            {actionLabel}
+          </button>
+        </div>
       )}
     </div>
   );

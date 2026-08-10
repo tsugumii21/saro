@@ -162,20 +162,26 @@ export default function AssistantScreen() {
             {msg.role === "bot" && msg.id !== "welcome" && !msg.isEmergency && (
               <div className="mt-1.5 max-w-[85%]">
                 {msg.degraded ? (
-                  <span className="t-label flex items-center gap-1.5 text-ink-faint">
-                    <CloudOff width={11} height={11} aria-hidden="true" />
-                    Could not reach the city's documents
-                  </span>
+                  <div className="p-2.5 rounded-md bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2 shadow-2xs">
+                    <CloudOff className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">Offline Fallback</span>
+                      <span>Could not connect to Legazpi document server.</span>
+                    </div>
+                  </div>
                 ) : msg.unanswered ? (
-                  <span className="t-label flex items-center gap-1.5 text-alert">
-                    <HelpCircle width={11} height={11} aria-hidden="true" />
-                    Not in the city's published documents — logged for staff to answer
-                  </span>
+                  <div className="p-2.5 rounded-md bg-alert-wash border border-alert text-alert text-xs flex items-start gap-2 shadow-2xs">
+                    <HelpCircle className="w-3.5 h-3.5 text-alert shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">Not in Published Documents</span>
+                      <span>Logged for staff review. Urgent? Call 911.</span>
+                    </div>
+                  </div>
                 ) : msg.source ? (
-                  <span className="t-label flex items-start gap-1.5 text-ink-faint">
-                    <FileText width={11} height={11} className="mt-0.5 shrink-0" aria-hidden="true" />
-                    Source: {msg.source}
-                  </span>
+                  <div className="flex items-center gap-1.5 text-xs text-ink-muted font-medium bg-raised px-2.5 py-1 rounded border border-line w-fit shadow-2xs">
+                    <FileText className="w-3.5 h-3.5 text-brand shrink-0" />
+                    <span>Source: <strong className="font-bold text-ink">{msg.source}</strong></span>
+                  </div>
                 ) : null}
               </div>
             )}

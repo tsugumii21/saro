@@ -711,6 +711,18 @@ export default function TrackScreen() {
                 }))}
             />
           </div>
+          <div className="p-2.5 bg-surface border-t border-line text-center">
+            <span className="t-micro text-ink-muted font-medium">Tap any pin to view tracking status & details</span>
+          </div>
+        </section>
+      )}
+
+      {/* ── Your own reports List ─────────────────────────────────────────────── */}
+      {mine.length > 0 && (
+        <section>
+          <h2 className="t-label text-ink-faint uppercase tracking-wider font-bold">
+            {isResident ? "Your Reports" : "Reports From This Device"}
+          </h2>
           <div className="mt-3 flex flex-col gap-2.5">
             {mine.slice(0, 12).map((r) => {
               const isSelected = report?.tracking_code === r.tracking_code;

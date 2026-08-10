@@ -106,6 +106,7 @@ export default function TrackDesktop() {
   const [searching, setSearching] = useState(false);
   const [mine, setMine] = useState([]);
   const [queued, setQueued] = useState([]);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedCode, setSelectedCode] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
 

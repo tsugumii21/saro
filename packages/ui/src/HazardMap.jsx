@@ -1128,68 +1128,43 @@ export default function HazardMap({
           </button>
 
           {togglesOpen && (
-            <div className="absolute top-11 right-0 z-30 bg-white/95 backdrop-blur border border-line rounded-md p-2.5 shadow-card w-52 sm:w-[220px] max-h-52 sm:max-h-[calc(100vh-140px)] overflow-y-auto animate-fade-in text-ink">
-              {/* Segmented Tab Switcher */}
-              <div className="flex items-center gap-1 p-0.5 bg-sunken rounded border border-line mb-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setPanelTab("layers")}
-                  className={`flex-1 py-1 px-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                    panelTab === "layers"
-                      ? "bg-white text-ink shadow-2xs"
-                      : "text-ink-muted hover:text-ink"
-                  }`}
-                >
-                  Layers ({visibleToggles.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPanelTab("key")}
-                  className={`flex-1 py-1 px-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                    panelTab === "key"
-                      ? "bg-white text-ink shadow-2xs"
-                      : "text-ink-muted hover:text-ink"
-                  }`}
-                >
-                  Key (6)
-                </button>
+            <div className="absolute top-11 right-0 z-30 bg-white/95 backdrop-blur border border-line rounded-md p-2.5 shadow-card w-48 sm:w-[220px] max-h-48 sm:max-h-[calc(100vh-140px)] overflow-y-auto animate-fade-in text-ink">
+              <span className="t-label block px-1 pb-1.5 font-bold text-ink uppercase tracking-wider text-[10px] border-b border-line mb-1">
+                Map Layers
+              </span>
+              <div className="flex flex-col gap-0.5">
+                {visibleToggles.map((layer) => (
+                  <label
+                    key={layer.id}
+                    className="t-body-sm flex cursor-pointer items-center gap-1.5 px-1 py-0.5 hover:bg-sunken rounded-xs transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(active[layer.id])}
+                      onChange={() => toggle(layer.id)}
+                      className="h-3 w-3 accent-brand shrink-0"
+                    />
+                    <span className="text-[11px] font-medium text-ink leading-tight">{layer.label}</span>
+                  </label>
+                ))}
               </div>
-
-              {/* Tab 1: Map Layers Checkboxes */}
-              {panelTab === "layers" && (
-                <div className="flex flex-col gap-1">
-                  {visibleToggles.map((layer) => (
-                    <label
-                      key={layer.id}
-                      className="t-body-sm flex cursor-pointer items-center gap-2 px-1 py-1 hover:bg-sunken rounded-xs transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(active[layer.id])}
-                        onChange={() => toggle(layer.id)}
-                        className="h-3.5 w-3.5 accent-brand"
-                      />
-                      <span className="text-xs font-medium text-ink">{layer.label}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              {/* Tab 2: Map Key Legend */}
-              {panelTab === "key" && (
-                <div className="space-y-1.5 px-1 py-0.5 text-[11px] text-ink-muted">
-                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-dashed border-[#E11D48] bg-[#E11D48]/20 shrink-0" /> Accident blackspot zone</div>
-                  <div className="flex items-center gap-2"><span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-white bg-[#C66A16] text-[10px] font-black text-white shrink-0">!</span> Accident spot marker</div>
+              <div className="mt-1.5 border-t border-line pt-1.5">
+                <span className="t-label block px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                  Map key
+                </span>
+                <div className="space-y-1 px-1 text-[10px] text-ink-muted">
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border border-dashed border-[#E11D48] bg-[#E11D48]/20 shrink-0" /> Accident blackspot zone</div>
+                  <div className="flex items-center gap-2"><span className="flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border border-white bg-[#C66A16] text-[9px] font-black text-white shrink-0">!</span> Accident spot marker</div>
                   <div className="flex items-center gap-2">
-                    <span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-white bg-[#087E6B] text-white shrink-0">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border border-white bg-[#087E6B] text-white shrink-0">
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                     </span> Evacuation shelter
                   </div>
-                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-[#2563EB] bg-[#3B82F6]/15 shrink-0" /> Flood extent</div>
-                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-[#995026] bg-[#A55B2A]/15 shrink-0" /> Volcanic corridor</div>
-                  <div className="flex items-center gap-2"><span className="h-0 w-5 border-t-2 border-alert shrink-0" /> Mayon danger boundary</div>
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border border-[#2563EB] bg-[#3B82F6]/15 shrink-0" /> Flood extent</div>
+                  <div className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border border-[#995026] bg-[#A55B2A]/15 shrink-0" /> Volcanic corridor</div>
+                  <div className="flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-alert shrink-0" /> Mayon danger boundary</div>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>

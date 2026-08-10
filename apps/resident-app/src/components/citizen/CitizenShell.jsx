@@ -724,6 +724,179 @@ export default function CitizenShell({ onReturnToWelcome }) {
     );
   };
 
+  /* ── Edit Resident Profile Modal ────────────────────────────────────── */
+  const renderEditProfileModal = () => {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans animate-in fade-in duration-150">
+        <div className="w-full max-w-md border border-line bg-surface p-6 shadow-2xl rounded-xl space-y-4 animate-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between border-b border-line pb-3">
+            <div className="flex items-center gap-2.5">
+              <User className="w-5 h-5 text-brand" />
+              <div>
+                <h3 className="text-base font-bold text-ink leading-none">Edit Resident Profile</h3>
+                <p className="text-xs text-ink-muted mt-1 leading-none">Update your personal account information</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowEditProfileModal(false)}
+              className="saro-btn saro-btn-ghost saro-btn-sm"
+              aria-label="Close edit profile modal"
+            >
+              <X width={16} height={16} />
+            </button>
+          </div>
+
+          {resMsg.text && (
+            <div
+              className={`p-3 rounded-md border text-xs font-medium ${
+                resMsg.type === "error"
+                  ? "bg-alert-wash border-alert/30 text-alert"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-800"
+              }`}
+            >
+              {resMsg.text}
+            </div>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveResidentProfile();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-ink">Full Name</label>
+              <input
+                type="text"
+                required
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Juan dela Cruz"
+                className="w-full px-3 py-2 text-xs border border-line rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 text-ink"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-ink">Email Address</label>
+              <input
+                type="email"
+                required
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="resident@example.com"
+                className="w-full px-3 py-2 text-xs border border-line rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 text-ink"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-ink">New Password (optional)</label>
+              <input
+                type="password"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                placeholder="Leave blank to keep current password"
+                className="w-full px-3 py-2 text-xs border border-line rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 text-ink"
+              />
+              <span className="text-[10px] text-ink-faint block">Minimum 6 characters if changing</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
+              <button
+                type="button"
+                onClick={() => setShowEditProfileModal(false)}
+                className="saro-btn saro-btn-ghost saro-btn-sm"
+                disabled={resSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={resSaving}
+                className="saro-btn saro-btn-primary saro-btn-sm font-bold flex items-center gap-1.5"
+              >
+                {resSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  /* ── Delete Resident Profile Modal ──────────────────────────────────── */
+  const renderDeleteProfileModal = () => {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-xs font-sans animate-in fade-in duration-150">
+        <div className="w-full max-w-md border border-alert/30 bg-surface p-6 shadow-2xl rounded-xl space-y-4 animate-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between border-b border-line pb-3">
+            <div className="flex items-center gap-2.5">
+              <Trash2 className="w-5 h-5 text-alert shrink-0" />
+              <div>
+                <h3 className="text-base font-bold text-alert leading-none">Delete Resident Account</h3>
+                <p className="text-xs text-ink-muted mt-1 leading-none">Permanent account self-deletion</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowDeleteProfileModal(false)}
+              className="saro-btn saro-btn-ghost saro-btn-sm"
+              aria-label="Close delete account modal"
+            >
+              <X width={16} height={16} />
+            </button>
+          </div>
+
+          <div className="p-3 bg-alert-wash/50 border border-alert/20 rounded-md space-y-1.5 text-xs text-alert-strong">
+            <span className="font-bold block">Are you sure you want to delete your account?</span>
+            <p className="text-[11px] leading-relaxed text-ink-muted">
+              Your account and synced "My Reports" profile access will be deleted. Any hazard reports you previously filed will remain safely recorded with Legazpi City and checkable by tracking code.
+            </p>
+          </div>
+
+          {resMsg.text && (
+            <div
+              className={`p-3 rounded-md border text-xs font-medium ${
+                resMsg.type === "error"
+                  ? "bg-alert-wash border-alert/30 text-alert"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-800"
+              }`}
+            >
+              {resMsg.text}
+            </div>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleDeleteResidentAccount();
+            }}
+            className="space-y-4"
+          >
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
+              <button
+                type="button"
+                onClick={() => setShowDeleteProfileModal(false)}
+                className="saro-btn saro-btn-ghost saro-btn-sm"
+                disabled={resDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={resDeleting}
+                className="saro-btn bg-alert text-white hover:bg-alert/90 saro-btn-sm font-bold flex items-center gap-1.5 shadow-xs"
+              >
+                {resDeleting ? "Deleting Account..." : "Confirm Delete Account"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
   // ── Desktop branch (≥ 1024px) ───────────────────────────────────────────
   // All state (modals, auth, settings) is managed here and passed down so
   // neither branch duplicates logic. The mobile JSX below is untouched.

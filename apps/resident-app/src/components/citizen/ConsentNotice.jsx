@@ -278,12 +278,12 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
     <section
       role="region"
       aria-labelledby="consent-heading-mobile"
-      className="w-full max-w-md mx-auto bg-surface border border-line rounded-xl shadow-xl overflow-hidden font-sans text-ink transition-all animate-in fade-in duration-200"
+      className="w-full max-w-md mx-auto my-2 bg-surface border border-line rounded-md shadow-xl overflow-hidden font-sans text-ink transition-all animate-in fade-in duration-200"
     >
       {/* Header */}
       <header className="flex items-start justify-between gap-3 border-b border-line p-4 bg-sunken/40">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="p-2 rounded-lg bg-brand-wash border border-brand/20 text-brand shrink-0 mt-0.5">
+          <div className="p-2 rounded-md bg-brand-wash border border-brand/20 text-brand shrink-0 mt-0.5">
             <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
           </div>
           <div className="min-w-0">
@@ -312,9 +312,9 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
       </header>
 
       {/* Main Content List */}
-      <div className="p-4 space-y-5 max-h-[80vh] overflow-y-auto">
+      <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
         {/* Section 1: What We Collect */}
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-brand shrink-0" />
             <h3 className="text-xs font-bold text-ink uppercase tracking-wider">
@@ -326,7 +326,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
             {COLLECTED_ITEMS.map(({ icon: Icon, title, detail }) => (
               <div
                 key={title}
-                className="p-3 rounded-lg border border-line bg-white flex items-start gap-3 shadow-2xs"
+                className="p-3 rounded-md border border-line bg-white flex items-start gap-3 shadow-2xs"
               >
                 <div className="p-1.5 rounded bg-sunken text-brand shrink-0 mt-0.5">
                   <Icon className="w-4 h-4" />
@@ -339,7 +339,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
             ))}
           </div>
 
-          <div className="p-2.5 rounded-lg bg-brand-wash/40 border border-brand/20 text-[11px] text-ink flex items-start gap-2">
+          <div className="p-2.5 rounded-md bg-brand-wash/40 border border-brand/20 text-[11px] text-ink flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 text-brand shrink-0 mt-0.5" />
             <p className="leading-relaxed">
               <strong>Anonymous by Default:</strong> Providing your name or phone number is strictly optional for officer callbacks.
@@ -356,7 +356,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
             </h3>
           </div>
 
-          <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/70 text-emerald-950 text-xs space-y-1 shadow-2xs">
+          <div className="p-3 rounded-md border border-emerald-200 bg-emerald-50/70 text-emerald-950 text-xs space-y-1 shadow-2xs">
             <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-xs">
               <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
               <span>Zero Advertising &amp; No Data Sales</span>
@@ -380,7 +380,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
             {AGENCIES.map(({ shortName, badge }) => (
               <div
                 key={shortName}
-                className="p-2.5 rounded-lg border border-line bg-white flex flex-col justify-between gap-1 shadow-2xs"
+                className="p-2.5 rounded-md border border-line bg-white flex flex-col justify-between gap-1 shadow-2xs"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Building2 className="w-3.5 h-3.5 text-brand shrink-0" />
@@ -396,7 +396,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
 
         {/* Section 4: Data Retention & Rights */}
         <div className="space-y-2 pt-2 border-t border-line">
-          <div className="p-3 rounded-lg border border-line bg-white space-y-1 shadow-2xs">
+          <div className="p-3 rounded-md border border-line bg-white space-y-1 shadow-2xs">
             <div className="flex items-center gap-2 text-xs font-bold text-ink">
               <Clock className="w-4 h-4 text-brand shrink-0" />
               <span>3-Year Audit Retention</span>
@@ -406,7 +406,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
             </p>
           </div>
 
-          <div className="p-3 rounded-lg border border-line bg-white space-y-1 shadow-2xs">
+          <div className="p-3 rounded-md border border-line bg-white space-y-1 shadow-2xs">
             <div className="flex items-center gap-2 text-xs font-bold text-ink">
               <Scale className="w-4 h-4 text-brand shrink-0" />
               <span>Your Rights Under RA 10173</span>
@@ -418,7 +418,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
         </div>
 
         {/* Emergency Exemption Notice */}
-        <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/70 text-amber-950 text-[11px] flex items-start gap-2">
+        <div className="p-3 rounded-md border border-amber-200 bg-amber-50/70 text-amber-950 text-[11px] flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
             <strong>Emergency Exemption:</strong> Panic alerts and 911 dispatch operate unconditionally to save lives.
@@ -430,10 +430,10 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
           <button
             type="button"
             onClick={accept}
-            className="saro-btn saro-btn-primary saro-btn-lg w-full flex items-center justify-center gap-2 font-bold shadow-md"
+            className="saro-btn saro-btn-primary w-full flex items-center justify-center gap-2 font-bold min-h-[48px] py-3.5 px-4 rounded-md shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 transition-all text-xs"
           >
             <ShieldCheck className="w-5 h-5" />
-            I Understand &amp; Acknowledge
+            <span>I Understand &amp; Acknowledge</span>
           </button>
         </div>
       </div>

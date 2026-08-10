@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search, Inbox, MapPin, Building2, ChevronRight, ThumbsUp, RotateCcw,
@@ -135,9 +135,21 @@ function formatTimelineDate(entry) {
 }
 
 export default function TrackScreen() {
+  const topRef = useRef(null);
   const [searchParams] = useSearchParams();
   const { isResident } = useAuth();
   const preCode = searchParams.get("code") || "";
+
+  const scrollToTop = useCallback(() => {
+    if (topRef.current) {
+      topRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      const mainEl = topRef.current.closest("main");
+      if (mainEl) {
+        mainEl.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const [code, setCode] = useState(preCode);
   const [report, setReport] = useState(null);
@@ -312,7 +324,7 @@ export default function TrackScreen() {
   const daysLeft = awaitingAnswer ? daysLeftToConfirm(report?.resolved_at) : null;
 
   return (
-    <div className="flex flex-col gap-6 px-4 pb-8 pt-5">
+    <div ref={topRef} className="flex flex-col gap-6 px-4 pb-8 pt-5">
       <div>
         <h1 className="t-title">Check a Report</h1>
         <p className="t-body-sm mt-1 text-ink-muted">
@@ -707,7 +719,7 @@ export default function TrackScreen() {
                   onSelect: () => {
                     setCode(r.tracking_code);
                     search(r.tracking_code);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    scrollToTop();
                   },
                 }))}
             />
@@ -734,7 +746,7 @@ export default function TrackScreen() {
                   onClick={() => {
                     setCode(r.tracking_code);
                     search(r.tracking_code);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    scrollToTop();
                   }}
                   className={`flex flex-col gap-2.5 p-4 text-left rounded-lg border transition-all shadow-2xs ${
                     isSelected

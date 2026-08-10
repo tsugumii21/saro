@@ -480,13 +480,13 @@ export default function ReportDesktop() {
 
               {/* Category Search */}
               <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-ink-faint" />
+                <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-brand" />
                 <input
                   type="text"
                   value={catSearch}
                   onChange={(e) => setCatSearch(e.target.value)}
                   placeholder="Search categories (e.g. flood, drain, debris)..."
-                  className="saro-input pl-8 py-2 text-xs w-full"
+                  className="bg-white border-2 border-brand-edge hover:border-brand text-ink placeholder:text-ink-muted rounded-md pl-9 pr-3 py-2 text-xs w-full shadow-xs focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                 />
               </div>
 

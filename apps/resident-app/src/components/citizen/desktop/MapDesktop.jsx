@@ -230,7 +230,10 @@ export default function MapDesktop() {
 
             <div className="flex flex-col gap-2.5">
               {displayReports.map(({ report: r, count }) => {
-                const isSelected = selectedReport?.id === r.id || selectedReport?.cluster_id === r.cluster_id;
+                const isSelected = Boolean(selectedReport) && (
+                  (Boolean(r.id) && selectedReport.id === r.id) ||
+                  (Boolean(r.cluster_id) && selectedReport.cluster_id === r.cluster_id)
+                );
                 return (
                   <button
                     key={r.id}
@@ -249,10 +252,10 @@ export default function MapDesktop() {
                         setMapCenter([lng, lat]);
                       }
                     }}
-                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs ${
+                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all cursor-pointer shadow-2xs ${
                       isSelected
-                        ? "bg-brand-wash border-brand ring-1 ring-brand/30"
-                        : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
+                        ? "bg-brand-wash border-brand ring-1 ring-brand/30 shadow-xs"
+                        : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60 active:bg-brand-wash"
                     }`}
                   >
                     {/* Header Row: Dot + Title + StatusTag */}

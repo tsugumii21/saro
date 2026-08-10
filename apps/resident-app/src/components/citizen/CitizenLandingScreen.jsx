@@ -356,11 +356,11 @@ export default function CitizenLandingScreen() {
           {/* Mayon Alert Status Card */}
           <div
             onClick={() => navigate("/map")}
-            className="group flex w-full flex-col gap-2 p-3.5 rounded-lg bg-surface border border-line hover:border-brand-edge transition-all cursor-pointer shadow-2xs"
+            className="group flex w-full flex-col gap-2 p-3.5 rounded-md bg-surface border border-line hover:border-brand-edge transition-all cursor-pointer shadow-2xs"
           >
             <div className="flex items-center justify-between gap-2 w-full">
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 text-status-assigned-ink border border-amber-200 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-md bg-amber-50 text-status-assigned-ink border border-amber-200 flex items-center justify-center shrink-0">
                   <Flame className="w-4 h-4" aria-hidden="true" />
                 </div>
                 <div className="flex flex-col min-w-0 flex-1">
@@ -390,11 +390,11 @@ export default function CitizenLandingScreen() {
           {/* Active City Reports Activity Card */}
           <div
             onClick={() => navigate("/map")}
-            className="group flex w-full flex-col gap-2.5 p-3.5 rounded-lg bg-surface border border-line hover:border-brand-edge transition-all cursor-pointer shadow-2xs"
+            className="group flex w-full flex-col gap-2.5 p-3.5 rounded-md bg-surface border border-line hover:border-brand-edge transition-all cursor-pointer shadow-2xs"
           >
             <div className="flex items-center justify-between gap-2 w-full">
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <div className="w-8 h-8 rounded-lg bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-md bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0">
                   <Activity className="w-4 h-4" aria-hidden="true" />
                 </div>
                 <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -409,17 +409,17 @@ export default function CitizenLandingScreen() {
               <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-brand group-hover:translate-x-0.5 transition-all shrink-0" aria-hidden="true" />
             </div>
 
-            <div className="grid grid-cols-3 gap-2 w-full pt-1 border-t border-line-faint">
-              <div className="bg-sunken px-2.5 py-1.5 rounded-md border border-line-faint flex items-center justify-between">
-                <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">Received</span>
+            <div className="grid grid-cols-3 gap-1.5 w-full pt-1.5 border-t border-line-faint">
+              <div className="bg-sunken px-2 py-1.5 rounded border border-line-faint flex flex-col sm:flex-row items-start sm:items-center justify-between gap-0.5 min-w-0">
+                <span className="text-[9px] font-bold text-ink-faint uppercase tracking-wider truncate">Received</span>
                 <span className="text-xs font-bold font-mono text-ink">{reportStats.received}</span>
               </div>
-              <div className="bg-sunken px-2.5 py-1.5 rounded-md border border-line-faint flex items-center justify-between">
-                <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">Assigned</span>
+              <div className="bg-sunken px-2 py-1.5 rounded border border-line-faint flex flex-col sm:flex-row items-start sm:items-center justify-between gap-0.5 min-w-0">
+                <span className="text-[9px] font-bold text-ink-faint uppercase tracking-wider truncate">Assigned</span>
                 <span className="text-xs font-bold font-mono text-status-assigned-ink">{reportStats.assigned}</span>
               </div>
-              <div className="bg-sunken px-2.5 py-1.5 rounded-md border border-line-faint flex items-center justify-between">
-                <span className="text-[10px] font-bold text-ink-faint uppercase tracking-wider">In Progress</span>
+              <div className="bg-sunken px-2 py-1.5 rounded border border-line-faint flex flex-col sm:flex-row items-start sm:items-center justify-between gap-0.5 min-w-0">
+                <span className="text-[9px] font-bold text-ink-faint uppercase tracking-wider truncate">In Progress</span>
                 <span className="text-xs font-bold font-mono text-brand">{reportStats.in_progress}</span>
               </div>
             </div>
@@ -438,12 +438,10 @@ export default function CitizenLandingScreen() {
           <button
             type="button"
             onClick={() => navigate("/report")}
-            className="group flex w-full items-center gap-3.5 p-3 rounded-lg bg-white border border-line hover:border-brand-edge transition-all text-left"
-            style={{ borderLeft: '3px solid var(--color-brand-mid)' }}
+            className="group flex w-full items-center gap-3.5 p-3 rounded-md bg-white border border-line border-l-4 border-l-brand hover:border-brand-edge hover:bg-brand-wash/40 transition-all text-left shadow-2xs"
           >
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                 style={{ background: 'var(--color-brand-wash)' }}>
-              <PencilLine className="w-4 h-4" style={{ color: 'var(--color-brand-mid)' }} aria-hidden="true" />
+            <div className="w-9 h-9 rounded-md bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0">
+              <PencilLine className="w-4.5 h-4.5" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
               <span className="text-[13px] font-bold text-ink block leading-tight group-hover:text-brand transition-colors">
@@ -460,12 +458,10 @@ export default function CitizenLandingScreen() {
           <button
             type="button"
             onClick={() => navigate("/track")}
-            className="group flex w-full items-center gap-3.5 p-3 rounded-lg bg-white border border-line hover:border-brand-edge transition-all text-left"
-            style={{ borderLeft: '3px solid var(--color-brand-mid)' }}
+            className="group flex w-full items-center gap-3.5 p-3 rounded-md bg-white border border-line border-l-4 border-l-brand hover:border-brand-edge hover:bg-brand-wash/40 transition-all text-left shadow-2xs"
           >
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                 style={{ background: 'var(--color-brand-wash)' }}>
-              <Search className="w-4 h-4" style={{ color: 'var(--color-brand-mid)' }} aria-hidden="true" />
+            <div className="w-9 h-9 rounded-md bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0">
+              <Search className="w-4.5 h-4.5" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
               <span className="text-[13px] font-bold text-ink block leading-tight group-hover:text-brand transition-colors">
@@ -481,7 +477,7 @@ export default function CitizenLandingScreen() {
       </div>
 
       {/* ── 4. Rotating Safety Advisory Card ────────────────────────────── */}
-      <div className="p-3.5 rounded-lg border border-line bg-gradient-to-r from-slate-50 to-brand-wash/40 flex flex-col gap-2">
+      <div className="p-3.5 rounded-md border border-line bg-gradient-to-r from-slate-50 to-brand-wash/40 flex flex-col gap-2 shadow-2xs">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-brand-wash text-brand flex items-center justify-center shrink-0">
@@ -502,10 +498,10 @@ export default function CitizenLandingScreen() {
             <button
               type="button"
               onClick={handlePrevTip}
-              className="p-1 rounded hover:bg-white text-ink-muted transition-colors"
+              className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-md hover:bg-white text-ink-muted active:bg-brand-wash transition-colors"
               aria-label="Previous safety tip"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="text-[10px] font-bold text-ink-faint px-0.5">
               {tipIndex + 1}/{SAFETY_TIPS.length}
@@ -513,10 +509,10 @@ export default function CitizenLandingScreen() {
             <button
               type="button"
               onClick={handleNextTip}
-              className="p-1 rounded hover:bg-white text-ink-muted transition-colors"
+              className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-md hover:bg-white text-ink-muted active:bg-brand-wash transition-colors"
               aria-label="Next safety tip"
             >
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -527,11 +523,9 @@ export default function CitizenLandingScreen() {
       </div>
 
       {/* ── 5. Command Center Status ─────────────────────────────────────────── */}
-      <div className="p-3 rounded-lg border border-line flex items-center justify-between gap-3"
-           style={{ background: 'var(--color-brand-wash)' }}>
+      <div className="p-3 rounded-md border border-brand-edge bg-brand-wash flex items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-               style={{ background: 'var(--color-brand)', color: 'white' }}>
+          <div className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shrink-0">
             <PhoneCall className="w-3.5 h-3.5" aria-hidden="true" />
           </div>
           <div className="flex flex-col">
@@ -542,8 +536,7 @@ export default function CitizenLandingScreen() {
             </span>
           </div>
         </div>
-        <a href="tel:911" className="text-[11px] font-bold px-2.5 py-1 rounded-md transition-colors"
-           style={{ background: 'var(--color-brand)', color: 'white' }}>
+        <a href="tel:911" className="text-[11px] font-bold px-3 py-1.5 rounded bg-brand text-white hover:bg-brand-mid transition-colors shadow-xs">
           Call 911
         </a>
       </div>

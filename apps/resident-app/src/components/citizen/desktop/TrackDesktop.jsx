@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Search, Inbox, MapPin, Building2, ChevronRight, ThumbsUp, RotateCcw,
-  CloudOff, Info, UserPlus, X, MessageSquare, Image as ImageIcon, CheckCircle2, ShieldCheck, ArrowRight
+  CloudOff, Info, UserPlus, X, MessageSquare, Image as ImageIcon, CheckCircle2, ShieldCheck, ArrowRight,
+  ChevronLeft, Copy, Check, Activity,
 } from "lucide-react";
 import { StatusTag, TrackingCode, HazardMap } from "@saro/ui";
 import {
@@ -105,8 +106,15 @@ export default function TrackDesktop() {
   const [searching, setSearching] = useState(false);
   const [mine, setMine] = useState([]);
   const [queued, setQueued] = useState([]);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedCode, setSelectedCode] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const handleCopyCode = (codeToCopy) => {
+    if (!codeToCopy) return;
+    navigator.clipboard.writeText(codeToCopy);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
 
   // Confirm / dispute
   const [disputing, setDisputing] = useState(false);
@@ -464,7 +472,7 @@ export default function TrackDesktop() {
                     >
                       <TrackingCode code={demo.tracking_code} />
                       <span className="text-xs text-ink-muted group-hover:text-brand font-medium">
-                        · {demo.category_label.split(" ")[0]}
+                        · {demo.tracking_code === "SR-8F2K" ? "Flooding" : demo.tracking_code === "SR-3M9P" ? "Broken Manhole" : demo.tracking_code === "SR-7N4L" ? "Road Pothole" : demo.tracking_code === "SR-1B9Q" ? "Typhoon Debris" : demo.category_label}
                       </span>
                       <ArrowRight className="w-3 h-3 text-ink-faint group-hover:text-brand" />
                     </button>
@@ -517,12 +525,35 @@ export default function TrackDesktop() {
             {/* Top Banner Header */}
             <article
               className="saro-clip saro-rise saro-card overflow-hidden"
-              style={{ boxShadow: `inset 0 4px 0 0 var(--color-status-${tabKey(report.status)}-tab)` }}
+              style={{
+                boxShadow: `inset 0 4px 0 0 var(--color-status-${tabKey(report.status)}-tab)`,
+                borderTop: `4px solid var(--color-status-${tabKey(report.status)}-tab)`,
+              }}
             >
               <div className="border-b border-rule p-5 flex items-center justify-between flex-wrap gap-4">
-                <div>
-                  <TrackingCode code={report.tracking_code} size="xl" />
-                  <span className="text-xs text-ink-faint block mt-1">filed {timeSince(report.created_at)}</span>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <TrackingCode code={report.tracking_code} size="xl" />
+                    <span className="text-xs text-ink-faint block mt-1">filed {timeSince(report.created_at)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyCode(report.tracking_code)}
+                    className="saro-btn saro-btn-secondary saro-btn-sm text-xs py-1 px-2.5 flex items-center gap-1.5 ml-2 cursor-pointer transition-all active:scale-95"
+                    title="Copy tracking code"
+                  >
+                    {copiedCode ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700 font-bold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-ink-muted" />
+                        <span>Copy Code</span>
+                      </>
+                    )}
+                  </button>
                 </div>
                 <StatusTag status={report.status} />
               </div>
@@ -642,16 +673,23 @@ export default function TrackDesktop() {
 
                   {/* Confirm / Dispute Action Card */}
                   {canDispute && (
-                    <div className="p-5" style={{ background: "var(--color-status-resolved-wash)" }}>
-                      <h3 className="text-sm font-bold text-ink">Was this hazard actually resolved?</h3>
-                      <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-                        {awaitingAnswer
-                          ? `${report.assigned_office ?? "The office"} marked this resolved. Resident verification is required.`
-                          : "This closed automatically. You may reopen if the hazard is still present."}
-                      </p>
+                    <div className="p-5 border-y border-emerald-300/80 bg-emerald-50/50 space-y-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-300/60">
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-ink">Was this hazard actually resolved?</h3>
+                          <p className="text-xs text-ink-muted mt-0.5 leading-relaxed">
+                            {awaitingAnswer
+                              ? `${report.assigned_office ?? "The office"} marked this resolved. Resident verification is required.`
+                              : "This closed automatically. You may reopen if the hazard is still present."}
+                          </p>
+                        </div>
+                      </div>
 
                       {!disputing ? (
-                        <div className="mt-3 flex gap-2">
+                        <div className="pt-1 flex gap-2">
                           {awaitingAnswer && (
                             <button
                               type="button"
@@ -674,13 +712,13 @@ export default function TrackDesktop() {
                           </button>
                         </div>
                       ) : (
-                        <div className="mt-3 flex flex-col gap-2">
+                        <div className="pt-1 flex flex-col gap-2">
                           <textarea
                             rows={3}
                             value={disputeReason}
                             onChange={(e) => setDisputeReason(e.target.value)}
                             placeholder="State what is still wrong at the location..."
-                            className="saro-input text-xs w-full resize-none p-2.5"
+                            className="saro-input text-xs w-full resize-none p-2.5 bg-white"
                           />
                           <div className="flex gap-2">
                             <button
@@ -703,7 +741,7 @@ export default function TrackDesktop() {
                       )}
 
                       {closureNote && (
-                        <p role="status" className="text-xs font-bold mt-2 text-brand">
+                        <p role="status" className="text-xs font-bold pt-1 text-brand">
                           {closureNote}
                         </p>
                       )}
@@ -724,13 +762,18 @@ export default function TrackDesktop() {
                           <li key={step} className="flex gap-3">
                             <span className="flex flex-col items-center">
                               <span
-                                className="mt-1 h-3 w-3 shrink-0 rounded-full border border-white shadow-xs"
+                                className={`mt-0.5 flex items-center justify-center shrink-0 rounded-full border border-white shadow-xs ${
+                                  current ? "h-4.5 w-4.5 ring-2 ring-brand/30" : "h-3.5 w-3.5"
+                                }`}
                                 style={{
                                   background: done
                                     ? `var(--color-status-${tabKey(step)}-tab)`
                                     : "var(--color-line)",
                                 }}
-                              />
+                              >
+                                {done && !current && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+                                {current && <Activity className="w-2.5 h-2.5 text-white animate-pulse" strokeWidth={3} />}
+                              </span>
                               {i < STATUS_PIPELINE.length - 1 && (
                                 <span
                                   className="w-0.5 flex-1 my-0.5"

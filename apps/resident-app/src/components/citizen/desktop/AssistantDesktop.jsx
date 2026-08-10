@@ -237,6 +237,23 @@ export default function AssistantDesktop() {
 
       {/* ── Right Panel: Desktop Chat Panel (flex-1) ─────────────────── */}
       <div className="flex flex-col flex-1 h-full min-w-0 overflow-hidden bg-canvas">
+        {/* Right Chat Panel Header — Aligned with left sidebar header */}
+        <div className="border-b border-line px-6 py-3.5 bg-surface flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-brand-wash text-brand border border-brand-edge flex items-center justify-center shrink-0">
+              <Bot className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-ink leading-tight">Conversation Thread</h2>
+              <p className="text-xs text-ink-faint leading-tight">Civic Assistant Consultation</p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Grounded &amp; Active
+          </span>
+        </div>
+
         {/* Scrollable Chat Thread */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
           {messages.map((msg) => (

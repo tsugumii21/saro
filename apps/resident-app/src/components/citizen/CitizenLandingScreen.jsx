@@ -356,24 +356,24 @@ export default function CitizenLandingScreen() {
           {/* Mayon Alert Status Card */}
           <div
             onClick={() => navigate("/map")}
-            className="group flex w-full flex-col gap-2 p-3.5 rounded-md bg-surface border border-line hover:border-brand-edge transition-all cursor-pointer shadow-2xs"
+            className="group flex w-full flex-col gap-2.5 p-3.5 rounded-md bg-surface border border-line hover:border-brand-edge transition-all cursor-pointer shadow-2xs"
           >
-            <div className="flex items-center justify-between gap-2 w-full">
+            {/* Top Row: Icon + Title + Chevron */}
+            <div className="flex items-center justify-between gap-2.5 w-full">
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <div className="w-8 h-8 rounded-md bg-amber-50 text-status-assigned-ink border border-amber-200 flex items-center justify-center shrink-0">
                   <Flame className="w-4 h-4" aria-hidden="true" />
                 </div>
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-[13px] font-bold text-ink leading-tight group-hover:text-brand transition-colors">
-                    Mayon Alert Status
-                  </span>
-                  <span className="text-[11px] text-ink-muted mt-0.5">
-                    Updated {volcanicAlert?.last_verified_at ? timeSince(volcanicAlert.last_verified_at) : "1d ago"} · PHIVOLCS Bulletin
-                  </span>
-                </div>
+                <span className="text-[13px] font-bold text-ink leading-tight group-hover:text-brand transition-colors truncate">
+                  Mayon Alert Status
+                </span>
               </div>
+              <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-brand group-hover:translate-x-0.5 transition-all shrink-0" aria-hidden="true" />
+            </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+            {/* Bottom Row: Status Pill + Meta Subtext */}
+            <div className="flex items-center justify-between gap-2 w-full pt-2 border-t border-line-faint">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {volcanicAlert ? (
                   <AlertLevelBadge alert={volcanicAlert} compact />
                 ) : (
@@ -382,8 +382,10 @@ export default function CitizenLandingScreen() {
                     <span>Level 0 · Normal</span>
                   </span>
                 )}
-                <ChevronRight className="w-4 h-4 text-ink-faint group-hover:text-brand group-hover:translate-x-0.5 transition-all shrink-0" aria-hidden="true" />
               </div>
+              <span className="text-[11px] text-ink-muted text-right truncate">
+                Updated {volcanicAlert?.last_verified_at ? timeSince(volcanicAlert.last_verified_at) : "1d ago"} · PHIVOLCS Bulletin
+              </span>
             </div>
           </div>
 

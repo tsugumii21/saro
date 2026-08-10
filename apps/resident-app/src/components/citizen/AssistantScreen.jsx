@@ -151,16 +151,22 @@ export default function AssistantScreen() {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"
-              }`}
+            className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
           >
-            <div
-              className={`max-w-[85%] rounded-xs px-4 py-3 text-xs sm:text-sm leading-relaxed ${msg.role === "user"
-                ? "bg-brand text-white rounded-br-none shadow-xs font-medium"
-                : "bg-white text-ink border border-line rounded-bl-none shadow-xs"
-                }`}
-            >
-              {msg.text}
+            <div className={`flex items-start gap-2 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+              {msg.role === "bot" && (
+                <div className="w-6 h-6 rounded-full bg-brand-wash border border-brand-edge flex items-center justify-center text-brand shrink-0 mt-0.5" aria-hidden="true">
+                  <Bot className="w-3.5 h-3.5" />
+                </div>
+              )}
+              <div
+                className={`rounded-xs px-4 py-3 text-xs sm:text-sm leading-relaxed ${msg.role === "user"
+                  ? "bg-brand text-white rounded-br-none shadow-xs font-medium"
+                  : "bg-white text-ink border border-line rounded-bl-none shadow-xs"
+                  }`}
+              >
+                {msg.text}
+              </div>
             </div>
 
             {/* Where the answer came from.

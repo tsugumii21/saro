@@ -230,9 +230,12 @@ export default function MapDesktop() {
 
             <div className="flex flex-col gap-2.5">
               {displayReports.map(({ report: r, count }) => {
-                const reportKey = r.id || r.tracking_code;
-                const activeKey = selectedReport?.id || selectedReport?.tracking_code;
-                const isSelected = Boolean(activeKey) && activeKey === reportKey;
+                const isSelected = Boolean(selectedReport) && (
+                  selectedReport === r ||
+                  (Boolean(r.id) && Boolean(selectedReport.id) && String(r.id) === String(selectedReport.id)) ||
+                  (Boolean(r.tracking_code) && Boolean(selectedReport.tracking_code) && String(r.tracking_code) === String(selectedReport.tracking_code)) ||
+                  (Boolean(r.lat) && Boolean(selectedReport.lat) && Number(r.lat) === Number(selectedReport.lat) && Number(r.lng) === Number(selectedReport.lng))
+                );
 
                 const handleCardClick = () => {
                   if (isSelected) {
@@ -255,14 +258,14 @@ export default function MapDesktop() {
 
                 return (
                   <button
-                    key={reportKey}
+                    key={r.id || r.tracking_code || `${r.lat}-${r.lng}`}
                     type="button"
                     onClick={handleCardClick}
                     aria-current={isSelected ? "true" : undefined}
-                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs cursor-pointer ${
+                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg transition-all cursor-pointer ${
                       isSelected
-                        ? "bg-brand-wash border-brand ring-1 ring-brand/30"
-                        : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
+                        ? "bg-brand-wash border-2 border-brand ring-2 ring-brand/40 shadow-md shadow-brand/10 scale-[1.01]"
+                        : "bg-surface border border-line hover:border-brand-edge hover:bg-raised/60 active:bg-brand-wash active:border-brand active:scale-[0.99] shadow-2xs"
                     }`}
                   >
                     {/* Header Row: Dot + Title + StatusTag */}
@@ -273,7 +276,7 @@ export default function MapDesktop() {
                           style={{ backgroundColor: STATUS_COLORS[r.status] || STATUS_COLORS.received }}
                         />
                         <span className={`text-xs leading-tight truncate ${
-                          isSelected ? "font-extrabold text-brand" : "font-bold text-ink"
+                          isSelected ? "font-extrabold text-brand" : "font-semibold text-ink"
                         }`}>
                           {getCategoryName(r.category_id || r.category)}
                         </span>

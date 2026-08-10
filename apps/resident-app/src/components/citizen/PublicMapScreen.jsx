@@ -198,53 +198,59 @@ export default function PublicMapScreen() {
           }))}
         />
 
-        {/* Top Control Bar: Status Filter Chips with smooth horizontal scroll */}
-        <div className="absolute left-0 top-3 right-0 z-20 overflow-x-auto overscroll-x-contain px-3 no-scrollbar">
-          <div className="flex w-max items-center gap-1.5 pb-1 pr-3">
-            <button
-              onClick={() => setStatusFilter("")}
-              className={`px-3 py-1.5 rounded-full t-label font-bold transition-all shadow-xs cursor-pointer border ${
-                !statusFilter
-                  ? "bg-ink text-white border-ink"
-                  : "bg-white/95 backdrop-blur text-ink border-line hover:bg-white hover:border-ink/30"
-              }`}
-            >
-              All
-            </button>
-            {STATUS_ORDER.map((status) => {
-              const isActive = statusFilter === status;
-              const color = STATUS_COLORS[status];
-              return (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(isActive ? "" : status)}
-                  className={`px-3 py-1.5 rounded-full t-label font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 border ${
-                    isActive
-                      ? "bg-ink text-white border-ink"
-                      : "bg-white/95 backdrop-blur text-ink border-line hover:bg-white hover:border-ink/30"
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }}></span>
-                  <span>{STATUS_LABELS[status]}</span>
-                </button>
-              );
-            })}
+        {/* Top Control Bar: Status Filter Chips with smooth horizontal scroll & gradient fade mask */}
+        <div className="relative w-full z-20">
+          <div className="pointer-events-none absolute right-0 top-3 h-9 w-10 bg-gradient-to-l from-white via-white/70 to-transparent z-30" aria-hidden="true" />
+          <div className="absolute left-0 top-3 right-0 z-20 overflow-x-auto overscroll-x-contain px-3 no-scrollbar">
+            <div className="flex w-max items-center gap-1.5 pb-1 pr-6">
+              <button
+                onClick={() => setStatusFilter("")}
+                className={`px-3 py-1.5 rounded-full t-label font-bold transition-all shadow-xs cursor-pointer border ${
+                  !statusFilter
+                    ? "bg-ink text-white border-ink"
+                    : "bg-white/95 backdrop-blur text-ink border-line hover:bg-white hover:border-ink/30"
+                }`}
+              >
+                All ({activeReports.length})
+              </button>
+              {STATUS_ORDER.map((status) => {
+                const isActive = statusFilter === status;
+                const color = STATUS_COLORS[status];
+                const count = activeReports.filter((r) => r.status === status).length;
+                return (
+                  <button
+                    key={status}
+                    onClick={() => setStatusFilter(isActive ? "" : status)}
+                    className={`px-3 py-1.5 rounded-full t-label font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 border ${
+                      isActive
+                        ? "bg-ink text-white border-ink"
+                        : "bg-white/95 backdrop-blur text-ink border-line hover:bg-white hover:border-ink/30"
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }}></span>
+                    <span>{STATUS_LABELS[status]} ({count})</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
       </div>
 
-      {/* Connected Bottom Sheet for Selected Report / Cluster */}
+      {/* Connected Bottom Sheet for Selected Report / Cluster (Cleared above mobile bottom tab bar) */}
       {selectedReport && (
-        <IncidentPinCard
-          report={selectedReport}
-          categoryName={getCategoryName(selectedReport.category_id || selectedReport.category)}
-          barangayName={getBarangayName(selectedReport.barangay_id) || selectedReport.barangay || "Legazpi City"}
-          timeSinceStr={timeSince(selectedReport.created_at)}
-          onClose={() => setSelectedReport(null)}
-          onActionClick={() => navigate(`/report?category=${selectedReport.category_id || selectedReport.category}`)}
-          actionLabel="Report a Hazard in This Area"
-        />
+        <div className="mb-14 sm:mb-0">
+          <IncidentPinCard
+            report={selectedReport}
+            categoryName={getCategoryName(selectedReport.category_id || selectedReport.category)}
+            barangayName={getBarangayName(selectedReport.barangay_id) || selectedReport.barangay || "Legazpi City"}
+            timeSinceStr={timeSince(selectedReport.created_at)}
+            onClose={() => setSelectedReport(null)}
+            onActionClick={() => navigate(`/report?category=${selectedReport.category_id || selectedReport.category}`)}
+            actionLabel="Report a Hazard in This Area"
+          />
+        </div>
       )}
     </div>
   );

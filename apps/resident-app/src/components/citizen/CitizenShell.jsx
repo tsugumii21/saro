@@ -970,7 +970,7 @@ export default function CitizenShell({ onReturnToWelcome }) {
                 to={to}
                 end={end}
                 className={({ isActive }) =>
-                  `relative flex h-full flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 transition-colors ${
+                  `relative flex h-full flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-inset rounded-xs ${
                     isActive ? "text-brand" : "text-ink-faint hover:text-ink"
                   }`
                 }

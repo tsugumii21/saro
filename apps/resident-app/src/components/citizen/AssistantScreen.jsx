@@ -147,7 +147,7 @@ export default function AssistantScreen() {
     <div className="flex flex-col h-full bg-canvas font-sans">
 
       {/* Scrollable Message List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+      <div className={`flex-1 overflow-y-auto p-4 space-y-3 min-h-0 ${messages.length === 1 ? "flex flex-col justify-center" : ""}`}>
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -245,32 +245,34 @@ export default function AssistantScreen() {
         <div ref={chatEndRef} />
       </div>
 
-      {/* Quick Prompt Chips */}
-      <div className="border-t border-line bg-white/80 backdrop-blur px-3 py-2 shrink-0 w-full max-w-full overflow-hidden">
-        <div className="relative w-full overflow-hidden">
-          {canScrollRight && (
+      {/* Quick Prompt Chips (Shown on initial load, auto-collapses once conversation starts) */}
+      {messages.length <= 1 && (
+        <div className="border-t border-line bg-white/80 backdrop-blur px-3 py-2 shrink-0 w-full max-w-full overflow-hidden transition-all duration-300">
+          <div className="relative w-full overflow-hidden">
+            {canScrollRight && (
+              <div
+                className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-white via-white/80 to-transparent z-10"
+                aria-hidden="true"
+              />
+            )}
             <div
-              className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-white via-white/80 to-transparent z-10"
-              aria-hidden="true"
-            />
-          )}
-          <div
-            ref={chipsRef}
-            className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar w-full touch-pan-x"
-          >
-            {QUICK_PROMPTS.map((prompt, i) => (
-              <button
-                key={i}
-                onClick={() => handleSend(prompt.text)}
-                disabled={loading}
-                className="shrink-0 px-3 py-1.5 rounded-full bg-white border border-line t-label font-semibold text-ink hover:border-brand/40 hover:bg-brand-wash active:bg-brand-wash transition-colors whitespace-nowrap disabled:opacity-50 min-h-[32px]"
-              >
-                {prompt.label}
-              </button>
-            ))}
+              ref={chipsRef}
+              className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar w-full touch-pan-x"
+            >
+              {QUICK_PROMPTS.map((prompt, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSend(prompt.text)}
+                  disabled={loading}
+                  className="shrink-0 px-3 py-1.5 rounded-full bg-white border border-line t-label font-semibold text-ink hover:border-brand/40 hover:bg-brand-wash active:bg-brand-wash transition-colors whitespace-nowrap disabled:opacity-50 min-h-[32px]"
+                >
+                  {prompt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Input Bar with Voice Message Icon Button */}
       <div className="border-t border-line bg-white px-3.5 py-2.5 shrink-0">

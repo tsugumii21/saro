@@ -208,13 +208,45 @@ export async function getReportsByDevice(deviceId) {
 }
 
 const DEMO_MAP_REPORTS = [
-  { id: "demo-1", tracking_code: "SR-8F2K", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1438, lng: 123.7448, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 5).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
-  { id: "demo-2", tracking_code: "SR-8F2L", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1439, lng: 123.7449, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
-  { id: "demo-3", tracking_code: "SR-8F2M", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1437, lng: 123.7447, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 3).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
-  { id: "demo-4", tracking_code: "SR-8F2N", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1440, lng: 123.7450, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
-  { id: "demo-5", tracking_code: "SR-3M9P", category: "open_drain", category_label: "Uncovered Drain & Broken Manhole", lat: 13.1415, lng: 123.7410, status: "assigned", priority: "medium", created_at: new Date(Date.now() - 3600000 * 18).toISOString(), barangay: "Em's Barrio" },
-  { id: "demo-6", tracking_code: "SR-7N4L", category: "pothole", category_label: "Road Pothole & Surface Damage", lat: 13.1490, lng: 123.7380, status: "resolved", priority: "low", created_at: new Date(Date.now() - 3600000 * 48).toISOString(), barangay: "Gogon" },
-  { id: "demo-7", tracking_code: "SR-1B9Q", category: "typhoon_debris", category_label: "Typhoon Debris & Structural Damage", lat: 13.1395, lng: 123.7465, status: "received", priority: "medium", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Oro Site" }
+  // 1. Emergency — Panic Alert (3 clustered reports: SR-8F01, SR-8F02, SR-8F03)
+  { id: "demo-panic-1", tracking_code: "SR-8F01", category: "emergency_unspecified", category_label: "Emergency — Panic Alert", lat: 13.1400, lng: 123.7440, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 1).toISOString(), barangay: "Legazpi City", cluster_id: "cluster-panic", description: "Anonymous emergency panic alert triggered via mobile dispatch app." },
+  { id: "demo-panic-2", tracking_code: "SR-8F02", category: "emergency_unspecified", category_label: "Emergency — Panic Alert", lat: 13.1401, lng: 123.7441, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Legazpi City", cluster_id: "cluster-panic", description: "Secondary panic beacon ping received near City Command Center." },
+  { id: "demo-panic-3", tracking_code: "SR-8F03", category: "emergency_unspecified", category_label: "Emergency — Panic Alert", lat: 13.1399, lng: 123.7439, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 3).toISOString(), barangay: "Legazpi City", cluster_id: "cluster-panic", description: "Rapid repeat panic signal logged in Legazpi emergency zone." },
+
+  // 2. Gas Leak & Chemical Spill (3 clustered reports: SR-7F01, SR-7F02, SR-7F03)
+  { id: "demo-gas-1", tracking_code: "SR-7F01", category: "gas_leak", category_label: "Gas Leak & Chemical Spill", lat: 13.1365, lng: 123.7335, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 1).toISOString(), barangay: "Cruzada", cluster_id: "cluster-gas", description: "Strong LPG smell along main alleyway in Cruzada, source unconfirmed." },
+  { id: "demo-gas-2", tracking_code: "SR-7F02", category: "gas_leak", category_label: "Gas Leak & Chemical Spill", lat: 13.1366, lng: 123.7336, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Cruzada", cluster_id: "cluster-gas", description: "Chemical odor spreading near residential compound in Cruzada." },
+  { id: "demo-gas-3", tracking_code: "SR-7F03", category: "gas_leak", category_label: "Gas Leak & Chemical Spill", lat: 13.1364, lng: 123.7334, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Cruzada", cluster_id: "cluster-gas", description: "Suspected gas line leak near Cruzada bakery line." },
+
+  // 3. Road Pothole & Surface Damage (2 clustered reports: SR-1F01, SR-1F02)
+  { id: "demo-pothole-1", tracking_code: "SR-1F01", category: "pothole", category_label: "Road Pothole & Surface Damage", lat: 13.1490, lng: 123.7380, status: "resolved", priority: "low", created_at: new Date(Date.now() - 3600000 * 80).toISOString(), barangay: "Gogon", cluster_id: "cluster-pothole", description: "Deep pothole on the northbound lane in Gogon, two tricycles damaged." },
+  { id: "demo-pothole-2", tracking_code: "SR-1F02", category: "pothole", category_label: "Road Pothole & Surface Damage", lat: 13.1491, lng: 123.7381, status: "resolved", priority: "low", created_at: new Date(Date.now() - 3600000 * 75).toISOString(), barangay: "Gogon", cluster_id: "cluster-pothole", description: "Asphalt cracking and sunken road patch along Gogon elementary gate." },
+
+  // 4. Flooding & Water Inundation (2 clustered reports: SR-2F01, SR-2F02)
+  { id: "demo-flood-1", tracking_code: "SR-2F01", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1438, lng: 123.7448, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 5).toISOString(), barangay: "Bitano", cluster_id: "cluster-flood", description: "Flooding near Bitano market line. Water level rising fast by the bakery." },
+  { id: "demo-flood-2", tracking_code: "SR-2F02", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1439, lng: 123.7449, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Bitano", cluster_id: "cluster-flood", description: "Flood water entering residential doorways near Bitano market line." },
+
+  // 5. Fire Outbreak & Structural Fire (2 clustered reports: SR-3F01, SR-3F02)
+  { id: "demo-fire-1", tracking_code: "SR-3F01", category: "fire", category_label: "Fire Outbreak & Structural Fire", lat: 13.1580, lng: 123.7520, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 3).toISOString(), barangay: "Rawis", cluster_id: "cluster-fire", description: "Smoke coming from the second floor of the commercial store in Rawis." },
+  { id: "demo-fire-2", tracking_code: "SR-3F02", category: "fire", category_label: "Fire Outbreak & Structural Fire", lat: 13.1581, lng: 123.7521, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Rawis", cluster_id: "cluster-fire", description: "Electrical sparks and heavy black smoke visible from street level in Rawis." },
+
+  // 6. Public Order & Crime Incident (1 report: SR-4F01)
+  { id: "demo-crime-1", tracking_code: "SR-4F01", category: "crime", category_label: "Public Order & Crime Incident", lat: 13.1610, lng: 123.7510, status: "assigned", priority: "medium", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Rawis", description: "Group disturbance outside sari-sari store in Rawis, bottle broken." },
+
+  // 7. Medical Emergency & Injury (1 report: SR-5F01)
+  { id: "demo-med-1", tracking_code: "SR-5F01", category: "medical", category_label: "Medical Emergency & Injury", lat: 13.1500, lng: 123.7490, status: "resolved", priority: "high", created_at: new Date(Date.now() - 3600000 * 9).toISOString(), barangay: "Bonot", description: "Elderly neighbour collapsed at home, breathing but unresponsive in Bonot." },
+
+  // 8. Coastal Storm Surge & Marine Emergency (1 report: SR-6F01)
+  { id: "demo-surge-1", tracking_code: "SR-6F01", category: "coastal_hazard", category_label: "Coastal Storm Surge & Marine Emergency", lat: 13.1650, lng: 123.7420, status: "assigned", priority: "high", created_at: new Date(Date.now() - 3600000 * 14).toISOString(), barangay: "Dap-Dap", description: "Storm surge pushing over the breakwater at Dap-Dap during high tide." },
+
+  // 9. Landslide & Soil Erosion (1 report: SR-9F01)
+  { id: "demo-slide-1", tracking_code: "SR-9F01", category: "landslide", category_label: "Landslide & Soil Erosion", lat: 13.1180, lng: 123.7250, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 20).toISOString(), barangay: "Homapon", description: "Soil slipping down the cut slope above the barangay road in Homapon." },
+
+  // 10. Road Obstruction & Signal Damage (1 report: SR-0F01)
+  { id: "demo-traffic-1", tracking_code: "SR-0F01", category: "traffic_obstruction", category_label: "Road Obstruction & Signal Damage", lat: 13.1420, lng: 123.7540, status: "assigned", priority: "medium", created_at: new Date(Date.now() - 3600000 * 26).toISOString(), barangay: "Victory Village", description: "Traffic light at Victory Village junction stuck on red in all directions." },
+
+  // 11. Bridge & Seawall Damage (1 report: SR-BF01)
+  { id: "demo-bridge-1", tracking_code: "SR-BF01", category: "bridge_damage", category_label: "Bridge & Seawall Damage", lat: 13.1320, lng: 123.7560, status: "assigned", priority: "high", created_at: new Date(Date.now() - 3600000 * 30).toISOString(), barangay: "Puro", description: "Crack widening on the seawall walkway near Puro pier." }
 ];
 
 /** Coarse public hazard map. Coordinates are rounded server-side to ~110 m. */

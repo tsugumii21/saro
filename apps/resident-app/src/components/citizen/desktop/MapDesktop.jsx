@@ -229,7 +229,7 @@ export default function MapDesktop() {
             )}
 
             <div className="flex flex-col gap-2.5">
-              {displayReports.map(({ report: r, count }) => {
+              {displayReports.map(({ report: r, count, members }) => {
                 const isSelected = Boolean(selectedReport) && (
                   selectedReport === r ||
                   (Boolean(r.id) && Boolean(selectedReport.id) && String(r.id) === String(selectedReport.id)) ||
@@ -247,6 +247,7 @@ export default function MapDesktop() {
                   setSelectedReport({
                     ...r,
                     clusterCount: count,
+                    members: (members || [r]).slice(0, 3),
                     categoryName: getCategoryName(r.category_id || r.category),
                     barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
                     timeSinceStr: timeSince(r.created_at),
@@ -296,7 +297,7 @@ export default function MapDesktop() {
                       </div>
                       {count > 1 && (
                         <span className="text-[10px] font-mono font-bold bg-brand-wash text-brand border border-brand-edge/60 px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
-                          ⚡ {count} reports
+                          ⚡ {Math.min(count, 3)} reports
                         </span>
                       )}
                     </div>
@@ -321,7 +322,7 @@ export default function MapDesktop() {
           accidentBlackspots={accidentBlackspots}
           showToggles={true}
           hidden={hiddenLayers}
-          reports={displayReports.map(({ report: r, count }) => ({
+          reports={displayReports.map(({ report: r, count, members }) => ({
             id: r.cluster_id || r.id,
             lat: r.lat,
             lng: r.lng,
@@ -333,11 +334,16 @@ export default function MapDesktop() {
             barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
             timeSinceStr: timeSince(r.created_at),
             status: r.status,
+            members: (members || [r]).slice(0, 3).map(m => ({
+              ...m,
+              categoryName: getCategoryName(m.category_id || m.category)
+            })),
+            onTrackClick: (code) => navigate(`/track?code=${code}`),
             onActionClick: () => navigate(`/report?category=${r.category_id || r.category}`),
             onSelect: () => {
               const lat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
               const lng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
-              setSelectedReport({ ...r, clusterCount: count });
+              setSelectedReport({ ...r, clusterCount: count, members: (members || [r]).slice(0, 3) });
               if (!isNaN(lat) && !isNaN(lng) && lat && lng) {
                 setMapCenter([lng, lat]);
               }
@@ -354,8 +360,9 @@ export default function MapDesktop() {
               barangayName={getBarangayName(selectedReport.barangay_id) || selectedReport.barangay || "Legazpi City"}
               timeSinceStr={timeSince(selectedReport.created_at)}
               onClose={() => setSelectedReport(null)}
+              onTrackClick={(code) => navigate(`/track?code=${code}`)}
               onActionClick={() => navigate(`/report?category=${selectedReport.category_id || selectedReport.category}`)}
-              actionLabel="Report a Hazard in This Area"
+              actionLabel="Report Another Hazard Here"
             />
           </div>
         )}

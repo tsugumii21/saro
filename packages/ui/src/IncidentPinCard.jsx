@@ -8,6 +8,7 @@ export default function IncidentPinCard({
   categoryName,
   barangayName,
   onClose,
+  onTrackClick,
   onActionClick,
   actionLabel = "Report a Hazard in This Area",
   timeSinceStr,
@@ -16,7 +17,24 @@ export default function IncidentPinCard({
   const [loadingPhotos, setLoadingPhotos] = useState(false);
 
   const isCluster = (report?.clusterCount || report?.count || 1) > 1;
-  const clusterCount = report?.clusterCount || report?.count || 1;
+  const clusterCount = Math.min(report?.clusterCount || report?.count || 1, 3);
+
+  const categoryPrefixes = {
+    emergency_unspecified: "SR-8F01",
+    gas_leak: "SR-7F01",
+    pothole: "SR-1F01",
+    flood: "SR-2F01",
+    fire: "SR-3F01",
+    crime: "SR-4F01",
+    medical: "SR-5F01",
+    coastal_hazard: "SR-6F01",
+    landslide: "SR-9F01",
+    traffic_obstruction: "SR-0F01",
+    bridge_damage: "SR-BF01",
+    typhoon_debris: "SR-1B01",
+  };
+  const mainCatKey = report?.category_id || report?.category || "emergency_unspecified";
+  const singleReportCode = report?.tracking_code || report?.trackingCode || report?.code || categoryPrefixes[mainCatKey] || "SR-0F01";
 
   useEffect(() => {
     if (!report?.id) return;
@@ -64,13 +82,13 @@ export default function IncidentPinCard({
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           <StatusTag status={report?.status || "received"} />
           {isCluster ? (
-            <span className="text-[10px] font-mono font-bold rounded-md px-2 py-0.5 bg-ink text-white shadow-2xs flex items-center gap-1 shrink-0">
-              <Sparkles className="w-3 h-3 text-amber-400" />
+            <span className="text-[10px] font-mono font-bold rounded-md px-2 py-0.5 bg-brand-wash text-brand border border-brand-edge/60 shadow-2xs flex items-center gap-1 shrink-0">
+              <Sparkles className="w-3.5 h-3.5 text-brand" />
               {clusterCount} reports in cluster
             </span>
           ) : (
             <span className="text-[10px] font-mono font-bold text-ink-muted bg-sunken px-2 py-0.5 rounded-md border border-line shrink-0">
-              {report?.tracking_code || "SR-PIN"}
+              {singleReportCode}
             </span>
           )}
         </div>
@@ -127,29 +145,94 @@ export default function IncidentPinCard({
         </div>
       )}
 
-      {/* Description / Summarized Context Box */}
-      {clusterSummary ? (
+      {/* Cluster Member Reports Breakdown (Max 3) */}
+      {isCluster && Array.isArray(report?.members) && report.members.length > 0 ? (
+        <div className="space-y-2 pt-2 border-t border-line">
+          <div className="text-[10px] font-bold uppercase text-ink-muted tracking-wider flex items-center justify-between">
+            <span>Cluster Member Reports ({Math.min(report.members.length, 3)})</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {report.members.slice(0, 3).map((item, idx) => {
+              const categoryPrefixes = {
+                emergency_unspecified: "SR-8F",
+                gas_leak: "SR-7F",
+                pothole: "SR-1F",
+                flood: "SR-2F",
+                fire: "SR-3F",
+                crime: "SR-4F",
+                medical: "SR-5F",
+                coastal_hazard: "SR-6F",
+                landslide: "SR-9F",
+                traffic_obstruction: "SR-0F",
+                bridge_damage: "SR-BF",
+              };
+              const catKey = item.category || report?.category || "emergency_unspecified";
+              const prefix = categoryPrefixes[catKey] || "SR-8F";
+              const fallbackCode = `${prefix}0${idx + 1}`;
+              const itemCode = item.tracking_code || item.trackingCode || item.code || fallbackCode;
+              return (
+                <div
+                  key={item.id || itemCode || idx}
+                  className="bg-surface p-3 rounded-lg border border-line flex flex-col gap-2 shadow-2xs"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-ink truncate">
+                      {item.category_label || categoryName || "Hazard Incident"}
+                    </span>
+                    <StatusTag status={item.status || "received"} size="sm" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-[11px] text-ink-muted">
+                    <span className="font-mono font-bold text-ink-muted bg-sunken px-2 py-0.5 rounded border border-line">
+                      {itemCode}
+                    </span>
+                    {onTrackClick && (
+                      <button
+                        onClick={() => onTrackClick(itemCode)}
+                        className="saro-btn saro-btn-primary saro-btn-sm font-bold text-[11px] py-1 px-2.5"
+                      >
+                        Track {itemCode}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Description / Summarized Context Box (Single Report) */}
+      {!isCluster && clusterSummary ? (
         <div className="bg-sunken p-3.5 rounded-lg border border-line text-xs sm:text-sm text-ink leading-relaxed font-sans space-y-1">
-          {isCluster && (
-            <span className="font-bold text-brand block text-[10px] uppercase tracking-wider">
-              Summarized Context
-            </span>
-          )}
           <span>{clusterSummary}</span>
         </div>
       ) : null}
 
       {/* Bottom Action Footer */}
-      {onActionClick && (
-        <div className="pt-3 border-t border-line">
-          <button
-            onClick={onActionClick}
-            className="saro-btn saro-btn-primary saro-btn-lg w-full font-bold shadow-md hover:shadow-lg transition-all text-xs sm:text-sm py-3"
-          >
-            {actionLabel}
-          </button>
-        </div>
-      )}
+      {(() => {
+        const trackingCode = singleReportCode;
+        return (
+          <div className="pt-3 border-t border-line flex flex-col gap-2">
+            {!isCluster && onTrackClick && trackingCode ? (
+              <button
+                onClick={() => onTrackClick(trackingCode)}
+                className="saro-btn saro-btn-primary saro-btn-lg w-full font-bold shadow-md hover:shadow-lg transition-all text-xs sm:text-sm py-2.5 flex items-center justify-center gap-2"
+              >
+                <span>Track Report &amp; Full History ({trackingCode})</span>
+              </button>
+            ) : null}
+
+            {onActionClick && (
+              <button
+                onClick={onActionClick}
+                className={`saro-btn ${!isCluster && onTrackClick && trackingCode ? "saro-btn-secondary" : "saro-btn-primary"} saro-btn-lg w-full font-bold shadow-xs transition-all text-xs py-2 flex items-center justify-center gap-1.5`}
+              >
+                {actionLabel}
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

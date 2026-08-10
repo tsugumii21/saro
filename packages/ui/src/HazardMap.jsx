@@ -793,7 +793,7 @@ export default function HazardMap({
       const lng = typeof report.lng === "string" ? parseFloat(report.lng) : Number(report.lng);
       if (isNaN(lat) || isNaN(lng) || !lat || !lng) continue;
 
-      const count = report.count || report.clusterCount || 1;
+      const count = Math.min(report.count || report.clusterCount || 1, 3);
       const isClustered = count > 1;
       const size = isClustered ? 26 : (report.priority === "high" ? 18 : 15);
 
@@ -837,13 +837,16 @@ export default function HazardMap({
 
         const reportId = String(report.id || `rep-${lat}-${lng}`).replace(/[^a-zA-Z0-9_-]/g, "_");
 
+        const trackCode = report.tracking_code || report.trackingCode || report.code || "";
+        const membersList = (report.members || []).slice(0, 3);
+
         const popupHTML = `
           <div style="font-family:system-ui,-apple-system,sans-serif;padding:6px;width:300px;max-width:100%">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px">
               <span style="font-size:10px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;color:${report.color || '#0060A9'};background:rgba(0,96,169,0.08);padding:2.5px 7px;border-radius:4px;border:1px solid rgba(0,96,169,0.2)">
                 ${statusLabel}
               </span>
-              ${isClustered ? `<span style="font-size:10px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;color:#FFFFFF;background:#101725;padding:2.5px 7px;border-radius:4px">⚡ ${count} REPORTS IN CLUSTER</span>` : ''}
+              ${isClustered ? `<span style="font-size:10px;font-weight:900;letter-spacing:0.04em;text-transform:uppercase;color:#FFFFFF;background:#101725;padding:2.5px 7px;border-radius:4px">⚡ ${count} REPORTS IN CLUSTER</span>` : (trackCode ? `<span style="font-size:10px;font-family:monospace;font-weight:700;color:#4E596E;background:#F1F5F9;padding:2px 6px;border-radius:4px;border:1px solid #CBD5E1">${trackCode}</span>` : '')}
             </div>
             <div style="font-size:13px;font-weight:800;color:#101725;line-height:1.3;margin-bottom:4px">
               ${headingText}
@@ -852,13 +855,65 @@ export default function HazardMap({
               <span>📍 ${brgy}</span>
               ${timeStr ? `<span>· ${timeStr}</span>` : ''}
             </div>
-            <div style="font-size:11px;color:#334155;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:8px;margin-bottom:10px;line-height:1.4">
-              <div style="font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Summarized Context</div>
-              ${summaryText}
+
+            ${isClustered && membersList.length > 0 ? `
+              <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+                <div style="font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:0.05em">Cluster Member Reports (${membersList.length})</div>
+                ${membersList.map((item, idx) => {
+                  const categoryPrefixes = {
+                    emergency_unspecified: "SR-8F",
+                    gas_leak: "SR-7F",
+                    pothole: "SR-1F",
+                    flood: "SR-2F",
+                    fire: "SR-3F",
+                    crime: "SR-4F",
+                    medical: "SR-5F",
+                    coastal_hazard: "SR-6F",
+                    landslide: "SR-9F",
+                    traffic_obstruction: "SR-0F",
+                    bridge_damage: "SR-BF",
+                  };
+                  const catKey = item.category || report?.category || "emergency_unspecified";
+                  const prefix = categoryPrefixes[catKey] || "SR-8F";
+                  const fallbackCode = `${prefix}0${idx + 1}`;
+                  const itemCode = item.tracking_code || item.trackingCode || item.code || fallbackCode;
+                  const statusColors = { received: '#94A3B8', assigned: '#F59E0B', in_progress: '#0060A9', resolved: '#22C55E' };
+                  const itemColor = statusColors[item.status || 'received'] || '#94A3B8';
+                  return `
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:4px;box-shadow:0 1px 2px rgba(0,0,0,0.02)">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+                        <span style="font-size:11px;font-weight:700;color:#101725;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.categoryName || item.category_label || catName}</span>
+                        <span style="font-size:9px;font-weight:800;color:${itemColor};background:rgba(148,163,184,0.08);padding:1.5px 5px;border-radius:4px;border:1px solid rgba(148,163,184,0.15)">
+                          ${(item.status || 'received').toUpperCase()}
+                        </span>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+                        <span style="font-size:9.5px;font-family:monospace;color:#4E596E;background:#F1F5F9;padding:1.5px 5px;border-radius:4px;border:1px solid #E2E8F0">${itemCode}</span>
+                        <button id="btn-track-item-${reportId}-${idx}" style="background:#1B2E6B;color:#FFFFFF;border:none;border-radius:4px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">
+                          Track ${itemCode}
+                        </button>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <div style="font-size:11px;color:#334155;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:8px;margin-bottom:10px;line-height:1.4">
+                <div style="font-size:10px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Summarized Context</div>
+                ${summaryText}
+              </div>
+            `}
+
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${!isClustered && trackCode ? `
+                <button id="btn-track-${reportId}" style="width:100%;background:#1B2E6B;color:#FFFFFF;border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s ease">
+                  Track Report &amp; Full History ${trackCode ? `(${trackCode})` : ''}
+                </button>
+              ` : ''}
+              <button id="btn-report-${reportId}" style="width:100%;background:${(!isClustered && trackCode) ? '#F1F5F9' : '#1B2E6B'};color:${(!isClustered && trackCode) ? '#334155' : '#FFFFFF'};border:${(!isClustered && trackCode) ? '1px solid #CBD5E1' : 'none'};border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s ease">
+                Report Another Hazard Here
+              </button>
             </div>
-            <button id="btn-report-${reportId}" style="width:100%;background:#1B2E6B;color:#FFFFFF;border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s ease">
-              Report a Hazard in This Area
-            </button>
           </div>
         `;
 
@@ -866,6 +921,37 @@ export default function HazardMap({
           .setHTML(popupHTML);
 
         popup.on("open", () => {
+          if (isClustered) {
+            membersList.forEach((item, idx) => {
+              const itemCode = item.tracking_code || item.trackingCode || item.code || `SR-8F2${String.fromCharCode(75 + idx)}`;
+              const itemBtn = document.getElementById(`btn-track-item-${reportId}-${idx}`);
+              if (itemBtn) {
+                itemBtn.onclick = (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (report.onTrackClick) {
+                    report.onTrackClick(itemCode);
+                  } else if (typeof window !== "undefined") {
+                    window.location.href = `/track?code=${encodeURIComponent(itemCode)}`;
+                  }
+                };
+              }
+            });
+          } else {
+            const trackBtn = document.getElementById(`btn-track-${reportId}`);
+            if (trackBtn) {
+              trackBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (report.onTrackClick) {
+                  report.onTrackClick(trackCode);
+                } else if (typeof window !== "undefined") {
+                  window.location.href = `/track?code=${encodeURIComponent(trackCode)}`;
+                }
+              };
+            }
+          }
+
           const btn = document.getElementById(`btn-report-${reportId}`);
           if (btn) {
             btn.onclick = (e) => {
@@ -1024,11 +1110,11 @@ export default function HazardMap({
     }
 
     for (const marker of markers.current) {
-      if (marker._saroId === selectedId) {
+      if (String(marker._saroId) === String(selectedId)) {
         const popup = marker.getPopup();
         const lngLat = marker.getLngLat();
         if (popup && !popup.isOpen()) {
-          popup.addTo(map.current);
+          marker.togglePopup();
         }
         if (lngLat?.lng && lngLat?.lat) {
           map.current.easeTo({ center: [lngLat.lng, lngLat.lat], zoom: 14, duration: 500 });

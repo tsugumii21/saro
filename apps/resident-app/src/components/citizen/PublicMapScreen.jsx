@@ -187,14 +187,25 @@ export default function PublicMapScreen() {
           accidentBlackspots={accidentBlackspots}
           showToggles={true}
           hidden={hiddenLayers}
-          reports={displayReports.map(({ report: r, count }) => ({
+          reports={displayReports.map(({ report: r, count, members }) => ({
             id: r.cluster_id || r.id,
             lat: r.lat,
             lng: r.lng,
             priority: r.priority,
             color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
             count: count,
-            onSelect: () => setSelectedReport({ ...r, clusterCount: count }),
+            category: r.category_id || r.category,
+            categoryName: getCategoryName(r.category_id || r.category),
+            barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
+            timeSinceStr: timeSince(r.created_at),
+            status: r.status,
+            members: (members || [r]).slice(0, 3).map(m => ({
+              ...m,
+              categoryName: getCategoryName(m.category_id || m.category)
+            })),
+            onTrackClick: (code) => navigate(`/track?code=${code}`),
+            onActionClick: () => navigate(`/report?category=${r.category_id || r.category}`),
+            onSelect: () => setSelectedReport({ ...r, clusterCount: count, members: (members || [r]).slice(0, 3) }),
           }))}
         />
 
@@ -247,8 +258,9 @@ export default function PublicMapScreen() {
             barangayName={getBarangayName(selectedReport.barangay_id) || selectedReport.barangay || "Legazpi City"}
             timeSinceStr={timeSince(selectedReport.created_at)}
             onClose={() => setSelectedReport(null)}
+            onTrackClick={(code) => navigate(`/track?code=${code}`)}
             onActionClick={() => navigate(`/report?category=${selectedReport.category_id || selectedReport.category}`)}
-            actionLabel="Report a Hazard in This Area"
+            actionLabel="Report Another Hazard Here"
           />
         </div>
       )}

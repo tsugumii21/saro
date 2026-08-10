@@ -191,6 +191,8 @@ export default function HazardMap({
   rainfall = [],
   evacuationCenters = [],
   accidentBlackspots = [],
+  selectedId = null,
+  onClearSelectedReport,
   onPick,
   onSelectLocation,
   picked,
@@ -205,11 +207,13 @@ export default function HazardMap({
   const markers = useRef([]);
   const evacuationMarkers = useRef([]);
   const accidentMarkers = useRef([]);
+  const activeLayerPopup = useRef(null);
   const popoverRef = useRef(null);
 
   const [ready, setReady] = useState(false);
   const [placementVersion, setPlacementVersion] = useState(0);
   const [togglesOpen, setTogglesOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState("layers");
   const [active, setActive] = useState(() =>
     Object.fromEntries(HAZARD_LAYERS.map((l) => [l.id, l.defaultOn]))
   );
@@ -817,6 +821,8 @@ export default function HazardMap({
         .setLngLat([lng, lat])
         .addTo(map.current);
 
+      marker._saroId = report.id;
+
       if (report.title || report.categoryName || isClustered) {
         const catName = report.categoryName || "Incident Report";
         const brgy = report.barangayName || "Legazpi City";
@@ -897,13 +903,33 @@ export default function HazardMap({
         `display:${blackspotsVisible ? "flex" : "none"};align-items:center;justify-content:center;` +
         "font:900 15px/1 system-ui,-apple-system,sans-serif;";
 
-      const popup = new Popup({ offset: 14, closeButton: true }).setHTML(
-        `<div style="font-family:system-ui,-apple-system,sans-serif;padding:2px">` +
-        `<div style="font-weight:700;font-size:13px;color:#99520E">${spot.name}</div>` +
-        `<div style="font-size:11px;color:#101725;margin-top:2px">${spot.location_label || "Accident-prone area"}</div>` +
-        `<div style="font-size:11px;color:#4E596E;margin-top:4px">${spot.incident_count || 0} reported incidents. ${spot.last_reported || "Recently reported"}</div>` +
+      const popup = new Popup({ offset: 14, closeButton: true, maxWidth: "300px" }).setHTML(
+        `<div style="font-family:system-ui,-apple-system,sans-serif;padding:4px;width:260px;max-width:100%">` +
+        `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">` +
+        `<span style="font-size:10px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;color:#C66A16;background:rgba(198,106,22,0.08);padding:2.5px 7px;border-radius:4px;border:1px solid rgba(198,106,22,0.2)">` +
+        `⚠️ ACCIDENT BLACKSPOT` +
+        `</span>` +
+        `</div>` +
+        `<div style="font-size:13px;font-weight:800;color:#101725;line-height:1.3;margin-bottom:4px;padding-right:20px">` +
+        `${spot.name}` +
+        `</div>` +
+        `<div style="font-size:11px;color:#64748B;margin-bottom:10px;display:flex;align-items:center;gap:4px">` +
+        `<span>📍 ${spot.location_label || "Accident-prone area"}</span>` +
+        `</div>` +
+        `<div style="font-size:11px;color:#334155;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;line-height:1.4">` +
+        `<div style="font-size:10px;font-weight:800;color:#92400E;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Incident Record</div>` +
+        `<strong>${spot.incident_count || 0} reported incidents</strong>. ${spot.last_reported || "Recently reported"}. High caution advised.` +
+        `</div>` +
         `</div>`
       );
+
+      popup.on("open", () => {
+        if (activeLayerPopup.current && activeLayerPopup.current !== popup) {
+          activeLayerPopup.current.remove();
+        }
+        activeLayerPopup.current = popup;
+        if (onClearSelectedReport) onClearSelectedReport();
+      });
 
       const marker = new Marker({
         element: el,
@@ -934,21 +960,40 @@ export default function HazardMap({
       `;
 
       const centerId = center.id || `ec-${lat}-${lng}`;
-      const popup = new Popup({ offset: 14, closeButton: true }).setHTML(
-        `<div style="font-family:system-ui,-apple-system,sans-serif;padding:4px;min-width:210px">` +
-        `<div style="font-weight:700;font-size:13px;color:#087E6B;display:flex;align-items:center;gap:6px">` +
-        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#087E6B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>` +
-        `<span>${center.name}</span></div>` +
-        `<div style="font-size:11px;color:#101725;margin-top:3px">${center.address}</div>` +
-        `<div style="font-size:11px;color:#4E596E;margin-top:4px">Capacity: <strong style="color:#101725">${center.capacity || 500}</strong> · Status: <strong style="color:#087E6B">${center.status || "Ready"}</strong></div>` +
-        `${center.notes ? `<div style="font-size:10px;color:#64748B;margin-top:3px;font-style:italic">${center.notes}</div>` : ""}` +
-        `<button id="btn-navigate-${centerId}" style="margin-top:8px;width:100%;background:#087E6B;color:#ffffff;border:none;border-radius:6px;padding:6px 10px;font-weight:700;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">` +
+      const popup = new Popup({ offset: 14, closeButton: true, maxWidth: "320px" }).setHTML(
+        `<div style="font-family:system-ui,-apple-system,sans-serif;padding:4px;width:270px;max-width:100%">` +
+        `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">` +
+        `<span style="font-size:10px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;color:#087E6B;background:rgba(8,126,107,0.08);padding:2.5px 7px;border-radius:4px;border:1px solid rgba(8,126,107,0.2);display:inline-flex;align-items:center;gap:4px">` +
+        `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#087E6B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>` +
+        `EVACUATION CENTER` +
+        `</span>` +
+        `</div>` +
+        `<div style="font-size:14px;font-weight:800;color:#101725;line-height:1.3;margin-bottom:4px;padding-right:20px">` +
+        `${center.name}` +
+        `</div>` +
+        `<div style="font-size:11px;color:#64748B;margin-bottom:10px;display:flex;align-items:center;gap:4px">` +
+        `<span>📍 ${center.address}</span>` +
+        `</div>` +
+        `<div style="font-size:11px;color:#334155;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.4">` +
+        `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">` +
+        `<span>Capacity: <strong style="color:#101725">${center.capacity || 500}</strong></span>` +
+        `<span style="color:#087E6B;font-weight:700;background:rgba(8,126,107,0.1);padding:1px 6px;border-radius:4px">● ${center.status || "Ready"}</span>` +
+        `</div>` +
+        `${center.notes ? `<div style="font-size:10px;color:#64748B;margin-top:4px;font-style:italic">${center.notes}</div>` : ""}` +
+        `</div>` +
+        `<button id="btn-navigate-${centerId}" style="width:100%;background:#087E6B;color:#ffffff;border:none;border-radius:8px;padding:9px 12px;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 1px 3px rgba(8,126,107,0.3);transition:all 0.15s ease">` +
         `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>` +
         `Get Directions (Walking)</button>` +
         `</div>`
       );
 
       popup.on("open", () => {
+        if (activeLayerPopup.current && activeLayerPopup.current !== popup) {
+          activeLayerPopup.current.remove();
+        }
+        activeLayerPopup.current = popup;
+        if (onClearSelectedReport) onClearSelectedReport();
+
         const btn = document.getElementById(`btn-navigate-${centerId}`);
         if (btn) {
           btn.onclick = (e) => {
@@ -966,7 +1011,32 @@ export default function HazardMap({
       }).setLngLat([lng, lat]).setPopup(popup).addTo(map.current);
       evacuationMarkers.current.push(marker);
     }
-  }, [reports, evacuationCenters, accidentBlackspots, ready, active, hidden, placementVersion, startEvacuationNavigation]);
+  }, [reports, evacuationCenters, accidentBlackspots, ready, active, hidden, placementVersion, startEvacuationNavigation, onClearSelectedReport]);
+
+  /* ── Auto-Open Selected Marker Popup & Fly ────────────────────────────── */
+
+  useEffect(() => {
+    if (!ready || !map.current || !selectedId) return;
+
+    if (activeLayerPopup.current) {
+      activeLayerPopup.current.remove();
+      activeLayerPopup.current = null;
+    }
+
+    for (const marker of markers.current) {
+      if (marker._saroId === selectedId) {
+        const popup = marker.getPopup();
+        const lngLat = marker.getLngLat();
+        if (popup && !popup.isOpen()) {
+          popup.addTo(map.current);
+        }
+        if (lngLat?.lng && lngLat?.lat) {
+          map.current.easeTo({ center: [lngLat.lng, lngLat.lat], zoom: 14, duration: 500 });
+        }
+        break;
+      }
+    }
+  }, [selectedId, ready]);
 
   /* ── Picked pin ─────────────────────────────────────────────────────────── */
 
@@ -1010,6 +1080,39 @@ export default function HazardMap({
 
   return (
     <div className={`relative ${className}`} style={style}>
+      <style>{`
+        .maplibregl-popup-content {
+          background: #ffffff !important;
+          border: 1px solid #E2E8F0 !important;
+          border-radius: 12px !important;
+          padding: 12px 14px !important;
+          box-shadow: 0 10px 25px -5px rgba(16, 23, 37, 0.15), 0 8px 10px -6px rgba(16, 23, 37, 0.1) !important;
+        }
+        .maplibregl-popup-close-button {
+          width: 28px !important;
+          height: 28px !important;
+          border-radius: 8px !important;
+          top: 8px !important;
+          right: 8px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          font-size: 16px !important;
+          color: #64748B !important;
+          background: transparent !important;
+          border: none !important;
+          cursor: pointer !important;
+          transition: all 0.15s ease !important;
+        }
+        .maplibregl-popup-close-button:hover {
+          background: #F1F5F9 !important;
+          color: #101725 !important;
+        }
+        .maplibregl-popup-tip {
+          border-top-color: #ffffff !important;
+          border-bottom-color: #ffffff !important;
+        }
+      `}</style>
       <div ref={container} className="h-full w-full" />
 
       {/* Reusable Layers Dropdown Popover */}
@@ -1025,43 +1128,68 @@ export default function HazardMap({
           </button>
 
           {togglesOpen && (
-            <div className="absolute top-11 right-0 z-30 bg-white/95 backdrop-blur border border-line rounded-md p-3 shadow-card min-w-[210px] max-h-[calc(100vh-140px)] overflow-y-auto animate-fade-in text-ink">
-              <span className="t-label block px-1 pb-2 font-bold text-ink uppercase tracking-wider text-[10px] border-b border-line mb-1.5">
-                Map Layers
-              </span>
-              <div className="flex flex-col gap-1">
-                {visibleToggles.map((layer) => (
-                  <label
-                    key={layer.id}
-                    className="t-body-sm flex cursor-pointer items-center gap-2 px-1 py-1 hover:bg-sunken rounded-xs transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(active[layer.id])}
-                      onChange={() => toggle(layer.id)}
-                      className="h-3.5 w-3.5 accent-brand"
-                    />
-                    <span className="text-xs font-medium text-ink">{layer.label}</span>
-                  </label>
-                ))}
+            <div className="absolute top-11 right-0 z-30 bg-white/95 backdrop-blur border border-line rounded-md p-2.5 shadow-card w-52 sm:w-[220px] max-h-52 sm:max-h-[calc(100vh-140px)] overflow-y-auto animate-fade-in text-ink">
+              {/* Segmented Tab Switcher */}
+              <div className="flex items-center gap-1 p-0.5 bg-sunken rounded border border-line mb-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setPanelTab("layers")}
+                  className={`flex-1 py-1 px-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                    panelTab === "layers"
+                      ? "bg-white text-ink shadow-2xs"
+                      : "text-ink-muted hover:text-ink"
+                  }`}
+                >
+                  Layers ({visibleToggles.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPanelTab("key")}
+                  className={`flex-1 py-1 px-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                    panelTab === "key"
+                      ? "bg-white text-ink shadow-2xs"
+                      : "text-ink-muted hover:text-ink"
+                  }`}
+                >
+                  Key (6)
+                </button>
               </div>
-              <div className="mt-2 border-t border-line pt-2">
-                <span className="t-label block px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-                  Map key
-                </span>
-                <div className="space-y-1.5 px-1 text-[11px] text-ink-muted">
-                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-dashed border-[#E11D48] bg-[#E11D48]/20" /> Accident blackspot zone</div>
-                  <div className="flex items-center gap-2"><span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-white bg-[#C66A16] text-[10px] font-black text-white">!</span> Accident spot marker</div>
+
+              {/* Tab 1: Map Layers Checkboxes */}
+              {panelTab === "layers" && (
+                <div className="flex flex-col gap-1">
+                  {visibleToggles.map((layer) => (
+                    <label
+                      key={layer.id}
+                      className="t-body-sm flex cursor-pointer items-center gap-2 px-1 py-1 hover:bg-sunken rounded-xs transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(active[layer.id])}
+                        onChange={() => toggle(layer.id)}
+                        className="h-3.5 w-3.5 accent-brand"
+                      />
+                      <span className="text-xs font-medium text-ink">{layer.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {/* Tab 2: Map Key Legend */}
+              {panelTab === "key" && (
+                <div className="space-y-1.5 px-1 py-0.5 text-[11px] text-ink-muted">
+                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-dashed border-[#E11D48] bg-[#E11D48]/20 shrink-0" /> Accident blackspot zone</div>
+                  <div className="flex items-center gap-2"><span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-white bg-[#C66A16] text-[10px] font-black text-white shrink-0">!</span> Accident spot marker</div>
                   <div className="flex items-center gap-2">
-                    <span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-white bg-[#087E6B] text-white">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-[4px] border border-white bg-[#087E6B] text-white shrink-0">
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                     </span> Evacuation shelter
                   </div>
-                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-[#2563EB] bg-[#3B82F6]/15" /> Flood extent</div>
-                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-[#995026] bg-[#A55B2A]/15" /> Volcanic corridor</div>
-                  <div className="flex items-center gap-2"><span className="h-0 w-5 border-t-2 border-alert" /> Mayon danger boundary</div>
+                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-[#2563EB] bg-[#3B82F6]/15 shrink-0" /> Flood extent</div>
+                  <div className="flex items-center gap-2"><span className="h-3 w-5 rounded-sm border border-[#995026] bg-[#A55B2A]/15 shrink-0" /> Volcanic corridor</div>
+                  <div className="flex items-center gap-2"><span className="h-0 w-5 border-t-2 border-alert shrink-0" /> Mayon danger boundary</div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

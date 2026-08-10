@@ -48,6 +48,7 @@ export default function MapDesktop() {
   const [categories, setCategories] = useState([]);
   const [barangays, setBarangays] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [mapCenter, setMapCenter] = useState(LEGAZPI_CENTER_LNGLAT);
   const [statusFilter, setStatusFilter] = useState("");
   const [hiddenLayers] = useState([]);
   const [rainfall, setRainfall] = useState([]);
@@ -227,42 +228,61 @@ export default function MapDesktop() {
               </div>
             )}
 
-            <div className="flex flex-col divide-y divide-line border-t border-b border-line">
+            <div className="flex flex-col gap-2.5">
               {displayReports.map(({ report: r, count }) => {
                 const isSelected = selectedReport?.id === r.id || selectedReport?.cluster_id === r.cluster_id;
                 return (
                   <button
                     key={r.id}
-                    onClick={() => setSelectedReport({ ...r, clusterCount: count })}
-                    className={`flex items-start gap-3 p-3 text-left transition-colors ${
+                    type="button"
+                    onClick={() => {
+                      const lat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
+                      const lng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
+                      setSelectedReport({
+                        ...r,
+                        clusterCount: count,
+                        categoryName: getCategoryName(r.category_id || r.category),
+                        barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
+                        timeSinceStr: timeSince(r.created_at),
+                      });
+                      if (!isNaN(lat) && !isNaN(lng) && lat && lng) {
+                        setMapCenter([lng, lat]);
+                      }
+                    }}
+                    className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs ${
                       isSelected
-                        ? "bg-brand-wash border-l-2 border-brand"
-                        : "hover:bg-raised/60 border-l-2 border-transparent"
+                        ? "bg-brand-wash border-brand ring-1 ring-brand/30"
+                        : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
                     }`}
                   >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0 mt-1.5"
-                      style={{ backgroundColor: STATUS_COLORS[r.status] || STATUS_COLORS.received }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-bold text-ink leading-tight">
+                    {/* Header Row: Dot + Title + StatusTag */}
+                    <div className="flex items-center justify-between gap-2 w-full">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: STATUS_COLORS[r.status] || STATUS_COLORS.received }}
+                        />
+                        <span className="text-xs font-bold text-ink leading-tight truncate">
                           {getCategoryName(r.category_id || r.category)}
                         </span>
-                        {count > 1 && (
-                          <span className="text-[9px] font-mono font-bold bg-brand text-white px-1.5 py-0.5 rounded-full">
-                            {count} reports
-                          </span>
-                        )}
                       </div>
-                      <div className="text-[11px] text-ink-muted flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3 text-ink-faint shrink-0" />
-                        <span className="truncate">{getBarangayName(r.barangay_id) || r.barangay || "Legazpi City"}</span>
-                        <span>·</span>
-                        <span className="shrink-0">{timeSince(r.created_at)}</span>
-                      </div>
+                      <StatusTag status={r.status} size="sm" />
                     </div>
-                    <StatusTag status={r.status} size="sm" />
+
+                    {/* Footer Row: Location + Time + Cluster Pill */}
+                    <div className="flex items-center justify-between gap-2 w-full text-[11px] text-ink-muted">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <MapPin className="w-3 h-3 text-brand shrink-0" />
+                        <span className="truncate">{getBarangayName(r.barangay_id) || r.barangay || "Legazpi City"}</span>
+                        <span className="text-ink-faint">·</span>
+                        <span className="shrink-0 text-ink-faint">{timeSince(r.created_at)}</span>
+                      </div>
+                      {count > 1 && (
+                        <span className="text-[10px] font-mono font-bold bg-brand-wash text-brand border border-brand-edge/60 px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
+                          ⚡ {count} reports
+                        </span>
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -275,7 +295,9 @@ export default function MapDesktop() {
       <div className="relative min-w-0 flex-1 h-full overflow-hidden">
         <HazardMap
           className="h-full w-full"
-          center={LEGAZPI_CENTER_LNGLAT}
+          center={mapCenter}
+          selectedId={selectedReport?.cluster_id || selectedReport?.id}
+          onClearSelectedReport={() => setSelectedReport(null)}
           zoom={13}
           rainfall={rainfall}
           evacuationCenters={evacuationCenters}
@@ -295,9 +317,31 @@ export default function MapDesktop() {
             timeSinceStr: timeSince(r.created_at),
             status: r.status,
             onActionClick: () => navigate(`/report?category=${r.category_id || r.category}`),
-            onSelect: () => setSelectedReport({ ...r, clusterCount: count }),
+            onSelect: () => {
+              const lat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
+              const lng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
+              setSelectedReport({ ...r, clusterCount: count });
+              if (!isNaN(lat) && !isNaN(lng) && lat && lng) {
+                setMapCenter([lng, lat]);
+              }
+            },
           }))}
         />
+
+        {/* Floating Incident & Cluster Details Overlay Card */}
+        {selectedReport && (
+          <div className="absolute bottom-6 left-6 z-30 w-full max-w-md shadow-2xl animate-fade-in">
+            <IncidentPinCard
+              report={selectedReport}
+              categoryName={getCategoryName(selectedReport.category_id || selectedReport.category)}
+              barangayName={getBarangayName(selectedReport.barangay_id) || selectedReport.barangay || "Legazpi City"}
+              timeSinceStr={timeSince(selectedReport.created_at)}
+              onClose={() => setSelectedReport(null)}
+              onActionClick={() => navigate(`/report?category=${selectedReport.category_id || selectedReport.category}`)}
+              actionLabel="Report a Hazard in This Area"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,172 +1,21 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search, Inbox, MapPin, Building2, ChevronRight, ThumbsUp, RotateCcw,
-  CloudOff, Info, UserPlus, X, MessageSquare, Image as ImageIcon, CheckCircle2, ShieldCheck, ArrowRight,
-  ChevronLeft, Copy, Check, Activity, ChevronDown,
+  CloudOff, Info, UserPlus, X, MessageSquare, Image as ImageIcon, ShieldCheck, ArrowRight,
+  Copy, Check, Activity,
 } from "lucide-react";
 import { StatusTag, TrackingCode, HazardMap } from "@saro/ui";
 import {
   getReportByTrackingCode, getStatusHistory, getOffices, getReportMedia,
-  getReportsByDevice, getMyReports, saroEvents,
+  getReportsByDevice, getMyReports, getOriginalMapDemoReports, saroEvents,
   confirmReport, disputeReport,
   listRememberedReports, updateRememberedStatus, listOutbox,
   CLIENT_STORAGE_KEYS, useAuth, STATUS_PIPELINE, STATUS_LABELS,
-  CLOSED_STATUSES, AUTO_CLOSE_DAYS,
+  CLOSED_STATUSES,
 } from "@saro/shared";
 import ReportTicket from "../ReportTicket";
 import ResidentAuthScreen from "../ResidentAuthScreen";
-
-const DEMO_RESIDENT_REPORTS = [
-  // 1. Emergency — Panic Alert (SR-8F01, SR-8F02, SR-8F03)
-  {
-    id: "demo-panic-1", tracking_code: "SR-8F01", category: "emergency_unspecified",
-    category_label: "Emergency — Panic Alert", status: "received",
-    lat: 13.1400, lng: 123.7440, created_at: new Date(Date.now() - 3600000 * 1).toISOString(),
-    description: "Anonymous emergency panic alert triggered via mobile dispatch app.",
-    barangay: "Legazpi City", assigned_office: "Legazpi 911", priority: "high"
-  },
-  {
-    id: "demo-panic-2", tracking_code: "SR-8F02", category: "emergency_unspecified",
-    category_label: "Emergency — Panic Alert", status: "received",
-    lat: 13.1401, lng: 123.7441, created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    description: "Secondary panic beacon ping received near City Command Center.",
-    barangay: "Legazpi City", assigned_office: "Legazpi 911", priority: "high"
-  },
-  {
-    id: "demo-panic-3", tracking_code: "SR-8F03", category: "emergency_unspecified",
-    category_label: "Emergency — Panic Alert", status: "received",
-    lat: 13.1399, lng: 123.7439, created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
-    description: "Rapid repeat panic signal logged in Legazpi emergency zone.",
-    barangay: "Legazpi City", assigned_office: "Legazpi 911", priority: "high"
-  },
-
-  // 2. Gas Leak & Chemical Spill (SR-7F01, SR-7F02, SR-7F03)
-  {
-    id: "demo-gas-1", tracking_code: "SR-7F01", category: "gas_leak",
-    category_label: "Gas Leak & Chemical Spill", status: "received",
-    lat: 13.1365, lng: 123.7335, created_at: new Date(Date.now() - 3600000 * 1).toISOString(),
-    description: "Strong LPG smell along main alleyway in Cruzada, source unconfirmed.",
-    barangay: "Cruzada", assigned_office: "BFP Legazpi", priority: "high"
-  },
-  {
-    id: "demo-gas-2", tracking_code: "SR-7F02", category: "gas_leak",
-    category_label: "Gas Leak & Chemical Spill", status: "received",
-    lat: 13.1366, lng: 123.7336, created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    description: "Chemical odor spreading near residential compound in Cruzada.",
-    barangay: "Cruzada", assigned_office: "BFP Legazpi", priority: "high"
-  },
-  {
-    id: "demo-gas-3", tracking_code: "SR-7F03", category: "gas_leak",
-    category_label: "Gas Leak & Chemical Spill", status: "received",
-    lat: 13.1364, lng: 123.7334, created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-    description: "Suspected gas line leak near Cruzada bakery line.",
-    barangay: "Cruzada", assigned_office: "BFP Legazpi", priority: "high"
-  },
-
-  // 3. Road Pothole & Surface Damage (SR-1F01, SR-1F02)
-  {
-    id: "demo-pothole-1", tracking_code: "SR-1F01", category: "pothole",
-    category_label: "Road Pothole & Surface Damage", status: "resolved",
-    lat: 13.1490, lng: 123.7380, created_at: new Date(Date.now() - 3600000 * 80).toISOString(),
-    description: "Deep pothole on the northbound lane in Gogon, two tricycles damaged.",
-    barangay: "Gogon", assigned_office: "City Engineering", priority: "low"
-  },
-  {
-    id: "demo-pothole-2", tracking_code: "SR-1F02", category: "pothole",
-    category_label: "Road Pothole & Surface Damage", status: "resolved",
-    lat: 13.1491, lng: 123.7381, created_at: new Date(Date.now() - 3600000 * 75).toISOString(),
-    description: "Asphalt cracking and sunken road patch along Gogon elementary gate.",
-    barangay: "Gogon", assigned_office: "City Engineering", priority: "low"
-  },
-
-  // 4. Flooding & Water Inundation (SR-2F01, SR-2F02)
-  {
-    id: "demo-flood-1", tracking_code: "SR-2F01", category: "flood",
-    category_label: "Flooding & Water Inundation", status: "in_progress",
-    lat: 13.1438, lng: 123.7448, created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-    description: "Flooding near Bitano market line. Water level rising fast by the bakery.",
-    barangay: "Bitano", assigned_office: "CDRRMO", priority: "high",
-    photo_url: "https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=800&q=80"
-  },
-  {
-    id: "demo-flood-2", tracking_code: "SR-2F02", category: "flood",
-    category_label: "Flooding & Water Inundation", status: "in_progress",
-    lat: 13.1439, lng: 123.7449, created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-    description: "Flood water entering residential doorways near Bitano market line.",
-    barangay: "Bitano", assigned_office: "CDRRMO", priority: "high"
-  },
-
-  // 5. Fire Outbreak & Structural Fire (SR-3F01, SR-3F02)
-  {
-    id: "demo-fire-1", tracking_code: "SR-3F01", category: "fire",
-    category_label: "Fire Outbreak & Structural Fire", status: "in_progress",
-    lat: 13.1580, lng: 123.7520, created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
-    description: "Smoke coming from the second floor of the commercial store in Rawis.",
-    barangay: "Rawis", assigned_office: "BFP Legazpi", priority: "high"
-  },
-  {
-    id: "demo-fire-2", tracking_code: "SR-3F02", category: "fire",
-    category_label: "Fire Outbreak & Structural Fire", status: "in_progress",
-    lat: 13.1581, lng: 123.7521, created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-    description: "Electrical sparks and heavy black smoke visible from street level in Rawis.",
-    barangay: "Rawis", assigned_office: "BFP Legazpi", priority: "high"
-  },
-
-  // 6. Public Order & Crime Incident (SR-4F01)
-  {
-    id: "demo-crime-1", tracking_code: "SR-4F01", category: "crime",
-    category_label: "Public Order & Crime Incident", status: "assigned",
-    lat: 13.1610, lng: 123.7510, created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-    description: "Group disturbance outside sari-sari store in Rawis, bottle broken.",
-    barangay: "Rawis", assigned_office: "PNP Legazpi", priority: "medium"
-  },
-
-  // 7. Medical Emergency & Injury (SR-5F01)
-  {
-    id: "demo-med-1", tracking_code: "SR-5F01", category: "medical",
-    category_label: "Medical Emergency & Injury", status: "resolved",
-    lat: 13.1500, lng: 123.7490, created_at: new Date(Date.now() - 3600000 * 9).toISOString(),
-    description: "Elderly neighbour collapsed at home, breathing but unresponsive in Bonot.",
-    barangay: "Bonot", assigned_office: "City Health Office", priority: "high"
-  },
-
-  // 8. Coastal Storm Surge & Marine Emergency (SR-6F01)
-  {
-    id: "demo-surge-1", tracking_code: "SR-6F01", category: "coastal_hazard",
-    category_label: "Coastal Storm Surge & Marine Emergency", status: "assigned",
-    lat: 13.1650, lng: 123.7420, created_at: new Date(Date.now() - 3600000 * 14).toISOString(),
-    description: "Storm surge pushing over the breakwater at Dap-Dap during high tide.",
-    barangay: "Dap-Dap", assigned_office: "Coast Guard Station", priority: "high"
-  },
-
-  // 9. Landslide & Soil Erosion (SR-9F01)
-  {
-    id: "demo-slide-1", tracking_code: "SR-9F01", category: "landslide",
-    category_label: "Landslide & Soil Erosion", status: "in_progress",
-    lat: 13.1180, lng: 123.7250, created_at: new Date(Date.now() - 3600000 * 20).toISOString(),
-    description: "Soil slipping down the cut slope above the barangay road in Homapon.",
-    barangay: "Homapon", assigned_office: "CDRRMO", priority: "high"
-  },
-
-  // 10. Road Obstruction & Signal Damage (SR-0F01)
-  {
-    id: "demo-traffic-1", tracking_code: "SR-0F01", category: "traffic_obstruction",
-    category_label: "Road Obstruction & Signal Damage", status: "assigned",
-    lat: 13.1420, lng: 123.7540, created_at: new Date(Date.now() - 3600000 * 26).toISOString(),
-    description: "Traffic light at Victory Village junction stuck on red in all directions.",
-    barangay: "Victory Village", assigned_office: "Public Safety Office", priority: "medium"
-  },
-
-  // 11. Bridge & Seawall Damage (SR-BF01)
-  {
-    id: "demo-bridge-1", tracking_code: "SR-BF01", category: "bridge_damage",
-    category_label: "Bridge & Seawall Damage", status: "assigned",
-    lat: 13.1320, lng: 123.7560, created_at: new Date(Date.now() - 3600000 * 30).toISOString(),
-    description: "Crack widening on the seawall walkway near Puro pier.",
-    barangay: "Puro", assigned_office: "City Engineering", priority: "high"
-  }
-];
 
 function timeSince(iso) {
   if (!iso) return "";
@@ -177,12 +26,6 @@ function timeSince(iso) {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
-}
-
-function daysLeftToConfirm(resolvedAt) {
-  if (!resolvedAt) return null;
-  const elapsed = (Date.now() - new Date(resolvedAt).getTime()) / 86_400_000;
-  return Math.max(0, Math.ceil(AUTO_CLOSE_DAYS - elapsed));
 }
 
 function tabKey(status) {
@@ -201,156 +44,6 @@ function formatTimelineDate(entry) {
   return date.toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 }
 
-function GroupedReportList({ mine, selectedCode, onSelect, timeSince }) {
-  const groups = useMemo(() => {
-    const map = new Map();
-    for (const r of mine) {
-      const key = r.category_label || r.category || "Other";
-      if (!map.has(key)) {
-        map.set(key, { label: key, category: r.category, items: [] });
-      }
-      map.get(key).items.push(r);
-    }
-    return [...map.values()];
-  }, [mine]);
-
-  const [expanded, setExpanded] = useState(() => {
-    const initial = {};
-    if (selectedCode) {
-      for (const g of groups) {
-        if (g.items.some((item) => item.tracking_code === selectedCode)) {
-          initial[g.label] = true;
-        }
-      }
-    }
-    return initial;
-  });
-
-  const toggleGroup = (label) => {
-    setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
-  };
-
-  return (
-    <div className="flex flex-col gap-2.5">
-      {groups.map((group) => {
-        const isSingle = group.items.length === 1;
-        const firstItem = group.items[0];
-        const isGroupExpanded = expanded[group.label];
-        const containsSelected = group.items.some((i) => i.tracking_code === selectedCode);
-
-        if (isSingle) {
-          const isSelected = selectedCode === firstItem.tracking_code;
-          return (
-            <button
-              key={firstItem.tracking_code}
-              onClick={() => onSelect(firstItem.tracking_code)}
-              className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs ${
-                isSelected
-                  ? "bg-brand-wash border-brand ring-1 ring-brand/30"
-                  : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
-              }`}
-              aria-current={isSelected ? "true" : undefined}
-            >
-              <div className="flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <TrackingCode code={firstItem.tracking_code} />
-                  <span className="text-[11px] text-ink-faint font-medium">
-                    · {timeSince(firstItem.created_at)}
-                  </span>
-                </div>
-                <StatusTag status={firstItem.status} size="sm" />
-              </div>
-              <div className="flex items-center justify-between gap-2 w-full">
-                <span className={`text-xs block leading-snug break-words flex-1 min-w-0 ${
-                  isSelected ? "font-extrabold text-brand" : "font-semibold text-ink"
-                }`}>
-                  {group.label}
-                </span>
-                <ChevronRight
-                  width={15}
-                  height={15}
-                  className={`shrink-0 transition-colors ${
-                    isSelected ? "text-brand" : "text-ink-faint"
-                  }`}
-                  aria-hidden="true"
-                />
-              </div>
-            </button>
-          );
-        }
-
-        return (
-          <div
-            key={group.label}
-            className={`rounded-lg border transition-all overflow-hidden shadow-2xs ${
-              containsSelected
-                ? "border-brand/60 bg-surface"
-                : "border-line bg-surface"
-            }`}
-          >
-            <button
-              onClick={() => toggleGroup(group.label)}
-              className="flex items-center justify-between gap-2 p-3.5 w-full text-left bg-raised/40 hover:bg-raised/80 transition-colors"
-            >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <span className="text-xs font-bold text-ink truncate">
-                  {group.label}
-                </span>
-                <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-brand-wash text-brand border border-brand-edge/60 shrink-0">
-                  {group.items.length} reports
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <ChevronDown
-                  width={16}
-                  height={16}
-                  className={`text-ink-muted transition-transform duration-200 ${
-                    isGroupExpanded ? "rotate-180 text-brand" : ""
-                  }`}
-                />
-              </div>
-            </button>
-
-            {isGroupExpanded && (
-              <div className="p-2 bg-surface flex flex-col gap-2 border-t border-line/60">
-                {group.items.map((item) => {
-                  const isSelected = selectedCode === item.tracking_code;
-                  return (
-                    <button
-                      key={item.tracking_code}
-                      onClick={() => onSelect(item.tracking_code)}
-                      className={`flex flex-col gap-1.5 p-2.5 rounded-md border text-left transition-all ${
-                        isSelected
-                          ? "bg-brand-wash border-brand ring-1 ring-brand/30"
-                          : "bg-surface border-line/80 hover:border-brand-edge hover:bg-raised/50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 w-full">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <TrackingCode code={item.tracking_code} />
-                          <span className="text-[10px] text-ink-faint">
-                            · {timeSince(item.created_at)}
-                          </span>
-                        </div>
-                        <StatusTag status={item.status} size="sm" />
-                      </div>
-                      {item.description && (
-                        <p className="text-[11px] text-ink-muted line-clamp-1 leading-tight">
-                          {item.description}
-                        </p>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * Desktop Track — Standardized 400px Left Panel + 2-Column Right Detail Card.
  *
@@ -358,6 +51,7 @@ function GroupedReportList({ mine, selectedCode, onSelect, timeSince }) {
  * Right panel (flex-1): 2-column desktop detail card (Option 3A Option A editorial guide empty state).
  */
 export default function TrackDesktop() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isResident } = useAuth();
   const preCode = searchParams.get("code") || "";
@@ -399,8 +93,10 @@ export default function TrackDesktop() {
 
   const loadMine = useCallback(async () => {
     const merged = new Map();
-    for (const r of DEMO_RESIDENT_REPORTS) {
-      merged.set(r.tracking_code, { ...r, origin: "demo" });
+    if (isResident) {
+      for (const row of getOriginalMapDemoReports()) {
+        merged.set(row.tracking_code, { ...row, origin: "map" });
+      }
     }
     for (const row of await listRememberedReports()) {
       merged.set(row.tracking_code, { ...row, origin: "device" });
@@ -435,18 +131,6 @@ export default function TrackDesktop() {
     setSelectedCode(c);
 
     if (detailPanelRef.current) detailPanelRef.current.scrollTop = 0;
-
-    const demoMatch = DEMO_RESIDENT_REPORTS.find((r) => r.tracking_code === c);
-    if (demoMatch) {
-      setReport(demoMatch);
-      updateRememberedStatus(demoMatch.tracking_code, demoMatch.status);
-      setHistory([
-        { status: "received", changed_at: demoMatch.created_at, note: "Report received by Legazpi Command Center" },
-        { status: demoMatch.status, changed_at: new Date(Date.now() - 1800000).toISOString(), note: `Status updated to ${demoMatch.status}` },
-      ]);
-      setSearching(false);
-      return;
-    }
 
     const { data, error: err } = await getReportByTrackingCode(c);
     if (err || !data) {
@@ -524,7 +208,6 @@ export default function TrackDesktop() {
   const awaitingAnswer = report?.status === "resolved";
   const stepIndex = STATUS_PIPELINE.indexOf(report?.status);
   const isClosed = CLOSED_STATUSES.includes(report?.status);
-  const daysLeft = awaitingAnswer ? daysLeftToConfirm(report?.resolved_at) : null;
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-canvas font-sans">
@@ -569,9 +252,10 @@ export default function TrackDesktop() {
           </form>
 
           {error && (
-            <p role="alert" className="text-xs font-bold border border-alert bg-alert-wash px-3.5 py-2.5 text-alert rounded-xs">
-              {error}
-            </p>
+            <div role="alert" className="border border-alert bg-alert-wash px-3.5 py-2.5 text-alert rounded-xs">
+              <p className="text-xs font-bold">Report Not Found</p>
+              <p className="mt-1 text-xs">{error}</p>
+            </div>
           )}
 
           {/* Queued / offline */}
@@ -596,15 +280,67 @@ export default function TrackDesktop() {
             </section>
           )}
 
-          {/* Grouped Accordion Report List */}
+          {/* My Reports list with High-Contrast Active State */}
           {mine.length > 0 ? (
             <section>
-              <GroupedReportList
-                mine={mine}
-                selectedCode={selectedCode}
-                onSelect={(code) => { setCode(code); search(code); }}
-                timeSince={timeSince}
-              />
+              <h2 className="text-xs font-bold text-ink-muted uppercase tracking-wider mb-2">
+                {isResident ? "Your Reports" : "Reports From This Device"}
+              </h2>
+              <div className="flex flex-col gap-2.5">
+                {mine.slice(0, 20).map((r) => {
+                  const isSelected = selectedCode === r.tracking_code;
+                  return (
+                    <article
+                      key={r.tracking_code}
+                      className={`flex flex-col gap-2 p-3.5 text-left rounded-lg border transition-all shadow-2xs ${
+                        isSelected
+                          ? "bg-brand-wash border-brand ring-1 ring-brand/30"
+                          : "bg-surface border-line hover:border-brand-edge hover:bg-raised/60"
+                      }`}
+                      aria-current={isSelected ? "true" : undefined}
+                    >
+                      {/* Header Row: Tracking Code + Time + StatusTag */}
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <TrackingCode code={r.tracking_code} />
+                          <span className="text-[11px] text-ink-faint font-medium">
+                            · {timeSince(r.created_at)}
+                          </span>
+                        </div>
+                        <StatusTag status={r.status} size="sm" />
+                      </div>
+
+                      {/* Title & Chevron Row */}
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <span className={`text-xs block leading-snug break-words flex-1 min-w-0 ${
+                          isSelected ? "font-extrabold text-brand" : "font-semibold text-ink"
+                        }`}>
+                          {r.category_label ?? r.category}
+                        </span>
+                        <ChevronRight
+                          width={15}
+                          height={15}
+                          className={`shrink-0 transition-colors ${
+                            isSelected ? "text-brand" : "text-ink-faint"
+                          }`}
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCode(r.tracking_code);
+                          navigate(`/track?code=${encodeURIComponent(r.tracking_code)}`);
+                          search(r.tracking_code);
+                        }}
+                        className="saro-btn saro-btn-primary saro-btn-sm saro-btn-block mt-0.5"
+                      >
+                        View Whole Report
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
 
               {/* Local Storage Info Footer */}
               <div
@@ -663,10 +399,10 @@ export default function TrackDesktop() {
         className="min-w-0 flex-1 overflow-y-auto bg-canvas"
         aria-label="Report detail"
       >
-        {/* Idle Guide State — min-h-full + justify-center for true vertical centering
-            inside the overflow-y-auto panel. my-auto was dead code here. */}
+        {/* Idle Guide State — anchored to the top of the overflow-y-auto panel so the
+            desk panel reads immediately instead of sitting below a band of empty space. */}
         {!report && !searching && (
-          <div className="min-h-full flex flex-col justify-center px-8 py-10">
+          <div className="flex flex-col px-8 pt-6 pb-10">
           <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
             <div className="border border-line bg-surface p-6 rounded-md shadow-xs flex flex-col gap-4">
               <div className="flex items-center gap-3">
@@ -685,7 +421,7 @@ export default function TrackDesktop() {
                   Try Sample Demonstration Reports:
                 </span>
                 <div className="flex flex-wrap gap-2">
-                  {DEMO_RESIDENT_REPORTS.map((demo) => (
+                  {mine.filter((demo) => demo.origin === "map").slice(0, 4).map((demo) => (
                     <button
                       key={demo.tracking_code}
                       onClick={() => { setCode(demo.tracking_code); search(demo.tracking_code); }}
@@ -693,7 +429,7 @@ export default function TrackDesktop() {
                     >
                       <TrackingCode code={demo.tracking_code} />
                       <span className="text-xs text-ink-muted group-hover:text-brand font-medium">
-                        · {demo.tracking_code === "SR-8F2K" ? "Flooding" : demo.tracking_code === "SR-3M9P" ? "Broken Manhole" : demo.tracking_code === "SR-7N4L" ? "Road Pothole" : demo.tracking_code === "SR-1B9Q" ? "Typhoon Debris" : demo.category_label}
+                        · {demo.category_label ?? demo.category}
                       </span>
                       <ArrowRight className="w-3 h-3 text-ink-faint group-hover:text-brand" />
                     </button>
@@ -754,7 +490,7 @@ export default function TrackDesktop() {
               <div className="border-b border-rule p-5 flex items-center justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-3">
                   <div>
-                    <TrackingCode code={report.tracking_code} size="xl" />
+                    <TrackingCode code={report.tracking_code} size="xl" showCopy={false} />
                     <span className="text-xs text-ink-faint block mt-1">filed {timeSince(report.created_at)}</span>
                   </div>
                   <button

@@ -347,7 +347,7 @@ export default function CitizenShell({ onReturnToWelcome }) {
                           </div>
                           <div>
                             <span className="text-xs font-bold text-ink block">Microphone Voice Input</span>
-                            <span className="text-[11px] text-ink-muted block">Enables Bikol/Tagalog voice dictation when filing hazard descriptions</span>
+                            <span className="text-[11px] text-ink-muted block">Enables voice dictation when filing hazard descriptions</span>
                           </div>
                         </div>
                         <button
@@ -563,7 +563,7 @@ export default function CitizenShell({ onReturnToWelcome }) {
                   <MapPin className={`w-4.5 h-4.5 ${appPermissions.location === "granted" ? "text-brand" : "text-ink-faint"}`} />
                   <div>
                     <span className="text-xs font-bold text-ink block">Location Access</span>
-                    <span className="text-[11px] text-ink-muted block leading-tight">GPS position for Panic and reports</span>
+                    <span className="text-[11px] text-ink-muted block leading-tight">GPS position for Emergency SOS and reports</span>
                   </div>
                 </div>
                 <button

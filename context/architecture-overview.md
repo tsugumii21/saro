@@ -257,7 +257,55 @@ SARO strictly isolates resident and official capabilities across runtime entry p
 
 ---
 
-## 7. Change & Audit Log
+## 7. Time-Based Visibility Decisions
+
+Four tunable durations govern what the dashboard treats as *currently* relevant.
+All four live together in `packages/shared/src/constants.js` so that changing one
+is a single edit in a single file. **None of them delete or modify stored data** —
+every report and every accident incident stays in Postgres exactly as filed, and
+widening any window brings excluded rows straight back into consideration.
+
+| Constant | Default | Governs | Why this value |
+| :--- | :--- | :--- | :--- |
+| `REPORT_ACTIVE_HOURS_EMERGENCY` | 48 h | Panic, gas leak, fire, flood pins on the live map | These hazards are resolved or gone within days. A 60-hour-old "fire here" pin is clutter that costs the map its credibility. Ends at whichever comes first: this timer, or an office marking it resolved. |
+| `REPORT_STALE_DAYS_INFRASTRUCTURE` | 90 d | Pothole, open drain, typhoon debris | A pothole does not stop existing because nobody looked at it, so this **flags, never removes**. Makes an unattended backlog visible instead of letting it age quietly. |
+| `MIN_INCIDENTS_FOR_ACCIDENT_AREA` | 3 | Accident-prone road segments | Conventional road-safety floor (~3 injury accidents in 3 years). At 2, a site is indistinguishable from coincidence. |
+| `ACCIDENT_ROLLING_WINDOW_MONTHS` | 24 | Which incidents count toward the threshold above | Without it the count is an all-time tally that can only grow, so a junction fixed in 2023 stays branded forever. Long enough to accumulate 3 incidents at a genuinely bad site; short enough that a completed remediation clears the marking within two years. |
+
+**Decisions worth recording:**
+
+* **Emergency set is narrower than `CRITICAL_CATEGORIES`.** The 48-hour clock applies
+  to hazards whose *danger itself* expires (`EMERGENCY_VISIBILITY_CATEGORIES`), not
+  to everything urgent to answer. A landslide or damaged seawall is critical to
+  dispatch but the hazard persists, so those keep the ordinary 72-hour archive rule.
+* **`bridge_damage` is excluded from the stale set.** The routing table dispatches it
+  as an emergency on a 12-hour SLA; treating it as a 90-day backlog item would
+  contradict how the city actually handles it.
+* **Staff queues are not time-filtered.** `isReportActiveOnMap` is applied to
+  resident-facing map surfaces and the public landing preview only. Hiding a
+  49-hour-old *unresolved* fire from dispatchers would be actively harmful, so
+  `LiveMap` keeps its own `showArchived` control and instead gained the stale flag.
+* **The rolling window needed incident-level dates.** `accident_blackspots.incident_count`
+  is an all-time scalar with nothing to filter on. Migration `20260808001300` adds
+  `accident_incidents` (one dated row per crash) and the SECURITY DEFINER RPC
+  `get_accident_blackspots_windowed(window_months)`, which returns
+  `recent_incident_count` alongside the untouched all-time `incident_count`.
+* **Degradation is reported, not disguised.** When a blackspot arrives carrying only
+  a scalar — an un-migrated row, or the offline fallback — `evaluateAccidentArea`
+  returns `windowed: false` rather than passing an all-time tally off as a windowed
+  one, and the map popup labels the figure "(all-time)" accordingly.
+* **Backfill stays conservative.** The migration seeds one incident per existing
+  blackspot at its known `last_reported_at` rather than inventing plausible dates
+  for crashes nobody recorded. Windowed counts therefore start low and rise as real
+  dated incidents are entered; `incident_count` is left untouched.
+
+Behaviour is pinned by 24 tests in `packages/shared/src/reportLifecycle.test.js`
+(`npm run test:shared`, Node's built-in runner, no new dependencies). All clocks
+are injected, so the suite is deterministic and will not rot with the calendar.
+
+---
+
+## 8. Change & Audit Log
 
 | Action | Path / Target | Summary & Notes |
 | :--- | :--- | :--- |
@@ -265,3 +313,10 @@ SARO strictly isolates resident and official capabilities across runtime entry p
 | **Updated** | `R:\Code\Obsidian\SARO\context\project-overview.md` | Synchronized Obsidian vault snapshot with complete codebase analysis |
 | **Verified**| `apps/resident-app` & `apps/admin-app` | Verified application entry points, role boundaries, and routing isolation |
 | **Verified**| `supabase/migrations/` (22 files) | Confirmed PostGIS schema, RLS policies, RPCs, and automated triggers |
+| **Created** | `packages/shared/src/reportLifecycle.js` | Pure time-based visibility rules: emergency active window, infrastructure staleness, accident rolling window |
+| **Created** | `packages/shared/src/reportLifecycle.test.js` | 24 deterministic tests incl. the two specified accident-window cases |
+| **Created** | `supabase/migrations/20260808001300_accident_incident_rolling_window.sql` | `accident_incidents` table, windowed RPC, conservative backfill |
+| **Updated** | `packages/shared/src/constants.js` | Added the four tunable durations and the two category sets |
+| **Updated** | `packages/ui/src/HazardMap.jsx` | Accident areas now filtered by windowed count; popup distinguishes in-window from all-time |
+| **Updated** | Resident map/home screens, admin landing | `!isArchivedReport` → `isReportActiveOnMap` |
+| **Updated** | `QueueTable.jsx`, `ReportDetailPanel.jsx` | Stale flag surfaced where status updates are actually made |

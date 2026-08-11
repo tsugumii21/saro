@@ -2,11 +2,17 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { HazardMap, IncidentPinCard } from "@saro/ui";
+import PublicReportDetail from "./PublicReportDetail";
 import {
   getPublicMapReports, getCategories, getBarangays,
-  getRainfall, getVolcanicAlert, getEvacuationCenters, getAccidentBlackspots,
-  LEGAZPI_CENTER, saroEvents, isArchivedReport,
+  getRainfall, getEvacuationCenters, getAccidentBlackspots,
+  LEGAZPI_CENTER, saroEvents, isReportActiveOnMap,
+  groupReportsIntoPins, groupPinsByLocation, countReportsByStatus, getCategoryTier,
+  useAuth,
 } from "@saro/shared";
+import {
+  loadMyReportKeys, matchOwnership, decorateGroupsWithOwnership, EMPTY_REPORT_KEYS,
+} from "../../lib/myReports";
 
 /** MapLibre takes [lng, lat]; LEGAZPI_CENTER is [lat, lng] for historical reasons. */
 const LEGAZPI_CENTER_LNGLAT = [LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]];
@@ -37,6 +43,7 @@ function timeSince(dateStr) {
 
 export default function PublicMapScreen() {
   const navigate = useNavigate();
+  const { isResident } = useAuth();
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
   const [barangays, setBarangays] = useState([]);
@@ -46,19 +53,36 @@ export default function PublicMapScreen() {
   const [rainfall, setRainfall] = useState([]);
   const [evacuationCenters, setEvacuationCenters] = useState([]);
   const [accidentBlackspots, setAccidentBlackspots] = useState([]);
-  const [alert, setAlert] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  /* The full report opened from a pin. A tracking code goes to Check a report;
+     everything else opens the read-only public detail by id. */
+  const [detailReport, setDetailReport] = useState(null);
+  /* Every hazard at one point, when the popup's short list is not the whole
+     story. */
+  const [locationList, setLocationList] = useState(null);
+  /* Which pins are the reader's own. Ids only — the map never carries codes. */
+  const [myKeys, setMyKeys] = useState(EMPTY_REPORT_KEYS);
+
+  /* Only the reader's own report goes to Track, because Track is where a report
+     is confirmed or disputed. Everyone else's opens the read-only detail by id. */
+  const openFullReport = useCallback(({ trackingCode, reportId, report, isMine }) => {
+    setLocationList(null);
+    if (isMine && trackingCode) {
+      navigate(`/track?code=${encodeURIComponent(trackingCode)}`);
+      return;
+    }
+    if (reportId) setDetailReport({ id: reportId, report });
+  }, [navigate]);
 
   const loadData = useCallback(async () => {
     setLoadError("");
-    const [rRes, cRes, bRes, rainRes, alertRes, ecRes, bsRes] = await Promise.all([
+    const [rRes, cRes, bRes, rainRes, ecRes, bsRes] = await Promise.all([
       getPublicMapReports(),
       getCategories(),
       getBarangays(),
       getRainfall(),
-      getVolcanicAlert(),
       getEvacuationCenters(),
       getAccidentBlackspots(),
     ]);
@@ -73,11 +97,14 @@ export default function PublicMapScreen() {
     if (cRes.data) setCategories(cRes.data);
     if (bRes.data) setBarangays(bRes.data);
     if (rainRes.data) setRainfall(rainRes.data);
-    if (alertRes.data) setAlert(alertRes.data);
     if (ecRes.data) setEvacuationCenters(ecRes.data);
     if (bsRes.data) setAccidentBlackspots(bsRes.data);
     setLoading(false);
   }, []);
+
+  const loadOwnership = useCallback(async () => {
+    setMyKeys(await loadMyReportKeys({ isResident }));
+  }, [isResident]);
 
   useEffect(() => {
     loadData();
@@ -85,6 +112,13 @@ export default function PublicMapScreen() {
     const unsub2 = saroEvents.on("report:updated", loadData);
     return () => { unsub1(); unsub2(); };
   }, [loadData]);
+
+  useEffect(() => {
+    loadOwnership();
+    /* A report filed from this session is the reader's the moment it exists. */
+    const unsub = saroEvents.on("report:created", loadOwnership);
+    return () => { unsub(); };
+  }, [loadOwnership]);
 
   const getCategoryName = (catId) => {
     const cat = categories.find((c) => c.id === catId);
@@ -96,47 +130,28 @@ export default function PublicMapScreen() {
     return brgy ? brgy.name : "Legazpi City";
   };
 
-  // Exclude auto-archived old resolved reports (>72h) from public map pins
-  const activeReports = reports.filter((r) => !isArchivedReport(r));
+  /* Time-based visibility: the long-standing archive rule for resolved reports,
+     plus the shorter emergency clock for hazards that expire on their own.
+     Nothing is deleted — an expired pin is still readable by tracking code. */
+  const activeReports = reports.filter((r) => isReportActiveOnMap(r));
 
   // Apply status filter
   const filteredReports = statusFilter
     ? activeReports.filter((r) => r.status === statusFilter)
     : activeReports;
 
-  // Smart spatial & cluster_id grouping
-  const displayReports = [];
-  const processed = new Set();
+  /* Grouping lives in @saro/shared so this screen, the desktop map and the
+     staff landing page all draw the same pins from the same rows. `count` is
+     always `members.length` — never a separate score column.
 
-  filteredReports.forEach((r, idx) => {
-    if (!r.lat || !r.lng || processed.has(idx)) return;
-    const rLat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
-    const rLng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
-
-    const clusterMembers = [r];
-    processed.add(idx);
-
-    filteredReports.forEach((other, oIdx) => {
-      if (processed.has(oIdx) || !other.lat || !other.lng) return;
-      const oLat = typeof other.lat === "string" ? parseFloat(other.lat) : Number(other.lat);
-      const oLng = typeof other.lng === "string" ? parseFloat(other.lng) : Number(other.lng);
-
-      const isClusterIdMatch = r.cluster_id && other.cluster_id && r.cluster_id === other.cluster_id;
-      const dist = Math.sqrt(Math.pow(rLat - oLat, 2) + Math.pow(rLng - oLng, 2));
-      const isProximityMatch = dist < 0.005;
-
-      if (isClusterIdMatch || isProximityMatch) {
-        clusterMembers.push(other);
-        processed.add(oIdx);
-      }
-    });
-
-    displayReports.push({
-      report: r,
-      count: Math.max(clusterMembers.length, r.confidence_score || 1),
-      members: clusterMembers,
-    });
+     The second pass collapses pins that share a rounded coordinate into one
+     marker per location: at ~110 m of precision unrelated reports land on the
+     same point, and drawing them separately stacks markers nobody can pick
+     apart. */
+  const displayReports = groupPinsByLocation(groupReportsIntoPins(filteredReports), {
+    tierOf: (r) => getCategoryTier(r?.category_id || r?.category),
   });
+  const statusCounts = countReportsByStatus(activeReports, STATUS_ORDER);
 
   return (
     <div className="flex flex-col h-full w-full relative overflow-hidden">
@@ -181,38 +196,86 @@ export default function PublicMapScreen() {
           className="h-full w-full"
           style={{ minHeight: "300px" }}
           center={LEGAZPI_CENTER_LNGLAT}
+          selectedId={selectedReport?.pinId ?? null}
+          onClearSelectedReport={() => setSelectedReport(null)}
+          renderReportPopup={(pin, { close }) => (
+            <IncidentPinCard
+              report={pin}
+              categoryName={pin.categoryName || getCategoryName(pin.category_id || pin.category)}
+              barangayName={pin.barangayName || getBarangayName(pin.barangay_id) || "Legazpi City"}
+              timeSinceStr={pin.timeSinceStr}
+              maxRows={2}
+              onClose={() => {
+                close();
+                setSelectedReport(null);
+              }}
+              onViewReport={openFullReport}
+              onShowAll={(locationPin) => {
+                close();
+                setLocationList(locationPin);
+              }}
+            />
+          )}
           zoom={13}
           rainfall={rainfall}
           evacuationCenters={evacuationCenters}
           accidentBlackspots={accidentBlackspots}
           showToggles={true}
           hidden={hiddenLayers}
-          reports={displayReports.map(({ report: r, count, members }) => ({
-            id: r.cluster_id || r.id,
-            lat: r.lat,
-            lng: r.lng,
-            priority: r.priority,
-            color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
-            count: count,
-            category: r.category_id || r.category,
-            categoryName: getCategoryName(r.category_id || r.category),
-            barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
-            timeSinceStr: timeSince(r.created_at),
-            status: r.status,
-            members: (members || [r]).slice(0, 3).map(m => ({
-              ...m,
-              categoryName: getCategoryName(m.category_id || m.category)
-            })),
-            onTrackClick: (code) => navigate(`/track?code=${code}`),
-            onActionClick: () => navigate(`/report?category=${r.category_id || r.category}`),
-            onSelect: () => setSelectedReport({ ...r, clusterCount: count, members: (members || [r]).slice(0, 3) }),
-          }))}
+          reports={displayReports.map(({ id, report: r, count, members, groups }) => {
+            const lead = matchOwnership(myKeys, r);
+            const owned = decorateGroupsWithOwnership(
+              myKeys,
+              (groups ?? []).map((group) => ({
+                ...group,
+                report: {
+                  ...group.report,
+                  report_id: group.report.id,
+                  categoryName: getCategoryName(group.report.category_id || group.report.category),
+                  barangayName: getBarangayName(group.report.barangay_id) || group.report.barangay || "Legazpi City",
+                  timeSinceStr: timeSince(group.report.created_at),
+                },
+              }))
+            );
+
+            return {
+              id,
+              /* The row id, kept beside the pin id so the popup can load this
+                 report's photo evidence. */
+              report_id: r.id,
+              /* One entry per kind of hazard filed at this point; the popup draws
+                 a row and an action for each. */
+              groups: owned.groups,
+              /* Ownership: the marker is ringed when anything under it is the
+                 reader's, and the card carries the code that opens it in Track. */
+              isMine: lead.isMine || owned.anyMine,
+              is_mine: lead.isMine,
+              my_tracking_code: lead.trackingCode,
+              lat: r.lat,
+              lng: r.lng,
+              priority: r.priority,
+              color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
+              count: count,
+              category: r.category_id || r.category,
+              categoryName: getCategoryName(r.category_id || r.category),
+              barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
+              timeSinceStr: timeSince(r.created_at),
+              status: r.status,
+              tracking_code: r.tracking_code,
+              description: r.description,
+              created_at: r.created_at,
+              members,
+              onSelect: () => setSelectedReport({ ...r, pinId: id, report_id: r.id, clusterCount: count, members }),
+            };
+          })}
         />
 
         {/* Top Control Bar: Status Filter Chips with smooth horizontal scroll & gradient fade mask */}
         <div className="relative w-full z-20">
-          <div className="pointer-events-none absolute right-0 top-3 h-9 w-10 bg-gradient-to-l from-white via-white/70 to-transparent z-30" aria-hidden="true" />
-          <div className="absolute left-0 top-3 right-0 z-20 overflow-x-auto overscroll-x-contain px-3 no-scrollbar">
+          {/* The layers button owns the top-right corner, so the chip rail stops
+              short of it instead of scrolling underneath. */}
+          <div className="pointer-events-none absolute right-14 top-3 h-9 w-10 bg-gradient-to-l from-white via-white/70 to-transparent z-30" aria-hidden="true" />
+          <div className="absolute left-0 top-3 right-14 z-20 overflow-x-auto overscroll-x-contain px-3 no-scrollbar">
             <div className="flex w-max items-center gap-1.5 pb-1 pr-6">
               <button
                 onClick={() => setStatusFilter("")}
@@ -227,7 +290,7 @@ export default function PublicMapScreen() {
               {STATUS_ORDER.map((status) => {
                 const isActive = statusFilter === status;
                 const color = STATUS_COLORS[status];
-                const count = activeReports.filter((r) => r.status === status).length;
+                const count = statusCounts[status];
                 return (
                   <button
                     key={status}
@@ -248,21 +311,24 @@ export default function PublicMapScreen() {
         </div>
 
       </div>
+      {/* No detail panel below the map: a pin's popup is the only place a
+          report is described, so there is no second copy to fall out of step. */}
 
-      {/* Connected Bottom Sheet for Selected Report / Cluster (Cleared above mobile bottom tab bar) */}
-      {selectedReport && (
-        <div className="mb-14 sm:mb-0">
-          <IncidentPinCard
-            report={selectedReport}
-            categoryName={getCategoryName(selectedReport.category_id || selectedReport.category)}
-            barangayName={getBarangayName(selectedReport.barangay_id) || selectedReport.barangay || "Legazpi City"}
-            timeSinceStr={timeSince(selectedReport.created_at)}
-            onClose={() => setSelectedReport(null)}
-            onTrackClick={(code) => navigate(`/track?code=${code}`)}
-            onActionClick={() => navigate(`/report?category=${selectedReport.category_id || selectedReport.category}`)}
-            actionLabel="Report Another Hazard Here"
-          />
-        </div>
+      {locationList && (
+        <PublicReportDetail
+          locationGroups={locationList.groups}
+          locationLabel={locationList.barangayName}
+          onOpenReport={openFullReport}
+          onClose={() => setLocationList(null)}
+        />
+      )}
+
+      {detailReport && (
+        <PublicReportDetail
+          reportId={detailReport.id}
+          fallbackReport={detailReport.report}
+          onClose={() => setDetailReport(null)}
+        />
       )}
     </div>
   );

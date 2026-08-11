@@ -1,5 +1,5 @@
 -- SARO 19 — the loader RPC for hazard_zones.
---
+-- Renumbered to avoid colliding with remove_proxy_reporting on remote.
 -- PostgREST will not cast a GeoJSON object to `geography` on the way in, so a
 -- plain insert cannot carry geometry. This function takes the GeoJSON as text
 -- and does the conversion server-side.

@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "main": "./src/index.js",
+  "scripts": {
+    "test": "node --test \"src/**/*.test.js\""
+  },
   "exports": {
     ".": "./src/index.js",
     "./api": "./src/api/index.js",

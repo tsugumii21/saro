@@ -139,6 +139,11 @@ export default function AdminDashboard() {
 }
 
 function AdminDashboardContent() {
+  /* Admin-gated above, so this scope is city-wide today. It is still passed
+     rather than omitted: when Analytics opens to offices and barangays it must
+     narrow with the viewer, and a screen that never asked for a scope is a
+     screen that will be forgotten on that day. */
+  const { viewerScope } = useAuth();
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
   const [offices, setOffices] = useState([]);
@@ -174,7 +179,7 @@ function AdminDashboardContent() {
   const loadData = useCallback(async () => {
     setLoadError("");
     const [rRes, cRes, oRes, bRes, aRes] = await Promise.all([
-      getReports(),
+      getReports({ scope: viewerScope }),
       getCategories(),
       getOffices(),
       getBarangays(),
@@ -187,7 +192,7 @@ function AdminDashboardContent() {
     if (aRes.data) setAssistantLogs(aRes.data);
     if (rRes.error) setLoadError(rRes.error);
     setLoading(false);
-  }, []);
+  }, [viewerScope]);
 
   useEffect(() => {
     loadData();

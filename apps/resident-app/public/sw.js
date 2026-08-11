@@ -168,6 +168,7 @@ async function drainOutbox() {
   for (const row of queued) {
     const payload = row.payload || {};
     const deviceId = payload.device_fingerprint || payload.reporter_device_id;
+    const isSosUpdate = row.operation === "update_sos";
 
     // Signed-in reports are left for the page, which has the session.
     if (!deviceId) continue;
@@ -179,19 +180,30 @@ async function drainOutbox() {
     // 42501 on the way back — the report would be delivered and this worker
     // would treat it as a permanent 4xx failure, leaving a duplicate in the
     // outbox forever. Same trap the page client hit; see migration 14.
-    const args = {
-      p_category: payload.category,
-      p_description: (payload.description || "").trim(),
-      p_lat: Number(payload.lat),
-      p_lng: Number(payload.lng),
-      p_device_id: deviceId,
-      p_barangay_id: payload.barangay_id || null,
-      p_photo_url: payload.photo_url || null,
-    };
+    const args = isSosUpdate
+      ? {
+          p_report_id: payload.report_id,
+          p_tracking_code: payload.tracking_code,
+          p_device_id: deviceId,
+          p_description: (payload.description || "").trim(),
+          p_lat: Number(payload.lat),
+          p_lng: Number(payload.lng),
+          p_barangay_id: payload.barangay_id || null,
+        }
+      : {
+          p_category: payload.category,
+          p_description: (payload.description || "").trim(),
+          p_lat: Number(payload.lat),
+          p_lng: Number(payload.lng),
+          p_device_id: deviceId,
+          p_barangay_id: payload.barangay_id || null,
+          p_photo_url: payload.photo_url || null,
+        };
 
     let response;
     try {
-      response = await fetch(`${config.url}/rest/v1/rpc/file_anonymous_report`, {
+      const rpcName = isSosUpdate ? "update_sos_report_details" : "file_anonymous_report";
+      response = await fetch(`${config.url}/rest/v1/rpc/${rpcName}`, {
         method: "POST",
         headers: {
           apikey: config.anonKey,
@@ -211,7 +223,7 @@ async function drainOutbox() {
       const created = Array.isArray(body) ? body[0] : body;
       await txAll(db, "outbox", "readwrite", (s) => s.delete(row.id), null);
 
-      if (created?.tracking_code) {
+      if (created?.tracking_code && !isSosUpdate) {
         await txAll(db, "my_reports", "readwrite", (s) =>
           s.put({
             tracking_code: created.tracking_code,
@@ -225,6 +237,15 @@ async function drainOutbox() {
 
         await self.registration.showNotification("Report sent", {
           body: `Your report went through. Code ${created.tracking_code}.`,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+          tag: `sent-${created.tracking_code}`,
+          data: { url: `/track?code=${created.tracking_code}` },
+        });
+      }
+      if (created?.tracking_code && isSosUpdate) {
+        await self.registration.showNotification("S.O.S. details added", {
+          body: `Your details were added to ${created.tracking_code}.`,
           icon: "/icon-192.png",
           badge: "/icon-192.png",
           tag: `sent-${created.tracking_code}`,

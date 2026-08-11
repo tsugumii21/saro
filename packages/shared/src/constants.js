@@ -77,6 +77,70 @@ export function isArchivedReport(report, maxAgeHours = DEFAULT_AUTO_ARCHIVE_HOUR
   return ageMs > thresholdMs;
 }
 
+/* ── Time-based visibility ───────────────────────────────────────────────────
+ *
+ * These are judgement calls, not facts, and they are expected to move once the
+ * city has real data to argue from. They live together here so changing one is
+ * a single edit in a single file, and so nobody has to grep a component tree to
+ * discover why a pin disappeared.
+ *
+ * None of them delete anything. They govern what the live map treats as
+ * *currently* active and what the dashboard flags as needing attention; every
+ * report stays in Postgres exactly as filed.
+ */
+
+/**
+ * Hours a fast-moving emergency stays on the live map as an active pin.
+ *
+ * Panic alerts, gas leaks, fires and active flooding describe a situation that
+ * is either handled or gone within a couple of days — a 60-hour-old "fire here"
+ * pin is not information, it is clutter that makes the map harder to trust.
+ * Whichever comes first, this timer or an office marking it resolved, ends the
+ * pin. Applies to EMERGENCY_VISIBILITY_CATEGORIES.
+ */
+export const REPORT_ACTIVE_HOURS_EMERGENCY = 48;
+
+/**
+ * Days a non-emergency infrastructure report may sit without an office status
+ * update before it is flagged as stale.
+ *
+ * A pothole does not stop existing because nobody looked at it, so this never
+ * removes the report — it marks it, so an unattended backlog becomes visible
+ * instead of quietly ageing. Applies to INFRASTRUCTURE_STALE_CATEGORIES.
+ */
+export const REPORT_STALE_DAYS_INFRASTRUCTURE = 90;
+
+/**
+ * Categories governed by REPORT_ACTIVE_HOURS_EMERGENCY.
+ *
+ * Deliberately narrower than CRITICAL_CATEGORIES: this is the set whose *hazard
+ * itself* expires quickly, not the set that is urgent to answer. A landslide or
+ * a damaged seawall is critical to respond to but the hazard persists, so those
+ * keep the ordinary archive rule.
+ */
+export const EMERGENCY_VISIBILITY_CATEGORIES = [
+  "emergency_unspecified",  // Panic alerts — same value as PANIC_CATEGORY
+  "gas_leak",
+  "fire",
+  "flood",
+];
+
+/**
+ * Categories governed by REPORT_STALE_DAYS_INFRASTRUCTURE.
+ *
+ * `bridge_damage` is deliberately absent: the routing table marks it emergency
+ * with a 12-hour SLA, so treating it as a 90-day backlog item would contradict
+ * how it is dispatched.
+ */
+export const INFRASTRUCTURE_STALE_CATEGORIES = [
+  "pothole",
+  "open_drain",         // Uncovered drain & broken manhole
+  "typhoon_debris",     // Typhoon debris & structural damage
+];
+
+/** Shown next to a report that has gone past REPORT_STALE_DAYS_INFRASTRUCTURE. */
+export const STALE_REPORT_LABEL = "Stale — needs status update";
+
 /* ── Roles ───────────────────────────────────────────────────────────────── */
 
 // "guest" is a client-side label for nobody being signed in — it is not a value
@@ -97,6 +161,41 @@ export const CLUSTER_RADIUS_METERS = 150;
 
 /** ...and only if submitted within this many minutes of each other. */
 export const CLUSTER_WINDOW_MINUTES = 60;
+
+/* ── Accident-prone areas ────────────────────────────────────────────────── */
+
+/**
+ * Distinct incidents a location needs before SARO draws it as accident-prone.
+ *
+ * The unit here is *incidents*, not reports. A cluster is four neighbours
+ * phoning in the same crash within the hour — corroboration of one event, not
+ * evidence that a road is dangerous. Marking a stretch of Rizal Avenue as
+ * accident-prone is a claim about recurrence, so it is counted from
+ * `incident_count`: separate crashes at the same place over time.
+ *
+ * Three is the conventional floor in road-safety practice — a site qualifies as
+ * a blackspot at roughly three injury accidents in three years, and below that
+ * two events at one spot are not distinguishable from coincidence. Raise it to
+ * 5 to flag only the worst sites once the city has a few years of data.
+ */
+export const MIN_INCIDENTS_FOR_ACCIDENT_AREA = 3;
+
+/**
+ * Trailing window the incident count is measured over.
+ *
+ * MIN_INCIDENTS_FOR_ACCIDENT_AREA answers "how many", this answers "since when",
+ * and without it the threshold is an all-time tally that can only ever grow. A
+ * junction fixed with a new signal in 2023 would stay branded accident-prone
+ * forever on the strength of crashes that its redesign already solved, and the
+ * map would slowly fill with places that used to be dangerous.
+ *
+ * Twenty-four months is long enough to gather three incidents at a genuinely
+ * bad site, and short enough that a completed remediation shows up as the
+ * marking clearing within two years. Incidents older than this are excluded
+ * from the count but are never deleted — they stay in the database in full, and
+ * widening the window brings them straight back into consideration.
+ */
+export const ACCIDENT_ROLLING_WINDOW_MONTHS = 24;
 
 /* ── Tracking codes ──────────────────────────────────────────────────────── */
 
@@ -161,16 +260,34 @@ export const CLIENT_STORAGE_KEYS = {
  */
 export const CONSENT_VERSION = 1;
 
-/* ── Panic ───────────────────────────────────────────────────────────────── */
+/* ── Emergency SOS ───────────────────────────────────────────────────────────
+ *
+ * The button residents press is called Emergency SOS. It was called Panic, and
+ * the database still is — `panic_flags`, `register_panic_flag` — because
+ * renaming live RPCs and their grants is a migration with real risk and no user
+ * benefit. Code and copy use SOS; the storage layer keeps its old names, and
+ * this comment is the map between them.
+ */
 
 /** National emergency number. Legazpi's 911 Emergency Action Center answers it. */
 export const EMERGENCY_NUMBER = "911";
 
-/** A second press inside this window is flagged for dispatchers. Never blocks. */
-export const PANIC_REPEAT_WINDOW_MS = 15 * 60 * 1000;
+/**
+ * A second SOS inside this window is surfaced for review. It never blocks.
+ *
+ * The usual meaning of a rapid repeat is that the first alert brought nobody —
+ * so it is read as an unanswered call, not as suspicion of the caller.
+ */
+export const SOS_REPEAT_WINDOW_MS = 15 * 60 * 1000;
 
-/** Category every Panic press files under. Routed to Legazpi 911, 1-hour SLA. */
-export const PANIC_CATEGORY = "emergency_unspecified";
+/** Old name. Kept so nothing importing it breaks mid-rename. */
+export const PANIC_REPEAT_WINDOW_MS = SOS_REPEAT_WINDOW_MS;
+
+/** Category every SOS press files under. Routed to Legazpi 911, 1-hour SLA. */
+export const SOS_CATEGORY = "emergency_unspecified";
+
+/** Old name, same value. */
+export const PANIC_CATEGORY = SOS_CATEGORY;
 
 /* ── Closure states ──────────────────────────────────────────────────────── */
 

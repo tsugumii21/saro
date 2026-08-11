@@ -8,7 +8,7 @@ import {
   getReportsNearPoint, getReportMedia, getReports, getBarangays,
   getClustersWithReports, getReportByTrackingCode,
   useAuth, LEGAZPI_CENTER, RESOLUTION_REASON_LABELS, STATUS_LABELS,
-  CLUSTER_RADIUS_METERS, CLUSTER_WINDOW_MINUTES,
+  CLUSTER_RADIUS_METERS, CLUSTER_WINDOW_MINUTES, describeScope,
 } from "@saro/shared";
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -46,7 +46,7 @@ function getDistanceMeters(lat1, lon1, lat2, lon2) {
 /* ── Main component ──────────────────────────────────────────────────────── */
 
 export default function EvidenceExport() {
-  const { profile, officeName, barangayName } = useAuth();
+  const { profile, officeName, barangayName, viewerScope } = useAuth();
 
   // Data sources
   const [allReports, setAllReports] = useState([]);
@@ -69,19 +69,32 @@ export default function EvidenceExport() {
   const [exporting, setExporting] = useState("");
   const [error, setError] = useState("");
 
-  // Load data on mount
+  /* Every read here is scoped to the signed-in viewer. This screen used to call
+     getReports() bare and print the viewer's office as a caption, which meant a
+     barangay captain could search, open and export evidence for the whole city
+     under a heading that said "Brgy. Bitano". */
   useEffect(() => {
+    if (!viewerScope?.role) return;
     (async () => {
       const [rRes, cRes, bRes] = await Promise.all([
-        getReports(),
-        getClustersWithReports(),
+        getReports({ scope: viewerScope }),
+        getClustersWithReports({ scope: viewerScope }),
         getBarangays(),
       ]);
       if (rRes.data) setAllReports(rRes.data);
       if (cRes.data) setClusters(cRes.data);
-      if (bRes.data) setBarangays(bRes.data);
+      /* A barangay official gets one entry in the barangay picker: their own.
+         The list is a navigation aid, and offering the other 69 barangays as
+         search targets that return nothing is worse than not offering them. */
+      if (bRes.data) {
+        setBarangays(
+          viewerScope.role === "barangay_official" && viewerScope.barangayId
+            ? bRes.data.filter((b) => String(b.id) === String(viewerScope.barangayId))
+            : bRes.data
+        );
+      }
     })();
-  }, []);
+  }, [viewerScope]);
 
   // Build searchable items from clusters, barangays, and individual reports
   const searchableItems = useMemo(() => {
@@ -170,9 +183,12 @@ export default function EvidenceExport() {
     if (!radiusPoint) return;
     setBusy(true);
     setError("");
+    /* A radius is a shape, not a permission: dropping a 500 m circle over the
+       next barangay must not return its reports. */
     const { data, error: searchError } = await getReportsNearPoint({
       ...radiusPoint,
       radiusMeters: radius,
+      scope: viewerScope,
     });
     setBusy(false);
     setSearched(true);
@@ -188,7 +204,7 @@ export default function EvidenceExport() {
       lat: radiusPoint.lat,
       lng: radiusPoint.lng,
     });
-  }, [radiusPoint, radius]);
+  }, [radiusPoint, radius, viewerScope]);
 
   // Tracking code direct lookup
   const searchByCode = useCallback(async (code) => {
@@ -269,7 +285,9 @@ export default function EvidenceExport() {
     }
 
     setExporting("Generating PDF…");
-    const scope = officeName || barangayName || "City-wide";
+    /* The exported sheet states the jurisdiction it was produced under, so a
+       printed record cannot be mistaken for a city-wide one. */
+    const scope = describeScope(viewerScope, { officeName, barangayName });
     const sourceLabel = selectedSource?.label ?? "Unknown location";
     const html = buildSheet({ rows: withPhotos, sourceLabel, byMonth, peak, profile, scope });
 
@@ -375,7 +393,14 @@ export default function EvidenceExport() {
             <div className="saro-card flex flex-col gap-3 p-4 border border-line shadow-xs">
               {/* Search input */}
               <div className="relative">
-                <Search width={16} height={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+                <Search
+                  width={16}
+                  height={16}
+                  strokeWidth={2.25}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--color-ink-muted)" }}
+                  aria-hidden="true"
+                />
                 <input
                   type="text"
                   value={searchQuery}

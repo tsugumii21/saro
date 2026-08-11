@@ -267,56 +267,93 @@ export default function GapLog() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
-        {/* Topic Table */}
-        <div className="saro-card overflow-x-auto border border-line rounded-lg bg-surface">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-raised border-b border-line">
-                {["Topic Cluster", "Questions", "Last Asked", "Status", ""].map((h) => (
-                  <th key={h} className="t-label px-3 py-2.5 text-left text-ink-faint font-bold">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {clustered.map((group) => (
-                <tr
-                  key={group.topic}
-                  onClick={() => { setSelected(group); closeComposer(); }}
-                  aria-selected={selected?.topic === group.topic}
-                  className="cursor-pointer border-t border-line aria-selected:bg-brand-wash hover:bg-raised transition-colors"
-                >
-                  <td className="t-body-sm px-3 py-3 font-bold text-ink">{clusterLabel(group.topic)}</td>
-                  <td className="px-3 py-3">
-                    <span className="t-data font-bold font-mono text-ink">{group.count}</span>
-                  </td>
-                  <td className="t-data-sm px-3 py-3 text-ink-muted">{timeAgo(group.latest)}</td>
-                  <td className="px-3 py-3">
+        {/* Topics, with the questions visible.
+            This was a four-column table: topic, a count, a timestamp, a badge.
+            Nothing a reader could act on without clicking, because the one thing
+            that matters — what residents actually asked — was hidden behind the
+            row. The questions are the content; the count is the footnote. */}
+        <div className="flex flex-col gap-3">
+          {clustered.map((group) => {
+            const isSelected = selected?.topic === group.topic;
+            const unresolvedCount = group.questions.filter((q) => !q.resolved).length;
+            const preview = group.questions.slice(0, 3);
+
+            return (
+              <button
+                key={group.topic}
+                type="button"
+                onClick={() => { setSelected(group); closeComposer(); }}
+                aria-current={isSelected ? "true" : undefined}
+                className={`saro-card w-full overflow-hidden text-left transition-all ${
+                  isSelected ? "border-brand ring-1 ring-brand/30" : "hover:border-brand-edge"
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-raised px-4 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <MessageCircleQuestion width={15} height={15} className="shrink-0 text-brand" aria-hidden="true" />
+                    <span className="truncate text-sm font-bold text-ink">{clusterLabel(group.topic)}</span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
                     {group.hasUnresolved ? (
-                      <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                        Gap
+                      <span className="rounded border border-status-assigned-tab bg-status-assigned-wash px-2 py-0.5 text-[10px] font-bold uppercase text-status-assigned-ink">
+                        {unresolvedCount} unanswered
                       </span>
                     ) : (
-                      <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-300">
-                        Resolved
+                      <span className="rounded border border-status-resolved-tab bg-status-resolved-wash px-2 py-0.5 text-[10px] font-bold uppercase text-status-resolved-ink">
+                        Answered
                       </span>
                     )}
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <ChevronRight width={16} height={16} className="text-ink-faint inline" aria-hidden="true" />
-                  </td>
-                </tr>
-              ))}
-              {!loading && clustered.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="t-body-sm px-3 py-10 text-center text-ink-muted">
-                    {filter === "unresolved"
-                      ? "No unanswered questions right now. The knowledge base covers everything residents have asked."
-                      : "No assistant questions logged yet."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    <span className="font-mono text-[11px] text-ink-faint">{timeAgo(group.latest)}</span>
+                    <ChevronRight width={15} height={15} className="text-ink-faint" aria-hidden="true" />
+                  </div>
+                </div>
+
+                <ul className="divide-y divide-line">
+                  {preview.map((entry) => (
+                    <li key={entry.id} className="flex items-start gap-2 px-4 py-2.5">
+                      <span
+                        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{
+                          background: entry.resolved
+                            ? "var(--color-status-resolved-tab)"
+                            : "var(--color-status-assigned-tab)",
+                        }}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs leading-relaxed text-ink">“{entry.question}”</span>
+                        {entry.resolved && entry.official_answer && (
+                          <span className="mt-0.5 block truncate text-[11px] text-ink-muted">
+                            Answered: {entry.official_answer}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                  {group.count > preview.length && (
+                    <li className="px-4 py-2 text-[11px] font-bold text-brand">
+                      + {group.count - preview.length} more question
+                      {group.count - preview.length === 1 ? "" : "s"} in this topic
+                    </li>
+                  )}
+                </ul>
+              </button>
+            );
+          })}
+
+          {!loading && clustered.length === 0 && (
+            <div className="saro-card flex flex-col items-center gap-2 px-6 py-14 text-center">
+              <CheckCircle2 width={22} height={22} className="text-status-resolved-ink" aria-hidden="true" />
+              <span className="t-subhead">
+                {filter === "unresolved" ? "Nothing unanswered" : "No questions logged yet"}
+              </span>
+              <span className="t-body-sm max-w-[46ch] text-ink-muted">
+                {filter === "unresolved"
+                  ? "Every question residents have asked the assistant is covered by published guidance."
+                  : "Questions appear here as residents ask the assistant things the city's documents do not answer."}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Detail Panel & Answer Composer */}

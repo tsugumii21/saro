@@ -79,17 +79,21 @@ function HotspotMap({ reports }) {
 }
 
 export default function ClusterReview() {
-  const { isBarangayOfficial } = useAuth();
+  const { isBarangayOfficial, viewerScope } = useAuth();
   const [clusters, setClusters] = useState([]);
   const [reports, setReports] = useState([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [c, r] = await Promise.all([getClustersWithReports(), getReports()]);
+    if (!viewerScope?.role) return;
+    const [c, r] = await Promise.all([
+      getClustersWithReports({ scope: viewerScope }),
+      getReports({ scope: viewerScope }),
+    ]);
     if (c.data) setClusters(c.data);
     if (r.data) setReports(r.data);
-  }, []);
+  }, [viewerScope]);
 
   useEffect(() => {
     load();
@@ -116,8 +120,8 @@ export default function ClusterReview() {
         <h1 className="t-heading">Duplicate Review</h1>
         <p className="t-body-sm mt-1 text-ink-muted">
           Reports of the same category within {CLUSTER_RADIUS_METERS}m and{" "}
-          {CLUSTER_WINDOW_MINUTES} minutes of each other are grouped as one incident. More
-          independent reports means higher confidence it is real.
+          {CLUSTER_WINDOW_MINUTES} minutes of each other are grouped as one incident. Each group
+          shows how many people reported it, how far apart they were, and over how long.
         </p>
       </div>
 
@@ -149,7 +153,10 @@ export default function ClusterReview() {
                     {cluster.report_count} report{cluster.report_count === 1 ? "" : "s"}
                   </span>
                 </div>
-                <ConfidenceBadge value={cluster.confidence} count={cluster.report_count} />
+                <CorroborationSummary
+                  label={cluster.corroboration_label}
+                  count={cluster.report_count}
+                />
               </header>
 
               <ul className="flex flex-col">
@@ -201,29 +208,23 @@ export default function ClusterReview() {
 }
 
 /**
- * Confidence as a bar plus a sentence, never a bare percentage.
+ * What corroborates this group, in measurements.
  *
- * "0.80" invites a dispatcher to treat a heuristic as a measurement. The number
- * is stated, but so is what produced it, because the only thing that actually
- * matters here is how many separate people reported it.
+ * This was a progress bar filled to a "confidence" percentage that came from
+ * `0.35 + members × 0.15` — the count, rescaled. The bar was the count wearing
+ * a lab coat. What a reviewer can actually weigh is how many separate people
+ * reported it, how far apart they stood, and over how long, so that is what it
+ * now says.
  */
-function ConfidenceBadge({ value, count }) {
-  const pct = Math.round(value * 100);
-  const strong = count >= 3;
-
+function CorroborationSummary({ label, count }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="h-1.5 w-24 bg-sunken" aria-hidden="true">
-        <span
-          className="block h-full"
-          style={{
-            width: `${pct}%`,
-            background: strong ? "var(--color-status-resolved-tab)" : "var(--color-status-assigned-tab)",
-          }}
-        />
-      </span>
-      <span className="t-body-sm text-ink-muted">
-        {count} independent report{count === 1 ? "" : "s"}
+      <span
+        className="inline-flex items-center gap-1 rounded border border-line bg-sunken px-2 py-0.5 font-mono text-[11px] font-bold text-ink-muted"
+        title={`${count} independent report${count === 1 ? "" : "s"}`}
+      >
+        <Layers width={12} height={12} aria-hidden="true" />
+        {label}
       </span>
     </div>
   );

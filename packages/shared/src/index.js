@@ -19,10 +19,13 @@ export {
   isEmergencyCategory,
   // resident reads (RPC only)
   getReportByTrackingCode,
+  getPublicReport,
+  getPublicReportTimeline,
   getStatusHistory,
   getReportsByDevice,
   getMyReports,
   getPublicMapReports,
+  getOriginalMapDemoReports,
   // staff reads (RLS scoped)
   getReports,
   getReportById,
@@ -30,7 +33,11 @@ export {
   getClusters,
   // writes
   createReport,
+  updateSosReportDetails,
   updateReportStatus,
+  reassignReport,
+  endorseReport,
+  deleteReport,
   markFalseReport,
   updateCategory,
   createRoutingRule,
@@ -67,6 +74,7 @@ export {
   isMockVolcanoFeedActive,
   getRainfall,
   getEvacuationCenters,
+  setEvacuationOccupancy,
   getAccidentBlackspots,
   getEvacuationRoute,
   // profiles
@@ -124,9 +132,56 @@ export { saroEvents, REALTIME_EVENTS } from "./api/events.js";
 /* ── Auth ────────────────────────────────────────────────────────────────── */
 export { AuthProvider, useAuth } from "./auth/AuthContext.jsx";
 
+/* ── Jurisdiction — the shared answer to "may this viewer see this report?" ── */
+export {
+  NO_SCOPE,
+  BARANGAY_LOCAL_DISPATCH_ENABLED,
+  makeViewerScope,
+  canViewReport,
+  canDispatchReport,
+  canEndorseReport,
+  canReassignReport,
+  scopeReports,
+  applyReportScopeToQuery,
+  describeScope,
+} from "./scope.js";
+
 /* ── Error messages ─────────────────────────────────────────────────────── */
 export { humanizeError, humanizeThrown } from "./errors.js";
 
 /* ── Constants and validation ────────────────────────────────────────────── */
 export * from "./constants.js";
 export * from "./validation.js";
+
+/* ── Emergency routing — category to responding agency to hotline ────────── */
+export {
+  listEmergencyCategories,
+  resolveEmergencyRouting,
+  toDialableNumber,
+} from "./emergencyRouting.js";
+
+/* ── Time-based visibility — what still counts as "active" or "recent" ───── */
+export {
+  isReportActiveOnMap,
+  isStaleReport,
+  daysSinceStatusUpdate,
+  hoursSinceFiled,
+  isEmergencyVisibilityCategory,
+  isInfrastructureStaleCategory,
+  countIncidentsInWindow,
+  rollingWindowStart,
+  evaluateAccidentArea,
+  qualifiesAsAccidentArea,
+} from "./reportLifecycle.js";
+
+/* ── Map pin grouping — the single source of every "how many reports" number */
+export {
+  groupReportsIntoPins,
+  groupPinsByLocation,
+  countReportsByStatus,
+  describeCorroboration,
+  corroborationLabel,
+  getDistanceMeters,
+  reportKey,
+  assignReportKeys,
+} from "./reportGrouping.js";

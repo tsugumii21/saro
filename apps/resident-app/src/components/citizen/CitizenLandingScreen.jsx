@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PencilLine, Search, PhoneCall, MapPin, ChevronRight, CloudOff, Flame, Activity, Lightbulb, ChevronLeft, Shield, CloudRain, Sparkles, RefreshCw } from "lucide-react";
 import { Wordmark, AlertLevelBadge } from "@saro/ui";
 import {
   createReport, registerPanicFlag, addReportMedia, enqueueReport, removeFromOutbox,
   rememberReport, requestBackgroundSync, PANIC_CATEGORY,
-  getVolcanicAlert, getPublicMapReports,
+  getVolcanicAlert, getPublicMapReports, getCategories, getOffices,
+  saroEvents, isReportActiveOnMap, countReportsByStatus,
+  listEmergencyCategories, resolveEmergencyRouting,
 } from "@saro/shared";
 import PanicControl from "./PanicControl";
 import ReportTicket from "./ReportTicket";
@@ -55,7 +57,6 @@ import {
  * exists. Neither waits for the other, and neither can lose the other's work.
  */
 
-const CALLBACK_HINT = "Panic alert. No detail given yet.";
 
 const SAFETY_TIPS = [
   {
@@ -105,32 +106,60 @@ export default function CitizenLandingScreen() {
   const [state, setState] = useState("idle");
   const [sent, setSent] = useState(null);
   const [imprecise, setImprecise] = useState(false);
+  /** Which agency this S.O.S was routed to — shown on the receipt. */
+  const [routed, setRouted] = useState(null);
   const [photoAttached, setPhotoAttached] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
 
   // Live situation & advisory state
   const [volcanicAlert, setVolcanicAlert] = useState(null);
-  const [reportStats, setReportStats] = useState({ received: 0, assigned: 0, in_progress: 0, total: 0 });
+  const [mapReports, setMapReports] = useState([]);
   const [tipIndex, setTipIndex] = useState(0);
+
+  /* Routing data for the S.O.S picker. Fetched on mount, not on press: the
+     agency for a fire must already be known by the time someone needs it. */
+  const [categories, setCategories] = useState([]);
+  const [offices, setOffices] = useState([]);
 
   useEffect(() => {
     let active = true;
     getVolcanicAlert().then(({ data }) => {
       if (active && data) setVolcanicAlert(data);
     });
-    getPublicMapReports().then(({ data }) => {
-      if (active && data) {
-        const counts = { received: 0, assigned: 0, in_progress: 0, total: data.length };
-        data.forEach((r) => {
-          if (r.status === "received") counts.received++;
-          if (r.status === "assigned") counts.assigned++;
-          if (r.status === "in_progress") counts.in_progress++;
-        });
-        setReportStats(counts);
-      }
-    });
-    return () => { active = false; };
+
+    getCategories().then(({ data }) => { if (active && data) setCategories(data); });
+    getOffices().then(({ data }) => { if (active && data) setOffices(data); });
+
+    const loadReports = () => {
+      getPublicMapReports().then(({ data }) => {
+        if (active && data) setMapReports(data);
+      });
+    };
+    loadReports();
+
+    /* Without these the card kept the total from page load, so filing a report
+       left it disagreeing with the Map screen it links to. */
+    const offCreated = saroEvents.on("report:created", loadReports);
+    const offUpdated = saroEvents.on("report:updated", loadReports);
+
+    return () => { active = false; offCreated(); offUpdated(); };
   }, []);
+
+  /* Straight from routing_table's is_emergency flag — the picker and the
+     dispatcher queue read the same rows, so they cannot disagree. */
+  const emergencyCategories = useMemo(
+    () => listEmergencyCategories(categories),
+    [categories]
+  );
+
+  /* Same source and same archive rule as the Map screen's "All" chip. */
+  const reportStats = useMemo(() => {
+    const activeReports = mapReports.filter((r) => isReportActiveOnMap(r));
+    return {
+      ...countReportsByStatus(activeReports, ["received", "assigned", "in_progress"]),
+      total: activeReports.length,
+    };
+  }, [mapReports]);
 
   const handleNextTip = () => {
     setTipIndex((prev) => (prev + 1) % SAFETY_TIPS.length);
@@ -161,11 +190,23 @@ export default function CitizenLandingScreen() {
       .catch(() => null);
   }, []);
 
-  const handlePanic = useCallback(async () => {
+  /**
+   * The resident has chosen what kind of emergency this is.
+   *
+   * The ordering below is unchanged and deliberate: the voice call goes first
+   * and nothing is allowed above it. What changed is which number it dials —
+   * the city's routing_table picks the office for this category and
+   * offices.hotline supplies its line, so fire reaches BFP and crime reaches
+   * PNP rather than everything reaching one desk.
+   */
+  const handleEmergency = useCallback(async (categoryId) => {
     setState("sending");
 
+    const routing = resolveEmergencyRouting(categoryId, { categories, offices });
+    setRouted(routing);
+
     // ── 1. The call. Nothing above this line can block it. ──────────────────
-    placeEmergencyCall();
+    placeEmergencyCall(routing.dial);
 
     const id = deviceId();
     const wasRapid = noteRapidRepeat();
@@ -183,14 +224,16 @@ export default function CitizenLandingScreen() {
     ]);
     setImprecise(!position.precise);
 
+    const hint = `S.O.S — ${routing.categoryLabel}. Routed to ${routing.agencyName}.`;
     const payload = {
-      category: PANIC_CATEGORY,
-      description: wasRapid
-        ? `${CALLBACK_HINT} Repeat press within 15 minutes.`
-        : CALLBACK_HINT,
+      /* The chosen category, so the report lands in the same office queue the
+         call just reached. Falls back to the generic panic category when the
+         person could not say what was happening. */
+      category: routing.categoryId || PANIC_CATEGORY,
+      description: wasRapid ? `${hint} Repeat press within 15 minutes.` : hint,
       lat: position.lat,
       lng: position.lng,
-      anonymous: true,           // Panic is always anonymous, even when signed in.
+      anonymous: true,           // S.O.S is always anonymous, even when signed in.
       device_fingerprint: id,
     };
 
@@ -232,7 +275,7 @@ export default function CitizenLandingScreen() {
       const { error: mediaError } = await addReportMedia(data.id, photo);
       if (!mediaError) setPhotoAttached(true);
     }
-  }, []);
+  }, [categories, offices]);
 
   // Reset warm-up state whenever we return to idle, so a second press starts a
   // fresh position read rather than reusing a fix from ten minutes ago.
@@ -249,6 +292,7 @@ export default function CitizenLandingScreen() {
     setSent(null);
     setPhotoAttached(false);
     setImprecise(false);
+    setRouted(null);
   };
 
   /* ── Sent, or queued: the receipt ──────────────────────────────────────── */
@@ -261,10 +305,12 @@ export default function CitizenLandingScreen() {
           <span className="saro-stamp" style={{ color: "var(--color-panic-strong)" }}>
             {queued ? "Call placed · alert waiting to send" : "Call placed · alert sent"}
           </span>
+          {/* Naming the agency matters: the person needs to know who is on the
+              other end of the call they are now on. */}
           <p className="t-body mt-3 text-ink-muted">
             {queued
-              ? "You are through to 911 by phone. Your location could not be sent yet — SARO will keep trying and send it the moment signal returns, even if you close this app."
-              : "Legazpi 911 has your location. Stay on the call if you can."}
+              ? `You are through to ${routed?.agencyName ?? "Legazpi 911"} by phone. Your location could not be sent yet — SARO will keep trying and send it the moment signal returns, even if you close this app.`
+              : `${routed?.agencyName ?? "Legazpi 911"} has your location. Stay on the call if you can.`}
           </p>
         </div>
 
@@ -282,7 +328,11 @@ export default function CitizenLandingScreen() {
         ) : (
           <ReportTicket
             code={sent.tracking_code}
-            categoryLabel="Emergency — Panic Alert"
+            categoryLabel={
+              routed?.categoryLabel
+                ? `Emergency S.O.S — ${routed.categoryLabel}`
+                : "Emergency — S.O.S Alert"
+            }
             filedAt={sent.created_at}
             tone="panic"
           />
@@ -308,7 +358,24 @@ export default function CitizenLandingScreen() {
         {!queued && (
           <button
             type="button"
-            onClick={() => navigate(`/report?panic=${sent.tracking_code}`)}
+            onClick={() => {
+              const params = new URLSearchParams({
+                panic: sent.tracking_code,
+                sos_id: sent.id,
+                category: sent.category,
+              });
+              navigate(`/report?${params}`, {
+                state: {
+                  sosReport: {
+                    id: sent.id,
+                    tracking_code: sent.tracking_code,
+                    category: sent.category,
+                    status: sent.status,
+                    created_at: sent.created_at,
+                  },
+                },
+              });
+            }}
             className="saro-btn saro-btn-primary saro-btn-lg saro-btn-block"
           >
             Add What Is Happening
@@ -333,11 +400,12 @@ export default function CitizenLandingScreen() {
 
   return (
     <div className="flex min-h-full flex-col px-4 pb-5 pt-3 gap-3.5 bg-surface">
-      {/* ── 1. Primary Safety Focus: Panic Button Card ──────────────────── */}
+      {/* ── 1. Primary Safety Focus: Emergency S.O.S ────────────────────── */}
       <PanicControl
-        onFire={handlePanic}
+        onSelectEmergency={handleEmergency}
         onHoldStart={warmUp}
         state={state === "sending" ? "sending" : "idle"}
+        emergencyCategories={emergencyCategories}
       />
 
       {state === "failed" && (
@@ -524,26 +592,7 @@ export default function CitizenLandingScreen() {
         </p>
       </div>
 
-      {/* ── 5. Command Center Status ─────────────────────────────────────────── */}
-      <div className="p-3 rounded-md border border-brand-edge bg-brand-wash flex items-center justify-between gap-3 shadow-2xs">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shrink-0">
-            <PhoneCall className="w-3.5 h-3.5" aria-hidden="true" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[12px] font-bold text-ink leading-tight">Legazpi Command Center</span>
-            <span className="text-[10px] text-ink-muted leading-tight mt-0.5 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-status-resolved-ink animate-pulse shrink-0 inline-block" />
-              Online — CDRRMO 24/7
-            </span>
-          </div>
-        </div>
-        <a href="tel:911" className="text-[11px] font-bold px-3 py-1.5 rounded bg-brand text-white hover:bg-brand-mid transition-colors shadow-xs">
-          Call 911
-        </a>
-      </div>
-
-      {/* ── 6. Footer ────────────────────────────────────────────────────────── */}
+      {/* ── 5. Footer ────────────────────────────────────────────────────────── */}
       <p className="text-[11px] text-ink-faint text-center leading-relaxed pt-0.5">
         SARO is Bikol for &ldquo;one&rdquo;. One front door for emergency reporting &amp; hazard tracking in Legazpi City.
       </p>

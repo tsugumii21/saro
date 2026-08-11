@@ -13,7 +13,7 @@ import { Copy, Check } from "lucide-react";
  * The alphabet already excludes 0/O and 1/I at generation time; the typeface
  * is the second line of defence for the characters that remain.
  */
-export default function TrackingCode({ code, size = "md", onCopy }) {
+export default function TrackingCode({ code, size = "md", onCopy, showCopy = true }) {
   const [copied, setCopied] = useState(false);
   if (!code) return null;
 
@@ -37,15 +37,17 @@ export default function TrackingCode({ code, size = "md", onCopy }) {
           <span style={{ color: "var(--color-ink-faint)" }}>{prefix}-</span>
           <span style={{ color: "var(--color-ink)" }}>{body}</span>
         </span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="saro-btn saro-btn-secondary saro-btn-sm"
-          aria-label={copied ? "Code copied" : `Copy tracking code ${code}`}
-        >
-          {copied ? <Check width={13} height={13} /> : <Copy width={13} height={13} />}
-          {copied ? "Copied" : "Copy"}
-        </button>
+        {showCopy && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="saro-btn saro-btn-secondary saro-btn-sm"
+            aria-label={copied ? "Code copied" : `Copy tracking code ${code}`}
+          >
+            {copied ? <Check width={13} height={13} /> : <Copy width={13} height={13} />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        )}
       </div>
     );
   }

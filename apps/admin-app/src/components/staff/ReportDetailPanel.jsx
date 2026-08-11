@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import {
   X, MapPin, Phone, Clock, ShieldCheck, UserRound, Layers,
   Upload, Check, Flag, Search, Image as ImageIcon, History,
-  FileText, Camera, AlertCircle, CornerUpLeft, ExternalLink, CheckCircle2, ChevronRight
+  FileText, Camera, AlertCircle, CornerUpLeft, ExternalLink, CheckCircle2, ChevronRight, Trash2
 } from "lucide-react";
 import {
-  updateReportStatus, addReportMedia, getReportMedia, getReportHistory,
+  updateReportStatus, deleteReport, addReportMedia, getReportMedia, getReportHistory,
   markFalseReport, saroEvents, STATUS_PIPELINE, STATUS_LABELS,
   RESOLUTION_REASONS, RESOLUTION_REASON_LABELS,
+  isStaleReport, daysSinceStatusUpdate, STALE_REPORT_LABEL,
+  reassignReport, endorseReport,
 } from "@saro/shared";
 import { StatusTag, TrackingCode, statusTab, HazardMap } from "@saro/ui";
 
@@ -53,12 +55,25 @@ function formatHistoryDate(isoStr) {
   });
 }
 
+/**
+ * One report, and whatever this viewer is allowed to do to it.
+ *
+ * The panel used to take `isBarangayOfficial` and infer permission from it,
+ * which quietly encoded "everyone who is not a barangay official may set any
+ * status" — including the city administrator, whose job is not dispatch. It now
+ * takes the three capabilities directly, decided in @saro/shared, so the roles
+ * can differ without this file growing a second opinion about them.
+ */
 export default function ReportDetailPanel({
   report,
   category,
   barangay,
   office,
-  isBarangayOfficial,
+  offices = [],
+  canDispatch = false,
+  canEndorse = false,
+  canReassign = false,
+  canDelete = false,
   onClose,
   onUpdateSuccess,
 }) {
@@ -76,27 +91,44 @@ export default function ReportDetailPanel({
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [activePhotoModal, setActivePhotoModal] = useState(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // Endorsement (barangay) and reassignment (admin) — the two non-dispatch writes.
+  const [endorsementNote, setEndorsementNote] = useState("");
+  const [endorsementDone, setEndorsementDone] = useState("");
+  const [reassignOfficeId, setReassignOfficeId] = useState("");
+  const [reassignReason, setReassignReason] = useState("");
+  const [reassignDone, setReassignDone] = useState("");
 
   const fileInputRef = useRef(null);
+  const reportId = report?.id;
+  const reportStatus = report?.status;
+  const reportUpdatedAt = report?.updated_at;
 
   // Sync state when selected report changes
   useEffect(() => {
-    if (!report) return;
-    setTargetStatus(report.status);
+    if (!reportId) return;
+    setTargetStatus(reportStatus);
     setCustomNote("");
     setResolutionPhoto(null);
     setReasonCode("");
     setReferenceCode("");
     setMarkAsFalse(false);
     setErrorMsg("");
+    setConfirmingDelete(false);
+    setEndorsementNote("");
+    setEndorsementDone("");
+    setReassignOfficeId("");
+    setReassignReason("");
+    setReassignDone("");
 
     let mounted = true;
     setLoadingDetails(true);
 
     async function loadReportAssets() {
       const [mediaRes, historyRes] = await Promise.all([
-        getReportMedia(report.id),
-        getReportHistory(report.id),
+        getReportMedia(reportId),
+        getReportHistory(reportId),
       ]);
 
       if (mounted) {
@@ -111,24 +143,35 @@ export default function ReportDetailPanel({
     return () => {
       mounted = false;
     };
-  }, [report?.id]);
+  }, [reportId, reportStatus, reportUpdatedAt]);
 
   if (!report) return null;
 
   // Determine resolution proof requirement directly from routing table / category row
-  const proofRequirement = category?.resolution_proof ?? "photo"; // "photo" | "reference_code" | "none"
+  const proofRequirement = category?.resolution_proof ?? "photo"; // "photo" | "reference"
 
   const isResolving = targetStatus === "resolved";
 
+  /**
+   * What actually blocks a status transition.
+   *
+   * A resolution photo no longer does. Requiring one meant a crew who fixed a
+   * drain at night, or on a phone with a dead camera, could not close the
+   * report at all — so the queue carried work that was finished, which is worse
+   * for dispatch than a closure with no picture. The photo is still offered and
+   * still attached when given; it is evidence, not a gate.
+   *
+   * The reference-code path stays required. That is a blotter or dispatch
+   * serial the office already holds, it is typed rather than captured, and it
+   * is the only record tying the closure to the responding unit.
+   */
   const isReadyToUpdate = (() => {
     if (submitting) return false;
-    if (isResolving) {
-      if (proofRequirement === "photo") {
-        return Boolean(resolutionPhoto);
-      }
-      if (proofRequirement === "reference_code") {
-        return Boolean(reasonCode) && referenceCode.trim().length >= 4;
-      }
+    if (isResolving && proofRequirement === "photo") {
+      return Boolean(resolutionPhoto);
+    }
+    if (isResolving && proofRequirement === "reference") {
+      return Boolean(reasonCode) && referenceCode.trim().length >= 4;
     }
     return true;
   })();
@@ -154,7 +197,7 @@ export default function ReportDetailPanel({
       }
 
       const proofObj = {};
-      if (isResolving && proofRequirement === "reference_code") {
+      if (isResolving && proofRequirement === "reference") {
         proofObj.reason = reasonCode;
         proofObj.reference = referenceCode.trim();
       }
@@ -193,6 +236,58 @@ export default function ReportDetailPanel({
   const initialPhotos = mediaList.filter((m) => m.kind === "submission" || !m.kind);
   const resolutionPhotos = mediaList.filter((m) => m.kind === "resolution");
 
+  /* A barangay official's note. Deliberately not a status change: it records
+     that somebody accountable for that street went and looked. */
+  const handleEndorse = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMsg("");
+    setEndorsementDone("");
+
+    const { error } = await endorseReport(report.id, {
+      note: endorsementNote.trim(),
+      status: report.status,
+    });
+    setSubmitting(false);
+    if (error) return setErrorMsg(error);
+
+    setEndorsementNote("");
+    setEndorsementDone("Endorsement recorded on this report.");
+    const hRes = await getReportHistory(report.id);
+    setHistoryList(hRes.data ?? []);
+    onUpdateSuccess?.();
+  };
+
+  /* The administrator's one write on a single report. The reason is required by
+     the database function, not just by this form. */
+  const handleReassign = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMsg("");
+    setReassignDone("");
+
+    const { error } = await reassignReport(report.id, reassignOfficeId, reassignReason.trim());
+    setSubmitting(false);
+    if (error) return setErrorMsg(error);
+
+    setReassignReason("");
+    setReassignOfficeId("");
+    setReassignDone("Reassigned. The reason is on the report's record.");
+    const hRes = await getReportHistory(report.id);
+    setHistoryList(hRes.data ?? []);
+    onUpdateSuccess?.();
+  };
+
+  const handleDelete = async () => {
+    setSubmitting(true);
+    setErrorMsg("");
+    const { error } = await deleteReport(report.id);
+    setSubmitting(false);
+    if (error) return setErrorMsg(error);
+    await onUpdateSuccess?.();
+    onClose?.();
+  };
+
   return (
     <aside className="saro-card saro-rise flex h-full min-h-0 flex-col overflow-hidden bg-white border border-line shadow-card rounded-xs font-sans">
       {/* ── Header ───────────────────────────────────────────────────────── */}
@@ -204,8 +299,14 @@ export default function ReportDetailPanel({
           <div className="flex items-center gap-2">
             <TrackingCode code={report.tracking_code} />
             {report.filed_by_verified ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-status-resolved-ink bg-status-resolved-tab px-1.5 py-0.5 rounded border border-emerald-300">
-                <ShieldCheck width={12} height={12} />
+              /* Dark green ink on the light wash, not on the mid-green tab.
+                 The old pairing put resolved-ink (#00694E) on resolved-tab
+                 (#007F5F) — two neighbouring greens at 1.2:1, effectively
+                 unreadable. The wash carries the same ink at 5.8:1 and stays
+                 the only filled green pill here, so it still reads as
+                 "verified" against the outlined hazard and stale pills. */
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-status-resolved-ink bg-status-resolved-wash px-1.5 py-0.5 rounded border border-status-resolved-tab">
+                <ShieldCheck width={12} height={12} strokeWidth={2.4} />
                 Verified Resident
               </span>
             ) : (
@@ -294,7 +395,18 @@ export default function ReportDetailPanel({
             </div>
             <div>
               <span className="t-label text-ink-faint block text-[10px] font-bold">Closure Proof Rule</span>
-              <span className="font-bold mt-1 block text-[11px]" style={{ color: proofRequirement === "photo" ? "var(--color-panic-strong)" : "#B45309" }}>
+              {/* The photo route is no longer a rule, so it no longer states
+                  one — and it gives up the panic vermilion it was never
+                  entitled to. Only the reference-code route still blocks a
+                  closure, so only it is inked as a condition to act on. */}
+              <span
+                className="font-bold mt-1 block text-[11px]"
+                style={{
+                  color: proofRequirement === "photo"
+                    ? "var(--color-ink-muted)"
+                    : "var(--color-status-assigned-ink)",
+                }}
+              >
                 {proofRequirement === "photo" ? "📷 Resolution Photo" : "📝 Reason + Ref Code"}
               </span>
             </div>
@@ -320,6 +432,30 @@ export default function ReportDetailPanel({
               </div>
             )}
           </div>
+
+          {/* Waiting, not lost. The report is untouched and still open — this
+              only says how long it has been since an office last moved it. */}
+          {isStaleReport(report) && (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded border p-3"
+              style={{
+                borderColor: "var(--color-status-assigned-tab)",
+                background: "var(--color-status-assigned-wash)",
+              }}
+            >
+              <Clock width={14} height={14} className="mt-0.5 shrink-0" style={{ color: "var(--color-status-assigned-ink)" }} />
+              <div>
+                <span className="t-body-sm block font-bold" style={{ color: "var(--color-status-assigned-ink)" }}>
+                  {STALE_REPORT_LABEL}
+                </span>
+                <span className="t-micro text-ink-muted block mt-0.5">
+                  No office status update in {daysSinceStatusUpdate(report)} days.
+                  Still open and still visible to the resident.
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* ── Photos & Evidence Gallery ─────────────────────────────────── */}
           <div className="space-y-2">
@@ -359,7 +495,7 @@ export default function ReportDetailPanel({
           </div>
 
           {/* ── Actionable Status Pipeline Control ───────────────────────── */}
-          {!isBarangayOfficial && (
+          {canDispatch && (
             <form onSubmit={handleApplyStatusChange} className="p-3.5 bg-brand-wash/30 border border-brand-edge rounded-xs space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-ink uppercase tracking-wider">
@@ -388,11 +524,15 @@ export default function ReportDetailPanel({
                 </select>
               </div>
 
-              {/* Proof Requirements for 'resolved' */}
+              {/* Closure evidence for 'resolved'. Heading follows the route:
+                  the photo route collects evidence, the reference-code route
+                  states requirements. */}
               {isResolving && (
                 <div className="p-3 bg-white border border-brand/30 rounded space-y-2.5">
                   <span className="text-[11px] font-bold text-ink block border-b border-line pb-1">
-                    Accountable Resolution Requirements
+                    {proofRequirement === "photo"
+                      ? "Resolution Evidence Required"
+                      : "Accountable Resolution Requirements"}
                   </span>
 
                   {proofRequirement === "photo" ? (
@@ -430,7 +570,7 @@ export default function ReportDetailPanel({
                         </button>
                       )}
                       <p className="text-[10px] text-ink-muted leading-tight">
-                        Photo evidence of completed work is required by the routing rule.
+                        A photo of the completed work is required by the routing rule.
                       </p>
                     </div>
                   ) : (
@@ -506,9 +646,116 @@ export default function ReportDetailPanel({
             </form>
           )}
 
-          {isBarangayOfficial && (
-            <div className="p-3 bg-sunken border border-line rounded text-xs text-ink-muted">
-              Barangay read-only view. Status changes are performed by the assigned handling office.
+          {/* ── Barangay endorsement ─────────────────────────────────────── */}
+          {canEndorse && (
+            <form onSubmit={handleEndorse} className="space-y-2 rounded-xs border border-line bg-sunken p-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-ink">
+                  Endorse this report
+                </span>
+                <span className="font-mono text-[10px] font-bold text-ink-muted">Barangay record</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-ink-muted">
+                What you write is signed with your name and joins this report's permanent record,
+                where the handling office reads it. It does not change the status — that stays with
+                {office?.short_name ? ` ${office.short_name}` : " the assigned office"}.
+              </p>
+              <textarea
+                rows={2}
+                value={endorsementNote}
+                onChange={(e) => setEndorsementNote(e.target.value)}
+                placeholder="e.g. Confirmed on site 9:20 AM. Water is knee-deep by the chapel, two families already moved."
+                className="saro-field w-full text-xs"
+              />
+              {endorsementDone && (
+                <p className="rounded border border-status-resolved-tab bg-status-resolved-wash p-2 text-[11px] font-bold text-status-resolved-ink">
+                  {endorsementDone}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={submitting || endorsementNote.trim().length < 4}
+                className="saro-btn saro-btn-primary saro-btn-block justify-center py-2 text-xs font-bold"
+              >
+                <CheckCircle2 width={14} height={14} />
+                {submitting ? "Recording…" : "Record endorsement"}
+              </button>
+            </form>
+          )}
+
+          {/* ── Administrator reassignment ───────────────────────────────── */}
+          {canReassign && (
+            <form onSubmit={handleReassign} className="space-y-2 rounded-xs border border-line bg-sunken p-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-ink">
+                  Reassign to another office
+                </span>
+                <span className="font-mono text-[10px] font-bold text-ink-muted">Recorded</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-ink-muted">
+                City administrators route work; they do not close it. A reassignment changes no
+                status, so the reason you give here is the only trace it leaves — it is written into
+                the report's history under your name.
+              </p>
+              <select
+                value={reassignOfficeId}
+                onChange={(e) => setReassignOfficeId(e.target.value)}
+                className="saro-field w-full text-xs"
+                aria-label="Receiving office"
+              >
+                <option value="">Choose the receiving office…</option>
+                {offices
+                  .filter((item) => String(item.id) !== String(report.assigned_office_id))
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.short_name ?? item.full_name}
+                    </option>
+                  ))}
+              </select>
+              <textarea
+                rows={2}
+                value={reassignReason}
+                onChange={(e) => setReassignReason(e.target.value)}
+                placeholder="e.g. Routed to Engineering by category, but the report describes a live gas leak."
+                className="saro-field w-full text-xs"
+              />
+              {reassignDone && (
+                <p className="rounded border border-status-resolved-tab bg-status-resolved-wash p-2 text-[11px] font-bold text-status-resolved-ink">
+                  {reassignDone}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={submitting || !reassignOfficeId || reassignReason.trim().length < 8}
+                className="saro-btn saro-btn-primary saro-btn-block justify-center py-2 text-xs font-bold"
+              >
+                <CornerUpLeft width={14} height={14} />
+                {submitting ? "Reassigning…" : "Reassign with reason"}
+              </button>
+            </form>
+          )}
+
+          {!canDispatch && !canEndorse && !canReassign && (
+            <div className="rounded border border-line bg-sunken p-3 text-xs text-ink-muted">
+              Read-only view. This report is handled by
+              {office?.short_name ? ` ${office.short_name}` : " the assigned office"}.
+            </div>
+          )}
+
+          {canDelete && (
+            <div className="border border-alert/40 bg-alert-wash p-3">
+              {confirmingDelete ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-alert">Permanently delete {report.tracking_code}?</p>
+                  <p className="text-[11px] leading-relaxed text-ink-muted">Its timeline and media references will also be removed. This cannot be undone.</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setConfirmingDelete(false)} disabled={submitting} className="saro-btn saro-btn-secondary saro-btn-sm flex-1">Cancel</button>
+                    <button type="button" onClick={handleDelete} disabled={submitting} className="saro-btn saro-btn-sm flex-1 bg-alert text-white hover:bg-alert/90"><Trash2 width={13} height={13} />{submitting ? "Deleting…" : "Delete permanently"}</button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setConfirmingDelete(true)} className="saro-btn saro-btn-ghost saro-btn-sm text-alert"><Trash2 width={14} height={14} /> Delete report</button>
+              )}
             </div>
           )}
 

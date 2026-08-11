@@ -7,6 +7,8 @@ import {
   updateReportStatus, addReportMedia, markFalseReport, saroEvents,
   useAuth, STATUS_PIPELINE,
   RESOLUTION_REASONS, RESOLUTION_REASON_LABELS,
+  canViewReport, describeScope,
+  canDispatchReport, canEndorseReport, canReassignReport,
 } from "@saro/shared";
 import { StatusTag, TrackingCode, statusTab, HazardMap } from "@saro/ui";
 import QueueTable from "./QueueTable";
@@ -206,7 +208,10 @@ function ResolvePanel({ report, proofKind, busy, onResolve }) {
 }
 
 export default function ResponderDashboard() {
-  const { officeId, officeName, barangayId, barangayName, isAdmin, isOffice, isBarangayOfficial } = useAuth();
+  /* Ids are no longer read here: jurisdiction is decided by viewerScope in
+     @saro/shared. The names remain because they are what the scope caption
+     prints. */
+  const { officeName, barangayName, isAdmin, viewerScope } = useAuth();
 
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -220,14 +225,15 @@ export default function ResponderDashboard() {
   const [actionError, setActionError] = useState("");
 
   const loadData = useCallback(async () => {
+    if (!viewerScope?.role) return;
     const [r, c, b, o] = await Promise.all([
-      getReports(), getCategories(), getBarangays(), getOffices(),
+      getReports({ scope: viewerScope }), getCategories(), getBarangays(), getOffices(),
     ]);
     if (r.data) setReports(r.data);
     if (c.data) setCategories(c.data);
     if (b.data) setBarangays(b.data);
     if (o.data) setOffices(o.data);
-  }, []);
+  }, [viewerScope]);
 
   useEffect(() => {
     loadData();
@@ -251,21 +257,10 @@ export default function ResponderDashboard() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return reports.filter((r) => {
-      if (!isAdmin) {
-        if (isOffice && (officeId || officeName)) {
-          const rOffId = r.assigned_office_id || r.office_id || r.offices?.id;
-          const rOffName = r.office_name || r.offices?.short_name;
-          const matchId = officeId && rOffId === officeId;
-          const matchName = rOffName && officeName && rOffName.toLowerCase() === officeName.toLowerCase();
-          if (!matchId && !matchName) return false;
-        } else if (isBarangayOfficial && (barangayId || barangayName)) {
-          const rBrgyId = r.barangay_id || r.barangays?.id;
-          const rBrgyName = r.barangay_name || r.barangays?.name;
-          const matchId = barangayId && rBrgyId === barangayId;
-          const matchName = rBrgyName && barangayName && rBrgyName.toLowerCase() === barangayName.toLowerCase();
-          if (!matchId && !matchName) return false;
-        }
-      }
+      /* Jurisdiction is decided once, in @saro/shared, on ids alone. The old
+         version here also matched on office and barangay *names*, which is what
+         let a profile with a null id fall through to seeing everything. */
+      if (!canViewReport(viewerScope, r)) return false;
       if (statusFilter && r.status !== statusFilter) return false;
       if (!q) return true;
       const cat = catBy[r.category_id ?? r.category];
@@ -276,7 +271,7 @@ export default function ResponderDashboard() {
         (brgyBy[r.barangay_id]?.name || r.barangay_name || "").toLowerCase().includes(q)
       );
     });
-  }, [reports, query, statusFilter, catBy, brgyBy, isAdmin, isOffice, isBarangayOfficial, officeId, officeName, barangayId, barangayName]);
+  }, [reports, query, statusFilter, catBy, brgyBy, viewerScope]);
 
   // A minute clock. SLA countdowns have to keep moving while a dispatcher sits
   // on this screen, and reading Date.now() during render makes the component
@@ -343,7 +338,7 @@ export default function ResponderDashboard() {
     await loadData();
   };
 
-  const scope = isAdmin ? "City-wide" : officeName || barangayName || "Your queue";
+  const scope = describeScope(viewerScope, { officeName, barangayName });
   const sel = selected ? reports.find((r) => r.id === selected.id) || selected : null;
   const selCat = sel ? catBy[sel.category_id ?? sel.category] : null;
 
@@ -371,7 +366,18 @@ export default function ResponderDashboard() {
       {/* ── One filter row. No sort control: triage order is not negotiable ── */}
       <div className="flex flex-wrap items-center gap-2">
         <label className="relative flex min-w-[240px] flex-1 items-center">
-          <Search width={15} height={15} className="pointer-events-none absolute left-3 text-ink-faint" aria-hidden="true" />
+          {/* Same ink and weight as the section nav icons. ink-faint is a
+              text tone: it clears AA as a glyph, but a 15px lucide outline is a
+              ~1.2px hairline, and antialiasing thins that to near nothing on
+              white. Icons in this app carry ink-muted and a heavier stroke. */}
+          <Search
+            width={15}
+            height={15}
+            strokeWidth={2.25}
+            className="pointer-events-none absolute left-3"
+            style={{ color: "var(--color-ink-muted)" }}
+            aria-hidden="true"
+          />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -431,7 +437,13 @@ export default function ResponderDashboard() {
             category={selCat}
             barangay={brgyBy[sel.barangay_id]}
             office={officeBy[sel.assigned_office_id]}
-            isBarangayOfficial={isBarangayOfficial}
+            offices={offices}
+            /* Who may do what is decided once, in @saro/shared, and handed down
+               as three plain answers. */
+            canDispatch={canDispatchReport(viewerScope, sel)}
+            canEndorse={canEndorseReport(viewerScope, sel)}
+            canReassign={canReassignReport(viewerScope)}
+            canDelete={isAdmin}
             onClose={() => setSelected(null)}
             onUpdateSuccess={loadData}
           />

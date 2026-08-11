@@ -18,7 +18,7 @@ export const PERMISSION_CONFIG = {
     id: "microphone",
     title: "Microphone Access",
     shortTitle: "Microphone",
-    description: "Enables hands-free voice input in Bikol or Tagalog when describing a hazard report.",
+    description: "Enables hands-free voice input when describing a hazard report.",
     iconName: "Mic",
   },
   phone: {

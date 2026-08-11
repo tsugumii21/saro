@@ -255,7 +255,7 @@ export default function AssistantDesktop() {
         </div>
 
         {/* Scrollable Chat Thread */}
-        <div className={`flex-1 overflow-y-auto p-6 space-y-4 min-h-0 ${messages.length === 1 ? "min-h-full flex flex-col justify-center" : ""}`}>
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
           {messages.map((msg) => (
             <div
               key={msg.id}

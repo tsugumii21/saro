@@ -5,10 +5,11 @@ import {
   BarChart3, Shield,
 } from "lucide-react";
 import ResponderDashboard from "./ResponderDashboard.jsx";
+import AdminOversight from "./AdminOversight.jsx";
 import AdminDashboard from "./AdminDashboard.jsx";
 import RoutingEditor from "./RoutingEditor.jsx";
 import LiveMap from "./LiveMap.jsx";
-import PanicReview from "./PanicReview.jsx";
+import SosReview from "./SosReview.jsx";
 import EvidenceExport from "./EvidenceExport.jsx";
 import GapLog from "./GapLog.jsx";
 import OfficesAndAccounts from "./OfficesAndAccounts.jsx";
@@ -22,21 +23,30 @@ import { useAuth, STAFF_ROLES } from "@saro/shared";
  * Flat, single-level navigation bar for operations staff and administrators.
  */
 
+/* The first tab is not the same job for everybody. An office and a barangay
+   work a queue; the city administrator watches whether the queues are being
+   worked. Same slot, different screen, different word — "Dispatch" on an
+   admin's screen was the whole misconception in one label. */
 const SECTIONS = [
-  { id: "dispatch",   Icon: LayoutDashboard,        label: "Dispatch",           roles: ["admin", "office", "barangay_official"] },
+  { id: "dispatch",   Icon: LayoutDashboard,        label: "Dispatch",           roles: ["office", "barangay_official"] },
+  { id: "oversight",  Icon: LayoutDashboard,        label: "Oversight",          roles: ["admin"] },
   { id: "clusters",   Icon: Map,                    label: "Live Map",           roles: ["admin", "office", "barangay_official"] },
-  { id: "analytics",  Icon: BarChart3,              label: "Analytics",          roles: ["admin", "office", "barangay_official"] },
+  /* Analytics is admin-only until it is scope-aware. It was offered to every
+     role while AdminDashboard redirects non-admins on sight, so an office
+     clicking it was bounced back with no explanation. Offering nothing beats
+     offering a door that closes in your face. */
+  { id: "analytics",  Icon: BarChart3,              label: "Analytics",          roles: ["admin"] },
   { id: "evidence",   Icon: FileDown,               label: "Evidence",           roles: ["admin", "office", "barangay_official"] },
   { id: "routing",    Icon: Building2,              label: "Routing & Data",     roles: ["admin"] },
   { id: "evacuation", Icon: Shield,                 label: "Evacuation Centers", roles: ["admin", "office", "barangay_official"] },
   { id: "accounts",   Icon: Users,                  label: "Offices & Accounts", roles: ["admin"] },
-  { id: "panic",      Icon: Siren,                  label: "Panic Review",       roles: ["admin", "office"] },
+  { id: "sos",        Icon: Siren,                  label: "Emergency SOS",      roles: ["admin", "office"] },
   { id: "gaplog",     Icon: MessageCircleQuestion,  label: "Gap Log",            roles: ["admin", "office"] },
 ];
 
 export default function StaffShell() {
   const { profile, role, isAdmin, canManageAccounts, canManageRouting, officeName, barangayName, loading, signOut } = useAuth();
-  const [tab, setTab] = useState("dispatch");
+  const [tab, setTab] = useState(null);
 
   if (loading) {
     return (
@@ -52,9 +62,12 @@ export default function StaffShell() {
   const scope = officeName || barangayName || "City-wide";
   const visibleSections = SECTIONS.filter((s) => s.roles.includes(role));
 
-  // A tab the current role cannot see falls back to Dispatch rather than
-  // rendering nothing — reachable only if the stored tab outlives a role change.
-  const active = visibleSections.some((s) => s.id === tab) ? tab : "dispatch";
+  // A tab this role cannot see falls back to their first one rather than
+  // rendering nothing. It cannot be a fixed id any more: "dispatch" does not
+  // exist for an administrator, and hard-coding it left them on a blank page.
+  const active = visibleSections.some((s) => s.id === tab)
+    ? tab
+    : visibleSections[0]?.id ?? null;
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
@@ -75,11 +88,11 @@ export default function StaffShell() {
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                aria-current={tab === id ? "page" : undefined}
+                aria-current={active === id ? "page" : undefined}
                 className="saro-btn saro-btn-sm"
                 style={{
-                  background: tab === id ? "var(--color-brand)" : "var(--color-surface)",
-                  color: tab === id ? "#fff" : "var(--color-ink-muted)",
+                  background: active === id ? "var(--color-brand)" : "var(--color-surface)",
+                  color: active === id ? "#fff" : "var(--color-ink-muted)",
                 }}
               >
                 <Icon width={14} height={14} />
@@ -103,10 +116,11 @@ export default function StaffShell() {
 
       <main className="flex-1 p-5">
         {active === "dispatch"   && <ResponderDashboard />}
+        {active === "oversight"  && <AdminOversight />}
         {active === "clusters"   && <LiveMap />}
         {active === "analytics"  && <AdminDashboard />}
         {active === "evidence"   && <EvidenceExport />}
-        {active === "panic"      && <PanicReview />}
+        {active === "sos"        && <SosReview />}
         {active === "gaplog"     && <GapLog />}
         {active === "evacuation" && <EvacuationCentersEditor />}
         {active === "accounts"   && (canManageAccounts || isAdmin) && <OfficesAndAccounts />}

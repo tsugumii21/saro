@@ -132,7 +132,7 @@ export default function PermissionPrimingScreen({ onComplete }) {
                   )}
                 </div>
                 <p className="text-[11px] text-ink-muted mt-0.5 leading-snug">
-                  Enables voice-to-text input in Bikol or Tagalog when describing a hazard report.
+                  Enables voice-to-text input when describing a hazard report.
                 </p>
               </div>
             </div>

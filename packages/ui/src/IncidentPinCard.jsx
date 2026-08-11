@@ -1,238 +1,274 @@
 import { useState, useEffect } from "react";
-import { MapPin, Clock, X, Image as ImageIcon, Sparkles } from "lucide-react";
+import { MapPin, Clock, X, Image as ImageIcon, Layers, BadgeCheck } from "lucide-react";
 import StatusTag from "./StatusTag.jsx";
 import { getReportMedia } from "@saro/shared";
+
+/**
+ * The card inside a map pin's popup — the one place a report is described.
+ *
+ * A pin can stand for one report or for everything filed at one point, because
+ * public coordinates are rounded to ~110 m and unrelated reports share a
+ * lattice point. When it stands for several, this lists them grouped by
+ * category with an action on every row: the reader never scrolls to reach the
+ * button, and opening one never spawns a second marker on the map.
+ */
+
+function isRealReportId(value) {
+  return (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value)) ||
+    String(value).startsWith("demo-")
+  );
+}
+
+function timeLabel(report, fallback) {
+  if (report?.timeSinceStr) return report.timeSinceStr;
+  if (fallback) return fallback;
+  return report?.created_at ? new Date(report.created_at).toLocaleString("en-PH") : "Filed recently";
+}
 
 export default function IncidentPinCard({
   report,
   categoryName,
   barangayName,
   onClose,
-  onTrackClick,
-  onActionClick,
-  actionLabel = "Report a Hazard in This Area",
+  onViewReport,
   timeSinceStr,
+  /* How many rows to show before the popup defers to the full list. Kept small
+     on phones so the card never grows a scrollbar in front of its own action. */
+  maxRows = 3,
+  onShowAll,
 }) {
-  const [photos, setPhotos] = useState([]);
-  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [photos, setPhotos] = useState(() => report?.photos ?? []);
 
-  const isCluster = (report?.clusterCount || report?.count || 1) > 1;
-  const clusterCount = Math.min(report?.clusterCount || report?.count || 1, 3);
-
-  const categoryPrefixes = {
-    emergency_unspecified: "SR-8F01",
-    gas_leak: "SR-7F01",
-    pothole: "SR-1F01",
-    flood: "SR-2F01",
-    fire: "SR-3F01",
-    crime: "SR-4F01",
-    medical: "SR-5F01",
-    coastal_hazard: "SR-6F01",
-    landslide: "SR-9F01",
-    traffic_obstruction: "SR-0F01",
-    bridge_damage: "SR-BF01",
-    typhoon_debris: "SR-1B01",
-  };
-  const mainCatKey = report?.category_id || report?.category || "emergency_unspecified";
-  const singleReportCode = report?.tracking_code || report?.trackingCode || report?.code || categoryPrefixes[mainCatKey] || "SR-0F01";
+  /* Map pins carry a grouping id, not the report row's id — `report_id` is the
+     row the photo evidence hangs off. */
+  const mediaId = report?.report_id ?? report?.id;
 
   useEffect(() => {
-    if (!report?.id) return;
-
-    if (report.photos && report.photos.length > 0) {
-      setPhotos(report.photos);
-      return;
-    }
+    if (!mediaId || !isRealReportId(mediaId)) return;
+    if (report.photos && report.photos.length > 0) return;
 
     let isMounted = true;
-    setLoadingPhotos(true);
-    getReportMedia(report.id)
+    getReportMedia(mediaId)
       .then(({ data }) => {
-        if (isMounted) {
-          setLoadingPhotos(false);
-          if (data && data.length > 0) {
-            const urls = data.map((m) => m.signed_url).filter(Boolean);
-            setPhotos(urls);
-          }
-        }
+        if (!isMounted) return;
+        const urls = (data ?? []).map((m) => m.signed_url).filter(Boolean);
+        if (urls.length > 0) setPhotos(urls);
       })
       .catch(() => {
-        if (isMounted) setLoadingPhotos(false);
+        if (isMounted) setPhotos([]);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [report?.id, report?.photos]);
+  }, [mediaId, report?.photos]);
 
-  const description = report?.description?.trim() || "";
+  /* Groups come from the shared location grouping: one entry per kind of hazard
+     filed at this point. A pin standing for a single report has none. */
+  const groups = Array.isArray(report?.groups) ? report.groups : [];
+  const totalCount = report?.count ?? report?.clusterCount ?? 1;
+  const isLocation = groups.length > 1 || totalCount > 1;
 
-  const clusterSummary = isCluster
-    ? report?.cluster_summary ||
-      `Cluster Summary (${clusterCount} Reports): Multiple citizen reports submitted for ${categoryName || "hazard"} in ${barangayName || "this location"}. ${description || "Active hazard area under monitoring."}`
-    : description;
+  const description = report?.description?.trim() || "No description supplied.";
+  /* The tracking code is the credential its filer closes the report with, so
+     the public map never publishes one. A pin without a code is not broken.
 
-  // Representative photos (max 3 for cluster, max 4 for single)
-  const displayPhotos = isCluster ? photos.slice(0, 3) : photos.slice(0, 4);
+     `my_tracking_code` is different: the host recognised this report as the
+     reader's own and paired it with a code the reader already held. It is never
+     read off the map. */
+  const isMine = Boolean(report?.is_mine);
+  const myTrackingCode = report?.my_tracking_code || "";
+  const publicCode = report?.tracking_code || report?.trackingCode || report?.code || "";
+  const trackingCode = isMine ? myTrackingCode || publicCode : publicCode;
+  const detailId = report?.report_id || report?.id;
+  const canOpenFullReport = Boolean(onViewReport) && Boolean(trackingCode || detailId);
+  /* A location pin is "yours" when any hazard filed on that point is. */
+  const locationHasMine = isMine || groups.some((group) => group.report?.is_mine);
+
+  const displayPhotos = photos.slice(0, 4);
+  const visibleGroups = groups.slice(0, maxRows);
+  const hiddenGroupCount = groups.length - visibleGroups.length;
+
+  /* Only a report the reader owns travels with a code: a code sent for anyone
+     else's pin would open Track — the confirm/dispute surface — on a report the
+     reader has no standing to close. */
+  const openReport = (row) => {
+    const target = row ?? report;
+    const targetIsMine = Boolean(target?.is_mine);
+    onViewReport?.({
+      isMine: targetIsMine,
+      trackingCode: targetIsMine
+        ? target?.my_tracking_code || target?.tracking_code || target?.trackingCode || target?.code || ""
+        : "",
+      reportId: target?.report_id || target?.id,
+      report: target,
+    });
+  };
 
   return (
-    <div className="bg-surface border border-line shadow-2xl p-5 rounded-xl font-sans max-h-[85vh] overflow-y-auto space-y-3.5 animate-fade-in">
-      {/* Header Bar */}
-      <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
-        <div className="flex items-center gap-2 flex-wrap min-w-0">
-          <StatusTag status={report?.status || "received"} />
-          {isCluster ? (
-            <span className="text-[10px] font-mono font-bold rounded-md px-2 py-0.5 bg-brand-wash text-brand border border-brand-edge/60 shadow-2xs flex items-center gap-1 shrink-0">
-              <Sparkles className="w-3.5 h-3.5 text-brand" />
-              {clusterCount} reports in cluster
+    /* Header and action sit outside the scroll area: only the middle scrolls,
+       so the way into the full report can never end up below the fold — which
+       is what a single overflowing card kept doing on a phone. */
+    <div className="flex w-full max-h-[44vh] flex-col overflow-hidden rounded-xl border border-line bg-surface font-sans shadow-2xl animate-fade-in sm:max-h-[44vh]">
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3.5 pb-2.5 pt-3.5 sm:px-5 sm:pt-5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {isLocation ? (
+            <span className="flex shrink-0 items-center gap-1 rounded-md bg-ink px-2 py-0.5 text-[10px] font-mono font-bold text-white shadow-2xs">
+              <Layers className="h-3 w-3 text-brand-edge" aria-hidden="true" />
+              {totalCount} reports here
             </span>
           ) : (
-            <span className="text-[10px] font-mono font-bold text-ink-muted bg-sunken px-2 py-0.5 rounded-md border border-line shrink-0">
-              {singleReportCode}
-            </span>
+            <>
+              <StatusTag status={report?.status || "received"} />
+              {trackingCode ? (
+                <span className="shrink-0 rounded-md border border-line bg-sunken px-2 py-0.5 font-mono text-[10px] font-bold text-ink-muted">
+                  {trackingCode}
+                </span>
+              ) : null}
+            </>
           )}
+          {/* Said on the pin's own card, not only in the list below it: the
+              reader should know a pin is theirs before deciding to open it. */}
+          {locationHasMine ? (
+            <span className="flex shrink-0 items-center gap-1 rounded-md border border-brand-edge bg-brand-wash px-2 py-0.5 text-[10px] font-bold text-brand">
+              <BadgeCheck className="h-3 w-3" aria-hidden="true" />
+              {isLocation ? "Includes your report" : "Your report"}
+            </span>
+          ) : null}
         </div>
         <button
           onClick={onClose}
-          className="text-ink-muted hover:text-ink p-1 rounded-lg hover:bg-sunken transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-brand/30"
+          className="shrink-0 rounded-lg p-1 text-ink-muted transition-colors hover:bg-sunken hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
           aria-label="Close detail"
         >
-          <X className="w-4 h-4" />
+          <X className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Category Title */}
-      <h3 className="text-base font-bold text-ink leading-snug">
-        {isCluster
-          ? `${clusterCount} Reports in this Area (${categoryName || "Hazard"})`
-          : categoryName || "Hazard Report"}
-      </h3>
-
-      {/* Location & Time Subheader */}
-      <div className="flex items-center gap-2 text-xs text-ink-muted font-medium flex-wrap">
-        <span className="flex items-center gap-1.5 min-w-0">
-          <MapPin className="w-3.5 h-3.5 text-brand shrink-0" aria-hidden="true" />
-          <span className="truncate">{barangayName || report?.barangay || "Legazpi City"}</span>
-        </span>
-        <span className="text-ink-faint">·</span>
-        <span className="flex items-center gap-1.5 shrink-0">
-          <Clock className="w-3.5 h-3.5 text-ink-faint shrink-0" aria-hidden="true" />
-          <span>{timeSinceStr || "recently"}</span>
-        </span>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3.5 py-3 sm:space-y-3.5 sm:px-5 sm:py-4">
+      {/* Title + place */}
+      <div>
+        <h3 className="text-[15px] font-bold leading-snug text-ink">
+          {isLocation ? "Reports at this location" : categoryName || "Hazard Report"}
+        </h3>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-ink-muted">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-brand" aria-hidden="true" />
+            <span className="truncate">{barangayName || report?.barangay || "Legazpi City"}</span>
+          </span>
+          <span className="text-ink-faint">·</span>
+          <span className="flex shrink-0 items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+            <span>{timeLabel(report, timeSinceStr)}</span>
+          </span>
+        </div>
       </div>
 
-      {/* Photo Gallery (Only rendered if photos exist) */}
-      {displayPhotos.length > 0 && (
-        <div className="space-y-1.5 pt-1">
-          <div className="text-[10px] font-bold uppercase text-ink-muted tracking-wider flex items-center gap-1">
-            <ImageIcon className="w-3 h-3 text-brand" />
-            <span>
-              {isCluster
-                ? `Representative Photos (${displayPhotos.length})`
-                : `Submitted Photos (${displayPhotos.length})`}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-            {displayPhotos.map((url, idx) => (
-              <img
-                key={idx}
-                src={url}
-                alt={`Report evidence ${idx + 1}`}
-                className="h-20 sm:h-24 w-28 sm:w-32 object-cover rounded-md border border-line shadow-2xs shrink-0 bg-raised"
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Cluster Member Reports Breakdown (Max 3) */}
-      {isCluster && Array.isArray(report?.members) && report.members.length > 0 ? (
-        <div className="space-y-2 pt-2 border-t border-line">
-          <div className="text-[10px] font-bold uppercase text-ink-muted tracking-wider flex items-center justify-between">
-            <span>Cluster Member Reports ({Math.min(report.members.length, 3)})</span>
-          </div>
-          <div className="flex flex-col gap-2">
-            {report.members.slice(0, 3).map((item, idx) => {
-              const categoryPrefixes = {
-                emergency_unspecified: "SR-8F",
-                gas_leak: "SR-7F",
-                pothole: "SR-1F",
-                flood: "SR-2F",
-                fire: "SR-3F",
-                crime: "SR-4F",
-                medical: "SR-5F",
-                coastal_hazard: "SR-6F",
-                landslide: "SR-9F",
-                traffic_obstruction: "SR-0F",
-                bridge_damage: "SR-BF",
-              };
-              const catKey = item.category || report?.category || "emergency_unspecified";
-              const prefix = categoryPrefixes[catKey] || "SR-8F";
-              const fallbackCode = `${prefix}0${idx + 1}`;
-              const itemCode = item.tracking_code || item.trackingCode || item.code || fallbackCode;
-              return (
-                <div
-                  key={item.id || itemCode || idx}
-                  className="bg-surface p-3 rounded-lg border border-line flex flex-col gap-2 shadow-2xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-ink truncate">
-                      {item.category_label || categoryName || "Hazard Incident"}
-                    </span>
-                    <StatusTag status={item.status || "received"} size="sm" />
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-[11px] text-ink-muted">
-                    <span className="font-mono font-bold text-ink-muted bg-sunken px-2 py-0.5 rounded border border-line">
-                      {itemCode}
-                    </span>
-                    {onTrackClick && (
-                      <button
-                        onClick={() => onTrackClick(itemCode)}
-                        className="saro-btn saro-btn-primary saro-btn-sm font-bold text-[11px] py-1 px-2.5"
-                      >
-                        Track {itemCode}
-                      </button>
+      {isLocation ? (
+        /* One row per kind of hazard filed here, each with its own way in. */
+        <ul className="space-y-2">
+          {visibleGroups.map((group) => {
+            const rowCategory =
+              group.report?.categoryName || group.report?.category_label || group.report?.category || "Hazard report";
+            const rowIsMine = Boolean(group.report?.is_mine);
+            /* Without a code there is nothing for Track to open, so the row keeps
+               the read-only wording even when the report is the reader's. */
+            const rowCanTrack =
+              rowIsMine && Boolean(group.report?.my_tracking_code || group.report?.tracking_code);
+            return (
+              <li
+                key={group.id}
+                className={`flex items-center justify-between gap-2.5 rounded-lg border p-2.5 ${
+                  rowIsMine ? "border-brand-edge bg-brand-wash/50" : "border-line bg-raised"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-xs font-bold text-ink">{rowCategory}</span>
+                    {rowIsMine && (
+                      <span className="flex shrink-0 items-center gap-1 rounded border border-brand-edge bg-brand-wash px-1.5 py-px text-[10px] font-bold text-brand">
+                        <BadgeCheck className="h-2.5 w-2.5" aria-hidden="true" />
+                        Yours
+                      </span>
+                    )}
+                    {group.count > 1 && (
+                      <span className="shrink-0 rounded border border-brand-edge bg-brand-wash px-1.5 py-px font-mono text-[10px] font-bold text-brand">
+                        ×{group.count}
+                      </span>
                     )}
                   </div>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <StatusTag status={group.report?.status || "received"} size="sm" />
+                    <span className="truncate text-[10px] text-ink-faint">{timeLabel(group.report)}</span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+                <button
+                  type="button"
+                  onClick={() => openReport(group.report)}
+                  className={`saro-btn saro-btn-sm shrink-0 text-[11px] ${
+                    rowIsMine ? "saro-btn-primary" : "saro-btn-secondary"
+                  }`}
+                >
+                  {rowCanTrack ? "Track report" : "View report"}
+                </button>
+              </li>
+            );
+          })}
 
-      {/* Description / Summarized Context Box (Single Report) */}
-      {!isCluster && clusterSummary ? (
-        <div className="bg-sunken p-3.5 rounded-lg border border-line text-xs sm:text-sm text-ink leading-relaxed font-sans space-y-1">
-          <span>{clusterSummary}</span>
-        </div>
-      ) : null}
-
-      {/* Bottom Action Footer */}
-      {(() => {
-        const trackingCode = singleReportCode;
-        return (
-          <div className="pt-3 border-t border-line flex flex-col gap-2">
-            {!isCluster && onTrackClick && trackingCode ? (
+          {hiddenGroupCount > 0 && (
+            <li>
               <button
-                onClick={() => onTrackClick(trackingCode)}
-                className="saro-btn saro-btn-primary saro-btn-lg w-full font-bold shadow-md hover:shadow-lg transition-all text-xs sm:text-sm py-2.5 flex items-center justify-center gap-2"
+                type="button"
+                onClick={() => onShowAll?.(report)}
+                className="w-full rounded-lg border border-dashed border-line px-3 py-2 text-[11px] font-bold text-brand transition-colors hover:bg-brand-wash/40"
               >
-                <span>Track Report &amp; Full History ({trackingCode})</span>
+                Show all {groups.length} hazards here
               </button>
-            ) : null}
+            </li>
+          )}
+        </ul>
+      ) : (
+        <>
+          {displayPhotos.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+                <ImageIcon className="h-3 w-3 text-brand" aria-hidden="true" />
+                <span>Submitted photos ({displayPhotos.length})</span>
+              </div>
+              <div className="no-scrollbar flex items-center gap-2 overflow-x-auto py-0.5">
+                {displayPhotos.map((url, idx) => (
+                  <img
+                    key={url}
+                    src={url}
+                    alt={`Report evidence ${idx + 1}`}
+                    className="h-16 w-24 shrink-0 rounded-md border border-line bg-raised object-cover sm:h-20 sm:w-28"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
-            {onActionClick && (
-              <button
-                onClick={onActionClick}
-                className={`saro-btn ${!isCluster && onTrackClick && trackingCode ? "saro-btn-secondary" : "saro-btn-primary"} saro-btn-lg w-full font-bold shadow-xs transition-all text-xs py-2 flex items-center justify-center gap-1.5`}
-              >
-                {actionLabel}
-              </button>
-            )}
-          </div>
-        );
-      })()}
+          {/* Clamped: the whole story lives in the full report. */}
+          <p className="line-clamp-3 rounded-lg border border-line bg-sunken p-3 text-xs leading-relaxed text-ink sm:text-sm">
+            {description}
+          </p>
+        </>
+      )}
+      </div>
+
+      {!isLocation && canOpenFullReport && (
+        <div className="shrink-0 border-t border-line px-3.5 py-3 sm:px-5 sm:py-4">
+          <button
+            type="button"
+            onClick={() => openReport(null)}
+            className="saro-btn saro-btn-primary saro-btn-block text-xs font-bold sm:text-sm"
+          >
+            {isMine && trackingCode ? "View Full Report in Track" : "View Full Report"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

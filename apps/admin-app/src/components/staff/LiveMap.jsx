@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Layers, MapPin, Clock, ShieldCheck, UserRound, X, Split, Eye, Flame, Filter, Sparkles, AlertTriangle, Search, Image as ImageIcon, Archive
+  Layers, MapPin, Clock, ShieldCheck, UserRound, X, Split, Eye, Flame, Filter, AlertTriangle, Search, Image as ImageIcon, Archive
 } from "lucide-react";
-import { StatusTag, TrackingCode, HazardMap } from "@saro/ui";
+import { StatusTag, TrackingCode, HazardMap, IncidentPinCard } from "@saro/ui";
 import {
-  getClustersWithReports, splitFromCluster, getReports, saroEvents, REALTIME_EVENTS,
+  splitFromCluster, getReports, saroEvents, REALTIME_EVENTS,
   useAuth, LEGAZPI_CENTER, CLUSTER_RADIUS_METERS, CLUSTER_WINDOW_MINUTES,
-  STATUS_LABELS, isArchivedReport,
+  STATUS_LABELS, isArchivedReport, getDistanceMeters, corroborationLabel,
 } from "@saro/shared";
+
+/** Stable empty array — a new `[]` each render would rebuild the map markers. */
+const EMPTY_BLACKSPOTS = [];
 
 const STATUS_COLORS = {
   received: "#94A3B8",
@@ -19,59 +22,41 @@ const STATUS_COLORS = {
   reopened: "#DC2626",
 };
 
-/**
- * Calculates distance between two coordinates in meters (Haversine formula).
- */
-function getDistanceMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // Earth radius in meters
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+/* getDistanceMeters was a second Haversine implementation living here. It now
+   comes from @saro/shared, which is also what the corroboration facts are
+   measured with — two copies of the same formula is two chances to disagree
+   about whether reports are 150 m apart. */
 
 /**
- * Confidence Badge calculation.
- * Displays calculated confidence score percentage and independent count.
+ * What corroborates this incident, stated as facts.
+ *
+ * Replaces a "confidence" badge that showed a percentage derived from the
+ * member count alone (`0.35 + n × 0.15`). Three reports always read "80%
+ * confidence", which sounds like a measurement and was not one — and the badge
+ * painted resolved-ink on resolved-tab, two neighbouring greens at ~1.2:1, so
+ * at high counts the text vanished into its own background.
+ *
+ * Both problems have the same fix: say the true thing, in ink that can be read.
  */
-function ConfidenceBadge({ value, count }) {
-  const percent = Math.round((value ?? 0.5) * 100);
-  const isHigh = percent >= 75;
-  const isMid = percent >= 50;
-
+function CorroborationBadge({ label, saved }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold font-mono"
+      className="inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[11px] font-bold"
       style={{
-        background: isHigh
-          ? "var(--color-status-resolved-tab)"
-          : isMid
-          ? "var(--color-brand-wash)"
-          : "var(--color-sunken)",
-        color: isHigh
-          ? "var(--color-status-resolved-ink)"
-          : isMid
-          ? "var(--color-brand)"
-          : "var(--color-ink-muted)",
-        border: "1px solid var(--color-rule-faint)",
+        background: saved ? "var(--color-brand-wash)" : "var(--color-sunken)",
+        color: saved ? "var(--color-brand)" : "var(--color-ink-muted)",
+        borderColor: saved ? "var(--color-brand-edge)" : "var(--color-line)",
       }}
     >
-      <Sparkles width={12} height={12} />
-      {percent}% Confidence ({count} report{count === 1 ? "" : "s"})
+      <Layers width={12} height={12} aria-hidden="true" />
+      {label}
     </span>
   );
 }
 
 export default function LiveMap() {
-  const { isBarangayOfficial } = useAuth();
+  const { isBarangayOfficial, viewerScope } = useAuth();
   const [reports, setReports] = useState([]);
-  const [dbClusters, setDbClusters] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null); // cluster or report
   const [showRecurringSpots, setShowRecurringSpots] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
@@ -79,14 +64,16 @@ export default function LiveMap() {
   const [busySplitId, setBusySplitId] = useState("");
   const [actionError, setActionError] = useState("");
 
+  /* The map draws pins from these rows, so an unscoped read here puts every
+     barangay's reports on a barangay official's screen even when their queue
+     below is correctly filtered. */
   const loadData = useCallback(async () => {
-    const [cRes, rRes] = await Promise.all([
-      getClustersWithReports(),
-      getReports(),
-    ]);
-    if (cRes.data) setDbClusters(cRes.data);
-    if (rRes.data) setReports(rRes.data);
-  }, []);
+    if (!viewerScope?.role) return;
+    /* Cluster membership travels on the reports themselves (`cluster_id`), so
+       there is no second fetch for the cluster rows: one read, one truth. */
+    const { data } = await getReports({ scope: viewerScope });
+    if (data) setReports(data);
+  }, [viewerScope]);
 
   useEffect(() => {
     loadData();
@@ -105,9 +92,22 @@ export default function LiveMap() {
     return reports.filter((r) => isArchivedReport(r)).length;
   }, [reports]);
 
-  // Compute auto-clustered groups from raw reports matching 150m & 60-min rule
+  /**
+   * The groups this map draws.
+   *
+   * Membership comes from Postgres first. `assign_report_cluster` runs on
+   * insert and writes `reports.cluster_id`, so the database already holds the
+   * answer to "which reports are one incident" — and it is the only copy of
+   * that answer anyone can edit. The screen used to ignore it and re-derive
+   * groups in the browser under synthetic ids like `cluster-<reportId>`, which
+   * is why Split Out could never work: it asked Postgres to remove a row from a
+   * cluster that existed only in this component's memory.
+   *
+   * Reports the trigger left unclustered are still grouped by proximity, but
+   * that grouping is labelled as a view rather than a record, and offers no
+   * split — there is nothing on the server to split.
+   */
   const computedClusters = useMemo(() => {
-    // Exclude archived reports unless showArchived toggle is ON
     const filteredReports = reports.filter((r) => {
       if (statusFilter && r.status !== statusFilter) return false;
       if (!showArchived && isArchivedReport(r)) return false;
@@ -116,62 +116,73 @@ export default function LiveMap() {
 
     if (!filteredReports.length) return [];
 
-    const assigned = new Set();
-    const clusterGroups = [];
+    const groups = [];
+    const claimed = new Set();
 
-    for (let i = 0; i < filteredReports.length; i++) {
-      const main = filteredReports[i];
-      if (assigned.has(main.id)) continue;
-
-      const groupMembers = [main];
-      assigned.add(main.id);
-
-      const mainTime = new Date(main.created_at).getTime();
-
-      for (let j = i + 1; j < filteredReports.length; j++) {
-        const candidate = filteredReports[j];
-        if (assigned.has(candidate.id)) continue;
-
-        // Same category requirement
-        if ((candidate.category_id ?? candidate.category) !== (main.category_id ?? main.category)) {
-          continue;
-        }
-
-        // Distance check (150m threshold)
-        const dist = getDistanceMeters(main.lat, main.lng, candidate.lat, candidate.lng);
-        if (dist > CLUSTER_RADIUS_METERS) continue;
-
-        // Time check (60-minute threshold)
-        const candidateTime = new Date(candidate.created_at).getTime();
-        const diffMinutes = Math.abs(mainTime - candidateTime) / 60000;
-        if (diffMinutes > CLUSTER_WINDOW_MINUTES) continue;
-
-        groupMembers.push(candidate);
-        assigned.add(candidate.id);
-      }
-
-      // Calculate centroid
-      const avgLat = groupMembers.reduce((sum, r) => sum + r.lat, 0) / groupMembers.length;
-      const avgLng = groupMembers.reduce((sum, r) => sum + r.lng, 0) / groupMembers.length;
-
-      clusterGroups.push({
-        id: groupMembers.length > 1 ? `cluster-${main.id}` : main.id,
-        isCluster: groupMembers.length > 1,
-        clusterCount: groupMembers.length,
-        confidence: Math.min(0.35 + groupMembers.length * 0.15, 0.98),
+    const buildGroup = (members, { id, isSaved }) => {
+      const main = members[0];
+      const avgLat = members.reduce((sum, r) => sum + Number(r.lat), 0) / members.length;
+      const avgLng = members.reduce((sum, r) => sum + Number(r.lng), 0) / members.length;
+      return {
+        id,
+        /* True only for a cluster row that exists in Postgres. Everything that
+           can act on the server — Split Out above all — keys off this. */
+        isSavedCluster: isSaved,
+        isCluster: members.length > 1,
+        clusterCount: members.length,
+        corroboration: corroborationLabel(members),
         lat: avgLat,
         lng: avgLng,
         category: main.category,
         category_label: main.routing_table?.label ?? main.category,
-        priority: groupMembers.some((r) => r.priority === "high") ? "high" : "medium",
+        priority: members.some((r) => r.priority === "high") ? "high" : "medium",
         color: STATUS_COLORS[main.status] || STATUS_COLORS.received,
         mainReport: main,
-        reports: groupMembers,
+        reports: members,
         created_at: main.created_at,
-      });
+      };
+    };
+
+    // 1. Real clusters, exactly as Postgres recorded them.
+    const byClusterId = new Map();
+    for (const report of filteredReports) {
+      if (!report.cluster_id) continue;
+      if (!byClusterId.has(report.cluster_id)) byClusterId.set(report.cluster_id, []);
+      byClusterId.get(report.cluster_id).push(report);
+      claimed.add(report.id);
+    }
+    for (const [clusterId, members] of byClusterId) {
+      groups.push(buildGroup(members, { id: clusterId, isSaved: true }));
     }
 
-    return clusterGroups;
+    // 2. Everything the trigger did not cluster, grouped by the same 150 m /
+    //    60 min rule so the map still shows one pin per apparent incident.
+    const rest = filteredReports.filter((r) => !claimed.has(r.id));
+    for (let i = 0; i < rest.length; i++) {
+      const main = rest[i];
+      if (claimed.has(main.id)) continue;
+
+      const members = [main];
+      claimed.add(main.id);
+      const mainTime = new Date(main.created_at).getTime();
+
+      for (let j = i + 1; j < rest.length; j++) {
+        const candidate = rest[j];
+        if (claimed.has(candidate.id)) continue;
+        if ((candidate.category_id ?? candidate.category) !== (main.category_id ?? main.category)) continue;
+        if (getDistanceMeters(main.lat, main.lng, candidate.lat, candidate.lng) > CLUSTER_RADIUS_METERS) continue;
+
+        const diffMinutes = Math.abs(mainTime - new Date(candidate.created_at).getTime()) / 60000;
+        if (diffMinutes > CLUSTER_WINDOW_MINUTES) continue;
+
+        members.push(candidate);
+        claimed.add(candidate.id);
+      }
+
+      groups.push(buildGroup(members, { id: main.id, isSaved: false }));
+    }
+
+    return groups;
   }, [reports, statusFilter, showArchived]);
 
   // Recurring spots (spatial hotspots aggregated to ~110m grid)
@@ -188,18 +199,46 @@ export default function LiveMap() {
       .sort((a, b) => b.reports.length - a.reports.length);
   }, [reports]);
 
-  // Prepare map pins
+  /* Prepare map pins. Each pin carries the detail its popup renders — the popup
+     is where a report is read, so a pin that knows only its coordinates would
+     leave the operator looking at an empty card. */
   const mapReportMarkers = useMemo(() => {
     return computedClusters.map((grp) => ({
       id: grp.id,
+      report_id: grp.mainReport?.id,
       lat: grp.lat,
       lng: grp.lng,
       count: grp.clusterCount,
       priority: grp.priority,
       color: grp.color,
+      status: grp.mainReport?.status,
+      category: grp.category,
+      categoryName: grp.category_label,
+      tracking_code: grp.mainReport?.tracking_code,
+      description: grp.mainReport?.description,
+      barangayName: grp.mainReport?.barangays?.name || "Legazpi City",
+      created_at: grp.created_at,
+      members: grp.reports,
       onSelect: () => setSelectedItem(grp),
+      onSelectMember: () => setSelectedItem(grp),
     }));
   }, [computedClusters]);
+
+  /* Memoised because the map rebuilds its markers whenever this array changes
+     identity — a fresh literal on every render tore the open pin popup down
+     the moment selecting a pin re-rendered this component. */
+  const blackspotMarkers = useMemo(() => {
+    if (!showRecurringSpots) return EMPTY_BLACKSPOTS;
+    return recurringSpots.map((spot, idx) => ({
+      id: `spot-${idx}`,
+      lat: spot.lat,
+      lng: spot.lng,
+      name: `Hotspot: ${spot.reports[0]?.routing_table?.label || spot.reports[0]?.category}`,
+      location_label: `${spot.reports.length} recurring reports near this location`,
+      incident_count: spot.reports.length,
+      last_reported: "Active",
+    }));
+  }, [showRecurringSpots, recurringSpots]);
 
   const handleSplitReport = async (clusterId, reportId) => {
     setBusySplitId(reportId);
@@ -212,7 +251,10 @@ export default function LiveMap() {
   };
 
   const totalActive = reports.filter((r) => r.status !== "closed_confirmed" && !isArchivedReport(r)).length;
-  const totalClusteredCount = computedClusters.filter((c) => c.isCluster).length;
+  /* Counted separately, because they are different claims: one is what the
+     database linked, the other is what this screen drew. */
+  const savedClusterCount = computedClusters.filter((c) => c.isCluster && c.isSavedCluster).length;
+  const proximityGroupCount = computedClusters.filter((c) => c.isCluster && !c.isSavedCluster).length;
   const highPriorityCount = reports.filter((r) => r.priority === "high" && !isArchivedReport(r)).length;
 
   return (
@@ -227,7 +269,8 @@ export default function LiveMap() {
             </span>
           </div>
           <p className="t-body-sm text-ink-muted mt-0.5">
-            City-wide spatial monitoring with real-time automatic hazard clustering within {CLUSTER_RADIUS_METERS}m & {CLUSTER_WINDOW_MINUTES} mins.
+            Incidents linked by the database on arrival. Reports it left unlinked are drawn together
+            when they fall within {CLUSTER_RADIUS_METERS} m and {CLUSTER_WINDOW_MINUTES} minutes.
           </p>
         </div>
 
@@ -238,8 +281,12 @@ export default function LiveMap() {
             <span className="text-base font-bold font-mono text-brand">{totalActive}</span>
           </div>
           <div className="flex flex-col items-start border-r border-line pr-4">
-            <span className="text-[10px] uppercase font-bold text-ink-faint">Auto Clusters</span>
-            <span className="text-base font-bold font-mono text-status-resolved-ink">{totalClusteredCount}</span>
+            <span className="text-[10px] uppercase font-bold text-ink-faint">Linked Incidents</span>
+            <span className="text-base font-bold font-mono text-status-resolved-ink">{savedClusterCount}</span>
+          </div>
+          <div className="flex flex-col items-start border-r border-line pr-4">
+            <span className="text-[10px] uppercase font-bold text-ink-faint">Near Each Other</span>
+            <span className="text-base font-bold font-mono text-ink">{proximityGroupCount}</span>
           </div>
           <div className="flex flex-col items-start border-r border-line pr-4">
             <span className="text-[10px] uppercase font-bold text-ink-faint">In Hazard Zone</span>
@@ -328,15 +375,22 @@ export default function LiveMap() {
             zoom={13}
             hidden={["rain"]}
             reports={mapReportMarkers}
-            accidentBlackspots={showRecurringSpots ? recurringSpots.map((spot, idx) => ({
-              id: `spot-${idx}`,
-              lat: spot.lat,
-              lng: spot.lng,
-              name: `Hotspot: ${spot.reports[0]?.routing_table?.label || spot.reports[0]?.category}`,
-              location_label: `${spot.reports.length} recurring reports near this location`,
-              incident_count: spot.reports.length,
-              last_reported: "Active",
-            })) : []}
+            renderReportPopup={(pin, { close }) => (
+              <IncidentPinCard
+                report={pin}
+                categoryName={pin.categoryName || pin.category}
+                barangayName={pin.barangayName}
+                timeSinceStr={pin.created_at ? new Date(pin.created_at).toLocaleString("en-PH") : ""}
+                onClose={close}
+                onSelectReport={() => {
+                  close();
+                  pin.onSelect?.();
+                }}
+              />
+            )}
+            selectedId={selectedItem?.id ?? null}
+            onClearSelectedReport={() => setSelectedItem(null)}
+            accidentBlackspots={blackspotMarkers}
           />
         </div>
 
@@ -351,9 +405,16 @@ export default function LiveMap() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-ink uppercase tracking-wider">
-                    {selectedItem.isCluster ? "Auto-Clustered Incident" : "Single Incident Report"}
+                    {selectedItem.isCluster
+                      ? selectedItem.isSavedCluster
+                        ? "Clustered Incident"
+                        : "Grouped by proximity"
+                      : "Single Incident Report"}
                   </span>
-                  <ConfidenceBadge value={selectedItem.confidence} count={selectedItem.clusterCount} />
+                  <CorroborationBadge
+                    label={selectedItem.corroboration}
+                    saved={selectedItem.isSavedCluster}
+                  />
                 </div>
                 <h2 className="t-body-sm mt-1 truncate font-bold text-ink">
                   {selectedItem.category_label || selectedItem.category}
@@ -415,8 +476,19 @@ export default function LiveMap() {
                 </div>
               </div>
 
+              {/* A group the browser inferred is a drawing, not a record: there
+                  is no cluster row on the server to take a report out of. Say so
+                  rather than offering a button that cannot do anything. */}
+              {selectedItem.isCluster && !selectedItem.isSavedCluster && (
+                <p className="rounded border border-line bg-sunken p-3 text-[11px] leading-relaxed text-ink-muted">
+                  These reports are drawn as one pin because they arrived within{" "}
+                  {CLUSTER_RADIUS_METERS} m and {CLUSTER_WINDOW_MINUTES} minutes of each other. The
+                  database has not linked them into an incident, so there is nothing here to split.
+                </p>
+              )}
+
               {/* Split Action for Admins */}
-              {!isBarangayOfficial && selectedItem.isCluster && (
+              {!isBarangayOfficial && selectedItem.isCluster && selectedItem.isSavedCluster && (
                 <div className="p-3 bg-amber-50/50 border border-amber-200 rounded space-y-2">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
                     <Split width={14} height={14} />

@@ -3,12 +3,12 @@ import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   AlertTriangle, MapPin, Navigation, Camera, Mic, MicOff,
   Send, ChevronDown, CheckCircle2, X, Plus, WifiOff, Search, Check,
-  Waves, Mountain, Wind, Ambulance, Car, Flame, Wrench, ShieldAlert, Droplets, Anchor,
   Lock, DoorOpen, UserPlus, BellRing, Zap, FileText, Siren
 } from "lucide-react";
 import { booleanPointInPolygon, point } from "@turf/turf";
+import { getCategoryIcon } from "../../lib/categoryIcons.js";
 import {
-  getCategories, getBarangays, getOffices, createReport, addReportMedia,
+  getCategories, getBarangays, getOffices, createReport, updateSosReportDetails, addReportMedia,
   validateReportDraft, LEGAZPI_CENTER, CLIENT_STORAGE_KEYS, useAuth,
   detectEmergencyInDescription,
   enqueueReport, removeFromOutbox, rememberReport, requestBackgroundSync,
@@ -68,21 +68,6 @@ function isInsideLegazpi(lat, lng) {
          lng >= LEGAZPI_BOUNDS.minLng && lng <= LEGAZPI_BOUNDS.maxLng;
 }
 
-function getCategoryIcon(cat) {
-  const id = cat.id || "";
-  if (id.includes("flood")) return Waves;
-  if (id.includes("landslide")) return Mountain;
-  if (id.includes("debris")) return Wind;
-  if (id.includes("medical")) return Ambulance;
-  if (id.includes("accident")) return Car;
-  if (id.includes("fire") || id.includes("gas")) return Flame;
-  if (id.includes("pothole") || id.includes("drain") || id.includes("bridge")) return Wrench;
-  if (id.includes("crime") || id.includes("traffic")) return ShieldAlert;
-  if (id.includes("water")) return Droplets;
-  if (id.includes("coastal")) return Anchor;
-  return AlertTriangle;
-}
-
 // The localStorage offline queue that used to live here is gone. It could not
 // survive being closed mid-storm — nothing ever retried it, there was no
 // service worker to drain it, and a queued report simply sat in a string until
@@ -95,6 +80,13 @@ export default function ReportFormScreen() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { isResident } = useAuth();
+  const sosReport = location.state?.sosReport;
+  const activeSosReportId = sosReport?.id || searchParams.get("sos_id") || "";
+  const activeSosTrackingCode = sosReport?.tracking_code || searchParams.get("panic") || "";
+  const activeSosCategoryId = sosReport?.category || searchParams.get("category") || "";
+  const isSosDetailsFlow = Boolean(
+    activeSosReportId && activeSosTrackingCode && activeSosCategoryId
+  );
 
   // The login wall, and the rules around it.
   //
@@ -116,7 +108,7 @@ export default function ReportFormScreen() {
   const [offices, setOffices] = useState([]);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState(
-    searchParams.get("category") || location.state?.category_id || ""
+    activeSosCategoryId || location.state?.category_id || ""
   );
   const [catSearch, setCatSearch] = useState("");
   const [catTab, setCatTab] = useState("all"); // "all" | "emergency" | "standard"
@@ -372,6 +364,17 @@ export default function ReportFormScreen() {
       anonymous: fileAnonymously,
       device_fingerprint: getDeviceFingerprint()
     };
+    const writePayload = isSosDetailsFlow
+      ? {
+          report_id: activeSosReportId,
+          tracking_code: activeSosTrackingCode,
+          description: payload.description,
+          lat: payload.lat,
+          lng: payload.lng,
+          barangay_id: payload.barangay_id,
+          device_fingerprint: payload.device_fingerprint,
+        }
+      : payload;
 
     // The report is written to IndexedDB before the network is touched, every
     // time — not only when `navigator.onLine` says we are offline. onLine is a
@@ -379,7 +382,10 @@ export default function ReportFormScreen() {
     // on a connected-but-dead cell, and on a phone that has just walked into a
     // parking structure. Queueing unconditionally means a request that dies
     // halfway is indistinguishable from one that never started.
-    const queueId = await enqueueReport(payload, { kind: "describe" });
+    const queueId = await enqueueReport(writePayload, {
+      kind: isSosDetailsFlow ? "sos_details" : "describe",
+      operation: isSosDetailsFlow ? "update_sos" : "create",
+    });
     requestBackgroundSync();
 
     if (!isOnline) {
@@ -388,7 +394,9 @@ export default function ReportFormScreen() {
       return;
     }
 
-    const { data, error } = await createReport(payload);
+    const { data, error } = isSosDetailsFlow
+      ? await updateSosReportDetails(writePayload)
+      : await createReport(writePayload);
 
     if (error || !data) {
       // Still queued, so this is a delay rather than a loss, and it is worded
@@ -399,13 +407,15 @@ export default function ReportFormScreen() {
     }
 
     await removeFromOutbox(queueId);
-    await rememberReport({
-      tracking_code: data.tracking_code,
-      category: data.category,
-      status: data.status,
-      kind: "describe",
-      created_at: data.created_at,
-    });
+    if (!isSosDetailsFlow) {
+      await rememberReport({
+        tracking_code: data.tracking_code,
+        category: data.category,
+        status: data.status,
+        kind: "describe",
+        created_at: data.created_at,
+      });
+    }
 
     // Save photo evidence if attached
     if (photos.length > 0) {
@@ -447,20 +457,26 @@ export default function ReportFormScreen() {
             <WifiOff width={14} height={14} aria-hidden="true" />
             Waiting to send
           </span>
-          <h1 className="t-heading mt-2">Your report is saved on this phone</h1>
+          <h1 className="t-heading mt-2">
+            {isSosDetailsFlow ? "Your S.O.S. details are saved on this phone" : "Your report is saved on this phone"}
+          </h1>
           <p className="t-body-sm mt-2 text-ink-muted">
             It is stored on the device, not lost. SARO keeps trying and sends it the moment
             signal returns — you do not have to leave this app open, and you do not have to
             do anything.
           </p>
           <p className="t-body-sm mt-3 text-ink-muted">
-            A tracking code is issued when it reaches the city. It will appear under
-            <strong className="font-bold"> Check a report</strong> as soon as it does.
+            {isSosDetailsFlow ? (
+              <>They will be added to <strong className="font-mono">{activeSosTrackingCode}</strong> when signal returns. No new report will be created.</>
+            ) : (
+              <>A tracking code is issued when it reaches the city. It will appear under
+                <strong className="font-bold"> Check a report</strong> as soon as it does.</>
+            )}
           </p>
         </div>
 
-        <button type="button" onClick={clearForm} className="saro-btn saro-btn-primary saro-btn-lg saro-btn-block">
-          File another report
+        <button type="button" onClick={isSosDetailsFlow ? () => navigate("/") : clearForm} className="saro-btn saro-btn-primary saro-btn-lg saro-btn-block">
+          {isSosDetailsFlow ? "Done" : "File another report"}
         </button>
         <button
           type="button"
@@ -478,9 +494,13 @@ export default function ReportFormScreen() {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-6">
         <div>
-          <span className="saro-stamp">Report received</span>
+          <span className="saro-stamp">
+            {isSosDetailsFlow ? "Details added to S.O.S." : "Report received"}
+          </span>
           <p className="t-body mt-3 text-ink-muted">
-            {getAssignedOfficeName()
+            {isSosDetailsFlow
+              ? `Your update stays under ${submitted.tracking_code}. No new report was created.`
+              : getAssignedOfficeName()
               ? `Routed to ${getAssignedOfficeName()}. Keep this code — it is how you check what happens next.`
               : "Keep this code — it is how you check what happens next."}
           </p>
@@ -499,8 +519,8 @@ export default function ReportFormScreen() {
         >
           Track this report
         </button>
-        <button type="button" onClick={clearForm} className="saro-btn saro-btn-ghost saro-btn-block">
-          File another
+        <button type="button" onClick={isSosDetailsFlow ? () => navigate("/") : clearForm} className="saro-btn saro-btn-ghost saro-btn-block">
+          {isSosDetailsFlow ? "Done" : "File another"}
         </button>
       </div>
     );
@@ -509,9 +529,13 @@ export default function ReportFormScreen() {
   return (
     <div className="px-4 py-3 max-w-md mx-auto pb-28 sm:pb-8">
       <div className="mb-4">
-        <h2 className="text-base font-bold text-ink">File a Hazard Report</h2>
+        <h2 className="text-base font-bold text-ink">
+          {isSosDetailsFlow ? "Add S.O.S. Details" : "File a Hazard Report"}
+        </h2>
         <p className="text-xs text-ink-muted mt-0.5">
-          One front door for Legazpi City. We route your report to the correct office.
+          {isSosDetailsFlow
+            ? `Adding information to ${activeSosTrackingCode}. Your selected hazard and report ID stay unchanged.`
+            : "One front door for Legazpi City. We route your report to the correct office."}
         </p>
       </div>
 
@@ -593,7 +617,21 @@ export default function ReportFormScreen() {
           )}
         </div>
 
-        {/* Thumb-Friendly Un-truncated Category Picker */}
+        {/* Active S.O.S. already has a category. Never reopen the normal picker. */}
+        {isSosDetailsFlow ? (
+          <div className="saro-card p-3.5" aria-label="Selected S.O.S. hazard">
+            <span className="t-label text-ink-faint">S.O.S. hazard already selected</span>
+            <div className="mt-1.5 flex min-w-0 items-center justify-between gap-3">
+              <span className="t-body-sm min-w-0 break-words font-bold text-ink">
+                {selectedCategory?.name || activeSosCategoryId}
+              </span>
+              <span className="shrink-0 font-mono text-xs font-bold text-brand">
+                {activeSosTrackingCode}
+              </span>
+            </div>
+          </div>
+        ) : (
+        /* Thumb-Friendly Un-truncated Category Picker */
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-xs font-bold text-ink uppercase tracking-wider">
@@ -843,6 +881,7 @@ export default function ReportFormScreen() {
             <p className="text-xs text-alert mt-1.5 font-medium">{validationErrors.category}</p>
           )}
         </div>
+        )}
 
         {/* Nothing gates the form here on purpose. The prototype showed a
             dead-end notice the moment a guest picked a non-emergency category,

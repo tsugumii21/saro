@@ -3,15 +3,16 @@ import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   AlertTriangle, MapPin, Navigation, Camera, Mic, MicOff,
   Send, ChevronDown, CheckCircle2, X, Plus, WifiOff, Search, Check,
-  Waves, Mountain, Wind, Ambulance, Car, Flame, Wrench, ShieldAlert, Droplets, Anchor,
-  Lock, DoorOpen, UserPlus, BellRing, Zap, FileText, Siren, Upload
+  Lock, DoorOpen, UserPlus, Zap, FileText, Siren
 } from "lucide-react";
 import { booleanPointInPolygon, point } from "@turf/turf";
+import { getCategoryIcon } from "../../../lib/categoryIcons.js";
 import {
-  getCategories, getBarangays, getOffices, createReport, addReportMedia,
+  getCategories, getBarangays, getOffices, createReport, updateSosReportDetails, addReportMedia,
   validateReportDraft, LEGAZPI_CENTER, CLIENT_STORAGE_KEYS, useAuth,
   detectEmergencyInDescription,
   enqueueReport, removeFromOutbox, rememberReport, requestBackgroundSync,
+  getCategoryTier,
 } from "@saro/shared";
 import { HazardMap } from "@saro/ui";
 import ResidentAuthScreen from "../ResidentAuthScreen";
@@ -65,32 +66,26 @@ function isInsideLegazpi(lat, lng) {
          lng >= LEGAZPI_BOUNDS.minLng && lng <= LEGAZPI_BOUNDS.maxLng;
 }
 
-function getCategoryIcon(cat) {
-  const id = cat.id || "";
-  if (id.includes("flood")) return Waves;
-  if (id.includes("landslide")) return Mountain;
-  if (id.includes("debris")) return Wind;
-  if (id.includes("medical")) return Ambulance;
-  if (id.includes("accident")) return Car;
-  if (id.includes("fire") || id.includes("gas")) return Flame;
-  if (id.includes("pothole") || id.includes("drain") || id.includes("bridge")) return Wrench;
-  if (id.includes("crime") || id.includes("traffic")) return ShieldAlert;
-  if (id.includes("water")) return Droplets;
-  if (id.includes("coastal")) return Anchor;
-  return AlertTriangle;
-}
-
 /**
  * Desktop Report Form — Standardized 400px Left Panel + Flex-1 Pin Picker Map.
  *
- * Option 2A: Full-width drag-and-drop photo target zone, un-trapped category list,
- * prominent voice dictation bar, and high-contrast step headers.
+ * The panel runs the same flow, in the same order, with the same components as
+ * the mobile ReportFormScreen: describe first, confirm the category second,
+ * place the pin, attach photos, submit. Only the map differs — mobile inlines a
+ * short picker, desktop hands the whole right-hand canvas to it.
  */
 export default function ReportDesktop() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { isResident } = useAuth();
+  const sosReport = location.state?.sosReport;
+  const activeSosReportId = sosReport?.id || searchParams.get("sos_id") || "";
+  const activeSosTrackingCode = sosReport?.tracking_code || searchParams.get("panic") || "";
+  const activeSosCategoryId = sosReport?.category || searchParams.get("category") || "";
+  const isSosDetailsFlow = Boolean(
+    activeSosReportId && activeSosTrackingCode && activeSosCategoryId
+  );
 
   const [showAuthWall, setShowAuthWall] = useState(false);
   const isGuest = !isResident;
@@ -100,7 +95,7 @@ export default function ReportDesktop() {
   const [offices, setOffices] = useState([]);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState(
-    searchParams.get("category") || location.state?.category_id || ""
+    activeSosCategoryId || location.state?.category_id || ""
   );
   const [catSearch, setCatSearch] = useState("");
   const [catTab, setCatTab] = useState("all");
@@ -339,8 +334,22 @@ export default function ReportDesktop() {
       anonymous: fileAnonymously,
       device_fingerprint: getDeviceFingerprint(),
     };
+    const writePayload = isSosDetailsFlow
+      ? {
+          report_id: activeSosReportId,
+          tracking_code: activeSosTrackingCode,
+          description: payload.description,
+          lat: payload.lat,
+          lng: payload.lng,
+          barangay_id: payload.barangay_id,
+          device_fingerprint: payload.device_fingerprint,
+        }
+      : payload;
 
-    const queueId = await enqueueReport(payload, { kind: "describe" });
+    const queueId = await enqueueReport(writePayload, {
+      kind: isSosDetailsFlow ? "sos_details" : "describe",
+      operation: isSosDetailsFlow ? "update_sos" : "create",
+    });
     requestBackgroundSync();
 
     if (!isOnline) {
@@ -349,7 +358,9 @@ export default function ReportDesktop() {
       return;
     }
 
-    const { data, error } = await createReport(payload);
+    const { data, error } = isSosDetailsFlow
+      ? await updateSosReportDetails(writePayload)
+      : await createReport(writePayload);
     if (error || !data) {
       setOfflineQueued(true);
       setSubmitting(false);
@@ -357,13 +368,15 @@ export default function ReportDesktop() {
     }
 
     await removeFromOutbox(queueId);
-    await rememberReport({
-      tracking_code: data.tracking_code,
-      category: data.category,
-      status: data.status,
-      kind: "describe",
-      created_at: data.created_at,
-    });
+    if (!isSosDetailsFlow) {
+      await rememberReport({
+        tracking_code: data.tracking_code,
+        category: data.category,
+        status: data.status,
+        kind: "describe",
+        created_at: data.created_at,
+      });
+    }
 
     if (photos.length > 0) {
       await Promise.all(photos.map((photo) => addReportMedia(data.id, photo, "evidence")));
@@ -391,29 +404,32 @@ export default function ReportDesktop() {
     setValidationErrors({});
   };
 
-  const filteredCategories = categories.filter((c) => {
-    const matchesSearch = !catSearch || c.name.toLowerCase().includes(catSearch.toLowerCase());
-    if (catTab === "emergency") return matchesSearch && c.is_emergency;
-    if (catTab === "standard") return matchesSearch && !c.is_emergency;
-    return matchesSearch;
-  });
-
   return (
     <div className="flex h-full w-full overflow-hidden bg-canvas font-sans">
       {/* ── Left Form Wizard Panel (Standardized 400px) ────────────────── */}
       <aside className="flex w-[400px] shrink-0 flex-col border-r border-line bg-surface overflow-y-auto">
         <div className="border-b border-line px-5 py-3.5">
-          <h1 className="text-sm font-bold text-ink">Describe a Hazard</h1>
-          <p className="text-xs text-ink-faint mt-0.5">File a structured incident report for Legazpi City</p>
+          <h1 className="text-sm font-bold text-ink">
+            {isSosDetailsFlow ? "Add S.O.S. Details" : "Describe a Hazard"}
+          </h1>
+          <p className="text-xs text-ink-faint mt-0.5">
+            {isSosDetailsFlow
+              ? `Updating ${activeSosTrackingCode}; selected hazard and report ID stay unchanged`
+              : "File a structured incident report for Legazpi City"}
+          </p>
         </div>
 
         {/* ── Success / Queued view ───────────────────────────────────── */}
         {submitted ? (
           <div className="p-5 flex flex-col gap-4">
             <div>
-              <span className="saro-stamp">Report received</span>
+              <span className="saro-stamp">
+                {isSosDetailsFlow ? "Details added to S.O.S." : "Report received"}
+              </span>
               <p className="text-xs text-ink-muted mt-2">
-                {getAssignedOfficeName()
+                {isSosDetailsFlow
+                  ? `Your update stays under ${submitted.tracking_code}. No new report was created.`
+                  : getAssignedOfficeName()
                   ? `${getAssignedOfficeName()} has been notified. Save this tracking code.`
                   : "Your report has reached Legazpi City DRRM. Save this tracking code."}
               </p>
@@ -423,8 +439,8 @@ export default function ReportDesktop() {
               categoryLabel={selectedCategory?.name ?? "Hazard Report"}
               filedAt={submitted.created_at}
             />
-            <button type="button" onClick={clearForm} className="saro-btn saro-btn-primary saro-btn-block py-2.5">
-              File another report
+            <button type="button" onClick={isSosDetailsFlow ? () => navigate("/") : clearForm} className="saro-btn saro-btn-primary saro-btn-block py-2.5">
+              {isSosDetailsFlow ? "Done" : "File another report"}
             </button>
             <button type="button" onClick={() => navigate("/track")} className="saro-btn saro-btn-ghost saro-btn-block py-2.5">
               Go to Check a report
@@ -437,264 +453,439 @@ export default function ReportDesktop() {
                 <WifiOff width={14} height={14} />
                 Waiting to send
               </span>
-              <h2 className="text-sm font-bold mt-2">Saved on this device</h2>
+              <h2 className="text-sm font-bold mt-2">
+                {isSosDetailsFlow ? "S.O.S. details saved on this device" : "Saved on this device"}
+              </h2>
               <p className="text-xs text-ink-muted mt-1 leading-relaxed">
-                Your report will automatically send when connection is restored.
+                {isSosDetailsFlow
+                  ? `They will update ${activeSosTrackingCode} when connection returns. No new report will be created.`
+                  : "Your report will automatically send when connection is restored."}
               </p>
             </div>
-            <button type="button" onClick={clearForm} className="saro-btn saro-btn-primary saro-btn-block py-2.5">
-              File another report
+            <button type="button" onClick={isSosDetailsFlow ? () => navigate("/") : clearForm} className="saro-btn saro-btn-primary saro-btn-block py-2.5">
+              {isSosDetailsFlow ? "Done" : "File another report"}
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6 p-5">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-5">
 
-            {/* 1. Category Selection */}
-            <div className="flex flex-col gap-2.5">
-              <label className="text-xs font-bold text-ink uppercase tracking-wider flex items-center justify-between">
-                <span>1. Hazard Category</span>
-                <span className="text-alert text-xs font-bold">*Required</span>
+            {/* ── Step 1: say what is happening ───────────────────────────
+             *
+             * First, exactly as on mobile: it is the only thing the resident
+             * actually knows on arrival. The category picker below is the
+             * confirmation surface, not the entry point.
+             */}
+            <div>
+              <label htmlFor="describe" className="t-label block text-ink-faint">
+                What is happening? <span className="text-alert">*</span>
               </label>
+              <p className="t-body-sm mt-1 text-ink-muted">
+                Say where it is and what you can see.
+              </p>
 
-              {/* Emergency vs Standard Filter Tabs */}
-              <div className="flex items-center gap-1.5 p-1 bg-sunken rounded-md border border-line">
-                {[
-                  { id: "all", label: "All" },
-                  { id: "emergency", label: "🚨 Emergency" },
-                  { id: "standard", label: "📋 Standard" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setCatTab(tab.id)}
-                    className={`flex-1 py-1.5 px-2 rounded text-xs font-bold transition-all ${
-                      catTab === tab.id
-                        ? "bg-white text-ink shadow-2xs"
-                        : "text-ink-muted hover:text-ink"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Category Search */}
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-brand" />
-                <input
-                  type="text"
-                  value={catSearch}
-                  onChange={(e) => setCatSearch(e.target.value)}
-                  placeholder="Search categories (e.g. flood, drain, debris)..."
-                  className="bg-white border-2 border-brand-edge hover:border-brand text-ink placeholder:text-ink-muted rounded-md pl-9 pr-3 py-2 text-xs w-full shadow-xs focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+              <div className="relative mt-2">
+                <textarea
+                  id="describe"
+                  rows={4}
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value);
+                    setValidationErrors((prev) => ({ ...prev, description: "" }));
+                  }}
+                  placeholder="May baha sa tabi kan eskwelahan, abot tuhod na…"
+                  className="w-full text-xs p-3 rounded-md border-2 border-line-strong hover:border-brand-edge focus:border-brand focus:ring-2 focus:ring-brand/20 bg-surface text-ink placeholder:text-ink-muted/80 resize-none leading-relaxed transition-all shadow-2xs outline-none font-medium"
+                  aria-invalid={Boolean(validationErrors.description)}
                 />
               </div>
 
-              {validationErrors.category && (
-                <p className="text-xs font-bold text-alert">{validationErrors.category}</p>
-              )}
-
-              {/* Category Options List — Natural Flow Without Inner Scroll Trap */}
-              <div className="grid grid-cols-1 gap-2 pt-1">
-                {filteredCategories.map((cat) => {
-                  const Icon = getCategoryIcon(cat);
-                  const isSelected = selectedCategoryId === cat.id;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => {
-                        if (selectedCategoryId === cat.id) {
-                          setSelectedCategoryId("");
-                        } else {
-                          setSelectedCategoryId(cat.id);
-                          setValidationErrors((p) => ({ ...p, category: "" }));
-                        }
-                      }}
-                      className={`flex items-center justify-between p-3 rounded-md text-left transition-all duration-150 ease-out active:scale-[0.985] cursor-pointer ${
-                        isSelected
-                          ? "bg-brand-wash border-2 border-brand text-brand font-bold shadow-2xs"
-                          : "bg-surface border-2 border-line hover:border-brand-edge text-ink"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <Icon className={`w-4 h-4 shrink-0 transition-colors duration-150 ${isSelected ? "text-brand" : cat.is_emergency ? "text-panic" : "text-brand"}`} />
-                        <span className="text-xs leading-tight truncate">{cat.name}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {cat.is_emergency && !isSelected && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 bg-panic/10 text-panic border border-panic/20 rounded">
-                            Urgent
-                          </span>
-                        )}
-                        {isSelected && (
-                          <CheckCircle2 className="w-4 h-4 text-brand shrink-0 animate-in fade-in zoom-in-75 duration-150" />
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 2. Location Selection */}
-            <div className="flex flex-col gap-2.5 pt-3 border-t border-line">
-              <label className="text-xs font-bold text-ink uppercase tracking-wider flex items-center justify-between">
-                <span>2. Location Pin</span>
-                <span className="text-alert text-xs font-bold">*Required</span>
-              </label>
-
-              <button
-                type="button"
-                onClick={handleUseMyLocation}
-                className="saro-btn saro-btn-secondary saro-btn-sm py-2 flex items-center justify-center gap-2"
-              >
-                <Navigation className="w-4 h-4 text-brand" />
-                <span>Use My GPS Position</span>
-              </button>
-
-              {coords ? (
-                <div className="p-3 rounded bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between shadow-2xs">
-                  <div className="flex items-center gap-2.5">
-                    <MapPin className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <div>
-                      <span className="font-bold block">Incident Location Fixed</span>
-                      <span className="text-[11px] font-mono text-emerald-800">
-                        {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}
-                      </span>
-                    </div>
-                  </div>
-                  <Check className="w-4 h-4 text-emerald-700" />
-                </div>
-              ) : (
-                <div className="p-3 rounded bg-raised border border-line text-xs text-ink-muted flex items-center gap-2.5">
-                  <MapPin className="w-4 h-4 text-brand shrink-0 animate-bounce" />
-                  <span>Click anywhere on the right-hand map canvas to set pin.</span>
-                </div>
-              )}
-
-              {boundsError && <p className="text-xs font-bold text-alert">{boundsError}</p>}
-              {validationErrors.coords && <p className="text-xs font-bold text-alert">{validationErrors.coords}</p>}
-
-              {/* Barangay Dropdown */}
-              {barangays.length > 0 && (
-                <div className="mt-1">
-                  <span className="text-[11px] font-semibold text-ink-faint block mb-1">Barangay (Optional)</span>
-                  <select
-                    value={barangayId}
-                    onChange={(e) => {
-                      setBarangayId(e.target.value);
-                      setBarangayAutoDetected(false);
-                    }}
-                    className="saro-input text-xs w-full py-2"
-                  >
-                    <option value="">-- Select Barangay --</option>
-                    {barangays.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* 3. Description & Voice Dictation Bar */}
-            <div className="flex flex-col gap-2.5 pt-3 border-t border-line">
-              <label className="text-xs font-bold text-ink uppercase tracking-wider flex items-center justify-between">
-                <span>3. Incident Description</span>
-                <span className="text-alert text-xs font-bold">*Required</span>
-              </label>
-
-              {/* Prominent Voice Dictation Bar */}
               {speechSupported && (
-                <div className="p-2.5 rounded-md bg-sunken border border-line flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Mic className="w-4 h-4 text-brand" />
-                    <span className="text-xs font-bold text-ink">Bikol / Tagalog Voice Input</span>
-                  </div>
+                <div className="mt-2 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => toggleSpeech()}
-                    className={`saro-btn saro-btn-sm text-xs py-1 px-3 ${
-                      isListening ? "bg-panic text-white animate-pulse" : "saro-btn-secondary"
+                    aria-pressed={isListening}
+                    className={`saro-btn saro-btn-sm flex items-center gap-1.5 ${
+                      isListening ? "saro-btn-primary" : "saro-btn-secondary"
                     }`}
                   >
-                    {isListening ? "Listening... Stop" : "Start Voice"}
+                    {isListening ? <MicOff width={13} height={13} /> : <Mic width={13} height={13} className="text-brand" />}
+                    {isListening ? "Stop listening" : "Voice Input"}
                   </button>
-                </div>
-              )}
 
-              <textarea
-                rows={4}
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
-                  setValidationErrors((p) => ({ ...p, description: "" }));
-                }}
-                placeholder="Describe details: flood depth, road blockage, structural damage..."
-                className="w-full text-xs p-3 rounded-md border-2 border-line-strong hover:border-brand-edge focus:border-brand focus:ring-2 focus:ring-brand/20 bg-surface text-ink placeholder:text-ink-muted/80 resize-none leading-relaxed transition-all shadow-2xs outline-none font-medium"
-              />
-
-              {keywordEmergency && (
-                <div className="p-2.5 rounded bg-panic-wash border border-panic/30 text-panic text-xs font-bold flex items-center gap-2">
-                  <Siren className="w-4 h-4 shrink-0 text-panic" />
-                  <span>Emergency words detected — files immediately &amp; anonymously.</span>
+                  {isListening && (
+                    <span className="t-body-sm text-brand font-medium animate-pulse" role="status">Listening…</span>
+                  )}
                 </div>
               )}
 
               {validationErrors.description && (
-                <p className="text-xs font-bold text-alert">{validationErrors.description}</p>
+                <p className="t-body-sm mt-1.5 text-alert">{validationErrors.description}</p>
+              )}
+
+              {/* The local fast-track, announced the instant the words appear. */}
+              {keywordEmergency && isGuest && (
+                <p
+                  className="t-body-sm mt-3 flex items-start gap-2 border border-alert bg-alert-wash text-alert rounded-md p-3 font-medium shadow-2xs"
+                  role="status"
+                >
+                  <AlertTriangle width={15} height={15} className="mt-0.5 shrink-0 text-alert" aria-hidden="true" />
+                  <span>
+                    Read as an emergency (“{keywordEmergency.matchedPhrase}”). You can file this
+                    straight away — no account, no sign-in.
+                  </span>
+                </p>
               )}
             </div>
 
-            {/* 4. Desktop Drag & Drop Photo Upload Zone (Option 2A) */}
-            <div className="flex flex-col gap-2.5 pt-3 border-t border-line">
-              <label className="text-xs font-bold text-ink uppercase tracking-wider flex items-center justify-between">
-                <span>4. Photo Evidence (Optional)</span>
-                <span className="text-xs text-ink-faint font-normal">Max 5 photos</span>
-              </label>
-
-              {/* Drag & Drop Target Box */}
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`relative p-5 rounded-md border-2 border-dashed transition-all text-center flex flex-col items-center justify-center gap-2 cursor-pointer ${
-                  isDragOver
-                    ? "border-brand bg-brand-wash/60"
-                    : "border-line bg-raised hover:border-brand-edge hover:bg-brand-wash/20"
-                }`}
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handlePhoto}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-                <div className="w-10 h-10 rounded-full bg-brand-wash text-brand border border-brand-edge flex items-center justify-center">
-                  <Upload className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-ink block">Drag &amp; drop photos here</span>
-                  <span className="text-[11px] text-ink-muted block mt-0.5">
-                    or click to browse files from your computer
+            {/* Active S.O.S. already has a category. Never reopen the normal picker. */}
+            {isSosDetailsFlow ? (
+              <div className="saro-card p-3.5" aria-label="Selected S.O.S. hazard">
+                <span className="t-label text-ink-faint">S.O.S. hazard already selected</span>
+                <div className="mt-1.5 flex min-w-0 items-center justify-between gap-3">
+                  <span className="t-body-sm min-w-0 break-words font-bold text-ink">
+                    {selectedCategory?.name || activeSosCategoryId}
+                  </span>
+                  <span className="shrink-0 font-mono text-xs font-bold text-brand">
+                    {activeSosTrackingCode}
                   </span>
                 </div>
               </div>
+            ) : (
+            /* Thumb-Friendly Un-truncated Category Picker */
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider">
+                  What Type of Hazard? <span className="text-alert">*</span>
+                </label>
+                {selectedCategory && (
+                  <span className="text-xs text-brand font-bold flex items-center gap-1 bg-brand-wash px-2 py-0.5 rounded border border-brand-edge">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-brand" />
+                    {selectedCategory.name}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-ink-muted leading-tight mb-2.5">
+                Critical and Urgent hazards need no account. Routine hazards require signing in.
+              </p>
 
-              {/* Photo Previews */}
+              {/* Scaled Search Bar */}
+              <div className="relative mb-3">
+                <Search className="w-4 h-4 absolute left-3.5 top-3 text-ink-faint" />
+                <input
+                  type="text"
+                  placeholder="e.g. flood, fire, pothole, medical..."
+                  value={catSearch}
+                  onChange={(e) => setCatSearch(e.target.value)}
+                  className="w-full text-sm pl-10 pr-9 py-2.5 rounded-xs border border-line bg-white text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 font-medium"
+                />
+                {catSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCatSearch("")}
+                    className="absolute right-3 top-2.5 text-xs text-ink-faint hover:text-ink font-bold"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* ── Category Tier Filter Pills ─────────────────────────────── */}
+              {(() => {
+                const availableCategories = categories
+                  .filter((cat) => cat.id !== "emergency_unspecified" && cat.category !== "emergency_unspecified")
+                  .map((cat) => {
+                    const tier = cat.tier || getCategoryTier(cat);
+                    return { ...cat, tier, is_emergency: tier === "critical" || tier === "urgent" };
+                  });
+
+                const criticalCount = availableCategories.filter((c) => c.tier === "critical").length;
+                const urgentCount = availableCategories.filter((c) => c.tier === "urgent").length;
+                const routineCount = availableCategories.filter((c) => c.tier === "routine").length;
+
+                const filterTabs = [
+                  { id: "all", label: `All (${availableCategories.length})` },
+                  { id: "critical", label: `Critical (${criticalCount})` },
+                  { id: "urgent", label: `Urgent (${urgentCount})` },
+                  { id: "routine", label: `Routine (${routineCount})` },
+                ];
+
+                const filteredCategories = availableCategories.filter((cat) => {
+                  if (catTab !== "all" && cat.tier !== catTab) return false;
+                  if (catSearch) {
+                    const q = catSearch.toLowerCase();
+                    return (
+                      cat.name.toLowerCase().includes(q) ||
+                      (cat.name_bikol || "").toLowerCase().includes(q) ||
+                      (cat.name_tagalog || "").toLowerCase().includes(q)
+                    );
+                  }
+                  return true;
+                });
+
+                const criticalGroup = filteredCategories.filter((c) => c.tier === "critical");
+                const urgentGroup = filteredCategories.filter((c) => c.tier === "urgent");
+                const routineGroup = filteredCategories.filter((c) => c.tier === "routine");
+
+                const sections = [
+                  {
+                    tier: "critical",
+                    title: "Critical Hazards",
+                    subtitle: "Real-time alert · No account needed",
+                    badge: "CRITICAL · IMMEDIATE ALERT",
+                    icon: Siren,
+                    items: criticalGroup,
+                    edgeColor: "var(--color-panic)",
+                    iconStyle: {
+                      background: "var(--color-panic-wash)",
+                      borderColor: "var(--color-panic)",
+                      color: "var(--color-panic-strong)",
+                    },
+                    tagColor: "var(--color-panic-strong)",
+                  },
+                  {
+                    tier: "urgent",
+                    title: "Urgent Hazards",
+                    subtitle: "Fast-tracked priority · No account needed",
+                    badge: "URGENT · NO ACCOUNT NEEDED",
+                    icon: Zap,
+                    items: urgentGroup,
+                    edgeColor: "#D97706",
+                    iconStyle: {
+                      background: "#FEF3C7",
+                      borderColor: "#F59E0B",
+                      color: "#B45309",
+                    },
+                    tagColor: "#B45309",
+                  },
+                  {
+                    tier: "routine",
+                    title: "Routine Hazards",
+                    subtitle: isGuest ? "Standard queue · Sign in to file" : "Standard response queue",
+                    badge: isGuest ? "ROUTINE · SIGN IN TO FILE" : "ROUTINE · STANDARD QUEUE",
+                    icon: FileText,
+                    items: routineGroup,
+                    edgeColor: "var(--color-line-strong)",
+                    iconStyle: {
+                      background: "var(--color-sunken)",
+                      borderColor: "var(--color-line)",
+                      color: "var(--color-brand)",
+                    },
+                    tagColor: "var(--color-ink-muted)",
+                  },
+                ].filter((sec) => sec.items.length > 0);
+
+                return (
+                  <>
+                    <div className="flex items-center gap-1.5 mb-3 overflow-x-auto scrollbar-none pb-0.5">
+                      {filterTabs.map((tab) => {
+                        const isActive = catTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setCatTab(tab.id)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${
+                              isActive
+                                ? "bg-ink text-white shadow-sm border border-ink"
+                                : "bg-sunken text-ink-muted border border-line hover:bg-line hover:text-ink"
+                            }`}
+                          >
+                            {isActive && <Check className="w-3.5 h-3.5 text-brand-edge stroke-[3]" />}
+                            {tab.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      {sections.length > 0 ? (
+                        sections.map((section) => (
+                          <div key={section.tier} className="flex flex-col gap-2">
+                            <div className="flex items-center gap-1.5 px-1 py-1 border-b border-line/60">
+                              <section.icon className="w-3.5 h-3.5 shrink-0" style={{ color: section.tagColor }} aria-hidden="true" />
+                              <span className="text-xs font-bold text-ink uppercase tracking-wider">{section.title}</span>
+                              <span className="text-[10px] text-ink-faint ml-auto font-medium">{section.subtitle}</span>
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                              {section.items.map((cat) => {
+                                const isSelected = selectedCategoryId === cat.id;
+                                const IconComp = getCategoryIcon(cat);
+                                const AccessIcon = section.tier === "routine" && isGuest ? Lock : DoorOpen;
+                                const badgeLabel = section.tier === "critical"
+                                  ? "CRITICAL · IMMEDIATE ALERT"
+                                  : section.tier === "urgent"
+                                  ? "URGENT · NO ACCOUNT NEEDED"
+                                  : isGuest
+                                  ? "ROUTINE · SIGN IN TO FILE"
+                                  : "ROUTINE · STANDARD QUEUE";
+
+                                return (
+                                  <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => {
+                                      if (selectedCategoryId === cat.id) {
+                                        setSelectedCategoryId("");
+                                      } else {
+                                        setSelectedCategoryId(cat.id);
+                                        setValidationErrors((prev) => ({ ...prev, category: "" }));
+                                        if (isGuest && cat.tier === "routine") {
+                                          setShowAuthWall(true);
+                                        }
+                                      }
+                                    }}
+                                    aria-pressed={isSelected}
+                                    className={`saro-card flex w-full items-start gap-3 p-3.5 pl-4 text-left transition-all duration-150 ease-out active:scale-[0.985] cursor-pointer rounded-md ${
+                                      isSelected
+                                        ? "bg-brand-wash border-2 border-brand text-brand font-bold shadow-2xs"
+                                        : "bg-surface border-2 border-line hover:border-brand-edge text-ink"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`flex h-10 w-10 shrink-0 items-center justify-center border rounded-md transition-colors ${
+                                        isSelected
+                                          ? "bg-brand-wash border-brand text-brand"
+                                          : "bg-sunken border-line text-ink-muted"
+                                      }`}
+                                    >
+                                      <IconComp width={20} height={20} aria-hidden="true" />
+                                    </span>
+
+                                    <span className="min-w-0 flex-1">
+                                      <span className="t-subhead block font-bold leading-snug text-ink">
+                                        {cat.name}
+                                      </span>
+                                      {cat.name_bikol && (
+                                        <span className="t-body-sm mt-0.5 block text-ink-muted">
+                                          {cat.name_bikol}
+                                        </span>
+                                      )}
+                                      <span
+                                        className={`t-label mt-1.5 flex items-center gap-1.5 text-[11px] font-bold ${
+                                          isSelected ? "text-brand" : "text-ink-muted"
+                                        }`}
+                                      >
+                                        <AccessIcon width={12} height={12} aria-hidden="true" />
+                                        {badgeLabel}
+                                      </span>
+                                    </span>
+
+                                    <span
+                                      className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                                        isSelected
+                                          ? "border-brand bg-brand text-white"
+                                          : "border-line-strong bg-surface text-transparent"
+                                      }`}
+                                      aria-hidden="true"
+                                    >
+                                      {isSelected && <Check width={14} height={14} strokeWidth={3} className="animate-in fade-in zoom-in-75 duration-150" />}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-6 text-xs text-ink-faint bg-raised rounded-xs border border-line font-medium">
+                          No matching hazard categories found. Try clearing your search.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+
+              {validationErrors.category && (
+                <p className="text-xs text-alert mt-1.5 font-medium">{validationErrors.category}</p>
+              )}
+            </div>
+
+            )}
+
+            {/* Location Section */}
+            <div>
+              <label className="block text-xs font-semibold text-ink mb-1.5">
+                Where Is It? <span className="text-alert">*</span>
+              </label>
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={handleUseMyLocation}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white border border-line rounded-xs text-xs font-medium text-ink hover:bg-raised min-h-[44px]"
+                >
+                  <Navigation className="w-3.5 h-3.5 text-brand" aria-hidden="true" />
+                  Use My Location
+                </button>
+                {/* Mobile inlines a short picker map here. Desktop already gives
+                    the whole right-hand canvas to it, so this points at that. */}
+                <span className="t-label text-ink-muted">or click the map on the right</span>
+              </div>
+
+              {boundsError && (
+                <p className="text-xs text-alert mb-2 bg-alert-wash border border-alert rounded-xs px-3 py-2">
+                  {boundsError}
+                </p>
+              )}
+
+              {coords && (
+                <p className="t-label text-ink-muted mt-1.5 flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-brand" aria-hidden="true" />
+                  {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+                  {barangayAutoDetected && (
+                    <span className="text-brand font-medium">
+                      &mdash; {barangays.find((b) => b.id === barangayId)?.name}
+                    </span>
+                  )}
+                </p>
+              )}
+              {validationErrors.coords && (
+                <p className="text-xs text-alert mt-1.5 font-medium">{validationErrors.coords}</p>
+              )}
+            </div>
+
+            {/* Barangay Override */}
+            {coords && !barangayAutoDetected && (
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">
+                  Barangay <span className="text-ink-muted font-normal">(auto-detection missed; select manually)</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={barangayId}
+                    onChange={(e) => setBarangayId(e.target.value)}
+                    className="w-full text-xs py-2.5 px-3 rounded-xs border border-line bg-white text-ink font-medium appearance-none pr-8"
+                  >
+                    <option value="">Select barangay</option>
+                    {barangays.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-2.5 text-ink-muted pointer-events-none" />
+                </div>
+              </div>
+            )}
+
+            {/* Photo Evidence — Multi-photo */}
+            <div>
+              <label className="block text-xs font-semibold text-ink mb-1">
+                Photo Evidence <span className="text-ink-muted font-normal">(optional, up to 5)</span>
+              </label>
               {photos.length > 0 && (
-                <div className="grid grid-cols-3 gap-2 pt-1">
-                  {photos.map((p, idx) => (
-                    <div key={idx} className="relative aspect-square rounded border border-line overflow-hidden bg-sunken group shadow-2xs">
-                      <img src={p} alt={`Evidence ${idx + 1}`} className="w-full h-full object-cover" />
+                <div className="flex gap-2 mb-2 overflow-x-auto no-scrollbar">
+                  {photos.map((photo, i) => (
+                    <div key={i} className="relative shrink-0 w-24 h-24">
+                      <img
+                        src={photo}
+                        alt={`Evidence ${i + 1}`}
+                        className="w-full h-full object-cover rounded-md border border-line"
+                      />
                       <button
                         type="button"
-                        onClick={() => removePhoto(idx)}
-                        className="absolute top-1 right-1 bg-black/70 hover:bg-panic text-white p-1 rounded-full transition-colors"
-                        title="Remove photo"
+                        onClick={() => removePhoto(i)}
+                        className="absolute -top-1.5 -right-1.5 bg-ink text-white w-6 h-6 rounded-full flex items-center justify-center t-micro shadow-xs hover:bg-black transition-colors"
+                        aria-label={`Remove photo ${i + 1}`}
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -702,24 +893,91 @@ export default function ReportDesktop() {
                   ))}
                 </div>
               )}
+              {photos.length < 5 && (
+                /* Same control as mobile; desktop keeps drag-and-drop on it
+                   because a file manager is right there. */
+                <label
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`flex items-center gap-2 px-4 py-3 border border-dashed rounded-md cursor-pointer min-h-[44px] transition-colors ${
+                    isDragOver ? "border-brand bg-brand-wash/60" : "bg-white border-line hover:bg-raised"
+                  }`}
+                >
+                  {photos.length > 0 ? (
+                    <Plus className="w-5 h-5 text-ink-muted" aria-hidden="true" />
+                  ) : (
+                    <Camera className="w-5 h-5 text-ink-muted" aria-hidden="true" />
+                  )}
+                  <span className="text-xs text-ink-muted font-medium">
+                    {photos.length > 0 ? "Add Another Photo" : "Choose Photos or Drag Them Here"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handlePhoto}
+                  />
+                </label>
+              )}
             </div>
 
-            {/* Submit CTA */}
-            <div className="pt-3 border-t border-line">
+            {/* ── Inline account-needed prompt ─────────────────────────────── */}
+            {needsAccount && (
+              <div className="mt-4 rounded-md border border-brand-edge bg-brand-wash p-4 flex flex-col gap-2.5 shadow-2xs">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-brand text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                    <UserPlus className="w-4 h-4" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <span className="text-[13px] font-bold text-ink block leading-tight">
+                      Account needed for non-emergency reports
+                    </span>
+                    <span className="text-[11px] text-ink-muted block mt-1 leading-snug">
+                      The city office may need to follow up with you about this report.
+                      Your description, photos, and location are saved — nothing is lost when you sign in.
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthWall(true)}
+                    className="saro-btn saro-btn-primary saro-btn-sm flex-1 flex items-center justify-center gap-1.5"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" aria-hidden="true" />
+                    Sign In or Create Account
+                  </button>
+                </div>
+                <p className="text-[10px] text-ink-faint leading-snug">
+                  Emergencies never need an account — switch to an emergency category above to file immediately.
+                </p>
+              </div>
+            )}
+
+            {/* Submit Button (stays below form content) */}
+            <div className="pt-4 pb-2">
+              {!isOnline && (
+                <div className="flex items-center gap-1.5 t-label text-status-assigned-ink bg-status-assigned-tab/10 border border-status-assigned-tab/30 rounded-xs px-3 py-1.5 mb-2 font-medium">
+                  <WifiOff className="w-3.5 h-3.5" aria-hidden="true" />
+                  Offline — report will be queued for later submission
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={submitting}
-                className="saro-btn saro-btn-primary saro-btn-block flex items-center justify-center gap-2 py-3 text-sm font-bold shadow-md"
+                className="saro-btn saro-btn-primary saro-btn-lg saro-btn-block flex items-center justify-center gap-2"
               >
-                <Send className="w-4.5 h-4.5" />
-                <span>{submitting ? "Submitting Report..." : "Submit Hazard Report"}</span>
+                <Send className="w-4 h-4" aria-hidden="true" />
+                {submitting
+                  ? (isSosDetailsFlow ? "Adding details..." : "Submitting...")
+                  : isSosDetailsFlow
+                  ? "Add details to S.O.S."
+                  : isOnline
+                  ? "Submit report"
+                  : "Save report offline"}
               </button>
-
-              <p className="text-xs text-ink-faint text-center mt-2 leading-tight">
-                {needsAccount
-                  ? "Standard report: Requires sign-in on submit."
-                  : "Urgent emergency: Files anonymously without account."}
-              </p>
             </div>
           </form>
         )}

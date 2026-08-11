@@ -150,7 +150,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
             <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-950 text-xs flex items-start gap-3 shadow-2xs">
               <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <p className="leading-relaxed">
-                <strong>Emergency Guarantee:</strong> Panic alerts and 911 dispatch operate 24/7 unconditionally to save lives, regardless of privacy notice status.
+                <strong>Emergency Guarantee:</strong> Emergency SOS alerts and 911 dispatch operate 24/7 unconditionally to save lives, regardless of privacy notice status.
               </p>
             </div>
           </aside>
@@ -421,7 +421,7 @@ export default function ConsentNotice({ onAcknowledge, dismissible = false }) {
         <div className="p-3 rounded-md border border-amber-200 bg-amber-50/70 text-amber-950 text-[11px] flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong>Emergency Exemption:</strong> Panic alerts and 911 dispatch operate unconditionally to save lives.
+            <strong>Emergency Exemption:</strong> Emergency SOS alerts and 911 dispatch operate unconditionally to save lives.
           </p>
         </div>
 

@@ -12,6 +12,14 @@
 
 import { supabase, REPORT_PHOTO_BUCKET } from "../supabase/client.js";
 import { humanizeError } from "../errors.js";
+import { isArchivedReport, ACCIDENT_ROLLING_WINDOW_MONTHS } from "../constants.js";
+import { assignReportKeys, describeCorroboration, corroborationLabel } from "../reportGrouping.js";
+import { getCategoryTier } from "../categoryTiers.js";
+import { applyReportScopeToQuery, scopeReports } from "../scope.js";
+/* deleteReport announces itself so open map and queue views refresh. It was
+   calling this without importing it, which threw a ReferenceError the moment an
+   admin deleted a report. */
+import { saroEvents } from "./events.js";
 
 /**
  * Normalise a PostgrestError into the { data, error } shape the apps expect.
@@ -45,37 +53,15 @@ function fail(message) {
  * migration seam, not the destination.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-export const CRITICAL_CATEGORIES = [
-  "fire",
-  "gas_leak",
-  "medical",
-  "accident",
-  "vehicular_crash",
-  "coastal_hazard",
-  "landslide",
-  "crime",
-];
-
-export const URGENT_CATEGORIES = [
-  "bridge_damage",
-  "soil_erosion",
-];
-
-export function getCategoryTier(categoryOrRow) {
-  const catKey = typeof categoryOrRow === "string"
-    ? categoryOrRow
-    : (categoryOrRow?.category || categoryOrRow?.id);
-
-  if (!catKey) return "routine";
-  if (CRITICAL_CATEGORIES.includes(catKey)) return "critical";
-  if (URGENT_CATEGORIES.includes(catKey)) return "urgent";
-  return "routine";
-}
-
-export function isEmergencyCategory(categoryOrRow) {
-  const tier = getCategoryTier(categoryOrRow);
-  return tier === "critical" || tier === "urgent";
-}
+/* The tier tables moved to ../categoryTiers.js, a leaf module — jurisdiction
+   rules need them and must not import the data layer to get them. Re-exported
+   here so every existing `from "@saro/shared"` import keeps resolving. */
+export {
+  CRITICAL_CATEGORIES,
+  URGENT_CATEGORIES,
+  getCategoryTier,
+  isEmergencyCategory,
+} from "../categoryTiers.js";
 
 function adaptCategory(row) {
   if (!row) return row;
@@ -116,15 +102,18 @@ function dataUrlToBlob(dataUrl) {
  * Reference data — readable by everyone
  * ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Hotlines are carried here as well as in the offices table so the S.O.S flow
+   still routes to the right agency when Supabase is unreachable. These mirror
+   the seeded values; the table is the source of truth. */
 const DEMO_OFFICES = [
-  { id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444", short_name: "CDRRMO", full_name: "City Disaster Risk Reduction and Management Office" },
-  { id: "3a09756b-4e89-42b7-bd3a-0e6e76cf0a3a", short_name: "Legazpi 911", full_name: "Legazpi 911 Emergency Command Center" },
-  { id: "3362fc03-d004-4148-8268-00d8c0a959b7", short_name: "City Engineering", full_name: "City Engineering Office" },
-  { id: "pso-legazpi", short_name: "Public Safety Office", full_name: "Public Safety Office (PSO)" },
-  { id: "bfp-legazpi", short_name: "BFP Legazpi", full_name: "Bureau of Fire Protection - Legazpi Station" },
-  { id: "pnp-legazpi", short_name: "PNP Legazpi", full_name: "Philippine National Police - Legazpi City Station" },
-  { id: "cho-legazpi", short_name: "City Health Office", full_name: "City Health Office (CHO)" },
-  { id: "pcg-legazpi", short_name: "Coast Guard Station", full_name: "Philippine Coast Guard - Legazpi Station" }
+  { id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444", short_name: "CDRRMO", full_name: "City Disaster Risk Reduction and Management Office", hotline: "(052) 480-3333" },
+  { id: "3a09756b-4e89-42b7-bd3a-0e6e76cf0a3a", short_name: "Legazpi 911", full_name: "Legazpi 911 Emergency Command Center", hotline: "911" },
+  { id: "3362fc03-d004-4148-8268-00d8c0a959b7", short_name: "City Engineering", full_name: "City Engineering Office", hotline: "(052) 742-0102" },
+  { id: "pso-legazpi", short_name: "Public Safety Office", full_name: "Public Safety Office (PSO)", hotline: "(052) 742-0155" },
+  { id: "bfp-legazpi", short_name: "BFP Legazpi", full_name: "Bureau of Fire Protection - Legazpi Station", hotline: "(052) 480-6222" },
+  { id: "pnp-legazpi", short_name: "PNP Legazpi", full_name: "Philippine National Police - Legazpi City Station", hotline: "(052) 820-6144" },
+  { id: "cho-legazpi", short_name: "City Health Office", full_name: "City Health Office (CHO)", hotline: "(052) 742-0188" },
+  { id: "pcg-legazpi", short_name: "Coast Guard Station", full_name: "Philippine Coast Guard - Legazpi Station", hotline: "(052) 480-1888" }
 ];
 
 const DEMO_CATEGORIES = [
@@ -186,14 +175,97 @@ export async function getBarangays() {
 export async function getReportByTrackingCode(code) {
   if (!code || !code.trim()) return fail("Tracking code is required");
 
+  const normalizedCode = code.trim().toUpperCase();
+  const demoReport = getOriginalMapDemoReports().find(
+    (report) => report.tracking_code === normalizedCode
+  );
+  if (demoReport) return { data: demoReport, error: null };
+
+  const { data: mapReports } = await getPublicMapReports();
+  const mapReport = (mapReports ?? []).find(
+    (report) => report.tracking_code?.toUpperCase() === normalizedCode
+  );
+  if (mapReport) return { data: mapReport, error: null };
+
   const { data, error } = await supabase.rpc("get_report_by_tracking_code", {
-    code: code.trim().toUpperCase(),
+    code: normalizedCode,
   });
   if (error) return fail(error.message);
 
   const report = Array.isArray(data) ? data[0] : data;
   if (!report) return fail(`No report found matching tracking code "${code}"`);
   return { data: report, error: null };
+}
+
+/**
+ * Read-only detail for one report, addressed by id rather than tracking code.
+ *
+ * This is what a public map pin opens. The tracking code is deliberately not
+ * involved: it is the credential `confirm_report_resolution` and
+ * `dispute_report_resolution` authenticate on, so publishing it on a map anyone
+ * can open would hand strangers the ability to close somebody's report. An id
+ * opens a read-only view and nothing else.
+ */
+export async function getPublicReport(reportId) {
+  if (!reportId) return fail("Report id is required");
+
+  if (String(reportId).startsWith("demo-")) {
+    const demo = DEMO_STAFF_REPORTS.find((item) => item.id === reportId);
+    if (!demo) return fail("That report is no longer available.");
+    return {
+      data: {
+        id: demo.id,
+        category: demo.category,
+        category_label: demo.routing_table?.label ?? demo.category,
+        description: demo.description,
+        status: demo.status,
+        lat: demo.lat,
+        lng: demo.lng,
+        barangay_name: demo.barangays?.name ?? null,
+        assigned_office: demo.offices?.short_name ?? null,
+        created_at: demo.created_at,
+        updated_at: demo.updated_at ?? demo.created_at,
+        resolved_at: demo.resolved_at ?? null,
+      },
+      error: null,
+    };
+  }
+
+  const { data, error } = await supabase.rpc("get_public_report", {
+    p_report_id: reportId,
+  });
+  if (error) return fail(error.message);
+
+  const report = Array.isArray(data) ? data[0] : data;
+  if (!report) return fail("That report is no longer available.");
+  return { data: report, error: null };
+}
+
+/** Status history for a public report id. Staff identities are never returned. */
+export async function getPublicReportTimeline(reportId) {
+  if (!reportId) return { data: [], error: null };
+
+  if (String(reportId).startsWith("demo-")) {
+    const demo = DEMO_STAFF_REPORTS.find((item) => item.id === reportId);
+    if (!demo) return { data: [], error: null };
+    const steps = [{ status: "received", from_status: null, note: "Report submitted.", changed_at: demo.created_at }];
+    if (["assigned", "in_progress", "resolved", "closed_confirmed", "closed_unconfirmed", "reopened"].includes(demo.status)) {
+      steps.push({ status: "assigned", from_status: "received", note: `Routed to ${demo.offices?.short_name ?? "the responding office"}.`, changed_at: demo.created_at });
+    }
+    if (["in_progress", "resolved", "closed_confirmed", "closed_unconfirmed", "reopened"].includes(demo.status)) {
+      steps.push({ status: "in_progress", from_status: "assigned", note: "Responders are working on this.", changed_at: demo.created_at });
+    }
+    if (demo.resolved_at) {
+      steps.push({ status: demo.status, from_status: "in_progress", note: demo.resolution_reference ? `Reference ${demo.resolution_reference}.` : null, changed_at: demo.resolved_at });
+    }
+    return { data: steps, error: null };
+  }
+
+  const { data, error } = await supabase.rpc("get_public_report_timeline", {
+    p_report_id: reportId,
+  });
+  if (error) return { data: [], error: error.message };
+  return { data: data ?? [], error: null };
 }
 
 export async function getStatusHistory(trackingCode) {
@@ -207,46 +279,18 @@ export async function getReportsByDevice(deviceId) {
   return wrap(await supabase.rpc("get_reports_by_device", { device_id: deviceId }));
 }
 
+/* Every row carries its own description. Enrichment below can only lend a
+   description to the single demo row it matches, so a pin without one of its
+   own used to fall through to the popup's empty state — which is exactly what
+   a resident reading the map sees first. */
 const DEMO_MAP_REPORTS = [
-  // 1. Emergency — Panic Alert (3 clustered reports: SR-8F01, SR-8F02, SR-8F03)
-  { id: "demo-panic-1", tracking_code: "SR-8F01", category: "emergency_unspecified", category_label: "Emergency — Panic Alert", lat: 13.1400, lng: 123.7440, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 1).toISOString(), barangay: "Legazpi City", cluster_id: "cluster-panic", description: "Anonymous emergency panic alert triggered via mobile dispatch app." },
-  { id: "demo-panic-2", tracking_code: "SR-8F02", category: "emergency_unspecified", category_label: "Emergency — Panic Alert", lat: 13.1401, lng: 123.7441, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Legazpi City", cluster_id: "cluster-panic", description: "Secondary panic beacon ping received near City Command Center." },
-  { id: "demo-panic-3", tracking_code: "SR-8F03", category: "emergency_unspecified", category_label: "Emergency — Panic Alert", lat: 13.1399, lng: 123.7439, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 3).toISOString(), barangay: "Legazpi City", cluster_id: "cluster-panic", description: "Rapid repeat panic signal logged in Legazpi emergency zone." },
-
-  // 2. Gas Leak & Chemical Spill (3 clustered reports: SR-7F01, SR-7F02, SR-7F03)
-  { id: "demo-gas-1", tracking_code: "SR-7F01", category: "gas_leak", category_label: "Gas Leak & Chemical Spill", lat: 13.1365, lng: 123.7335, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 1).toISOString(), barangay: "Cruzada", cluster_id: "cluster-gas", description: "Strong LPG smell along main alleyway in Cruzada, source unconfirmed." },
-  { id: "demo-gas-2", tracking_code: "SR-7F02", category: "gas_leak", category_label: "Gas Leak & Chemical Spill", lat: 13.1366, lng: 123.7336, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Cruzada", cluster_id: "cluster-gas", description: "Chemical odor spreading near residential compound in Cruzada." },
-  { id: "demo-gas-3", tracking_code: "SR-7F03", category: "gas_leak", category_label: "Gas Leak & Chemical Spill", lat: 13.1364, lng: 123.7334, status: "received", priority: "high", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Cruzada", cluster_id: "cluster-gas", description: "Suspected gas line leak near Cruzada bakery line." },
-
-  // 3. Road Pothole & Surface Damage (2 clustered reports: SR-1F01, SR-1F02)
-  { id: "demo-pothole-1", tracking_code: "SR-1F01", category: "pothole", category_label: "Road Pothole & Surface Damage", lat: 13.1490, lng: 123.7380, status: "resolved", priority: "low", created_at: new Date(Date.now() - 3600000 * 80).toISOString(), barangay: "Gogon", cluster_id: "cluster-pothole", description: "Deep pothole on the northbound lane in Gogon, two tricycles damaged." },
-  { id: "demo-pothole-2", tracking_code: "SR-1F02", category: "pothole", category_label: "Road Pothole & Surface Damage", lat: 13.1491, lng: 123.7381, status: "resolved", priority: "low", created_at: new Date(Date.now() - 3600000 * 75).toISOString(), barangay: "Gogon", cluster_id: "cluster-pothole", description: "Asphalt cracking and sunken road patch along Gogon elementary gate." },
-
-  // 4. Flooding & Water Inundation (2 clustered reports: SR-2F01, SR-2F02)
-  { id: "demo-flood-1", tracking_code: "SR-2F01", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1438, lng: 123.7448, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 5).toISOString(), barangay: "Bitano", cluster_id: "cluster-flood", description: "Flooding near Bitano market line. Water level rising fast by the bakery." },
-  { id: "demo-flood-2", tracking_code: "SR-2F02", category: "flood", category_label: "Flooding & Water Inundation", lat: 13.1439, lng: 123.7449, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Bitano", cluster_id: "cluster-flood", description: "Flood water entering residential doorways near Bitano market line." },
-
-  // 5. Fire Outbreak & Structural Fire (2 clustered reports: SR-3F01, SR-3F02)
-  { id: "demo-fire-1", tracking_code: "SR-3F01", category: "fire", category_label: "Fire Outbreak & Structural Fire", lat: 13.1580, lng: 123.7520, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 3).toISOString(), barangay: "Rawis", cluster_id: "cluster-fire", description: "Smoke coming from the second floor of the commercial store in Rawis." },
-  { id: "demo-fire-2", tracking_code: "SR-3F02", category: "fire", category_label: "Fire Outbreak & Structural Fire", lat: 13.1581, lng: 123.7521, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Rawis", cluster_id: "cluster-fire", description: "Electrical sparks and heavy black smoke visible from street level in Rawis." },
-
-  // 6. Public Order & Crime Incident (1 report: SR-4F01)
-  { id: "demo-crime-1", tracking_code: "SR-4F01", category: "crime", category_label: "Public Order & Crime Incident", lat: 13.1610, lng: 123.7510, status: "assigned", priority: "medium", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Rawis", description: "Group disturbance outside sari-sari store in Rawis, bottle broken." },
-
-  // 7. Medical Emergency & Injury (1 report: SR-5F01)
-  { id: "demo-med-1", tracking_code: "SR-5F01", category: "medical", category_label: "Medical Emergency & Injury", lat: 13.1500, lng: 123.7490, status: "resolved", priority: "high", created_at: new Date(Date.now() - 3600000 * 9).toISOString(), barangay: "Bonot", description: "Elderly neighbour collapsed at home, breathing but unresponsive in Bonot." },
-
-  // 8. Coastal Storm Surge & Marine Emergency (1 report: SR-6F01)
-  { id: "demo-surge-1", tracking_code: "SR-6F01", category: "coastal_hazard", category_label: "Coastal Storm Surge & Marine Emergency", lat: 13.1650, lng: 123.7420, status: "assigned", priority: "high", created_at: new Date(Date.now() - 3600000 * 14).toISOString(), barangay: "Dap-Dap", description: "Storm surge pushing over the breakwater at Dap-Dap during high tide." },
-
-  // 9. Landslide & Soil Erosion (1 report: SR-9F01)
-  { id: "demo-slide-1", tracking_code: "SR-9F01", category: "landslide", category_label: "Landslide & Soil Erosion", lat: 13.1180, lng: 123.7250, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 20).toISOString(), barangay: "Homapon", description: "Soil slipping down the cut slope above the barangay road in Homapon." },
-
-  // 10. Road Obstruction & Signal Damage (1 report: SR-0F01)
-  { id: "demo-traffic-1", tracking_code: "SR-0F01", category: "traffic_obstruction", category_label: "Road Obstruction & Signal Damage", lat: 13.1420, lng: 123.7540, status: "assigned", priority: "medium", created_at: new Date(Date.now() - 3600000 * 26).toISOString(), barangay: "Victory Village", description: "Traffic light at Victory Village junction stuck on red in all directions." },
-
-  // 11. Bridge & Seawall Damage (1 report: SR-BF01)
-  { id: "demo-bridge-1", tracking_code: "SR-BF01", category: "bridge_damage", category_label: "Bridge & Seawall Damage", lat: 13.1320, lng: 123.7560, status: "assigned", priority: "high", created_at: new Date(Date.now() - 3600000 * 30).toISOString(), barangay: "Puro", description: "Crack widening on the seawall walkway near Puro pier." }
+  { id: "demo-1", tracking_code: "SR-8F2K", category: "flood", category_label: "Flooding & Water Inundation", description: "Flooding near Bitano market line. Water level rising fast by the bakery.", lat: 13.1438, lng: 123.7448, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 5).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
+  { id: "demo-2", tracking_code: "SR-8F2L", category: "flood", category_label: "Flooding & Water Inundation", description: "Water now covering both lanes in front of the Bitano market. Tricycles cannot pass through.", lat: 13.1439, lng: 123.7449, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 4).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
+  { id: "demo-3", tracking_code: "SR-8F2M", category: "flood", category_label: "Flooding & Water Inundation", description: "Flood water entering ground floor units along the Bitano market side street, about ankle deep inside.", lat: 13.1437, lng: 123.7447, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 3).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
+  { id: "demo-4", tracking_code: "SR-8F2N", category: "flood", category_label: "Flooding & Water Inundation", description: "Drainage outfall behind the Bitano market is backing up; water keeps rising even though the rain stopped.", lat: 13.1440, lng: 123.7450, status: "in_progress", priority: "high", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Bitano", cluster_id: "cluster-bitano" },
+  { id: "demo-5", tracking_code: "SR-3M9P", category: "open_drain", category_label: "Uncovered Drain & Broken Manhole", description: "Manhole cover missing outside the elementary school gate. Children pass here every morning.", lat: 13.1415, lng: 123.7410, status: "assigned", priority: "medium", created_at: new Date(Date.now() - 3600000 * 18).toISOString(), barangay: "Em's Barrio" },
+  { id: "demo-6", tracking_code: "SR-7N4L", category: "pothole", category_label: "Road Pothole & Surface Damage", description: "Deep pothole on the northbound lane in Gogon, two tricycles already damaged their wheels on it.", lat: 13.1490, lng: 123.7380, status: "resolved", priority: "low", created_at: new Date(Date.now() - 3600000 * 48).toISOString(), barangay: "Gogon" },
+  { id: "demo-7", tracking_code: "SR-1B9Q", category: "typhoon_debris", category_label: "Typhoon Debris & Structural Damage", description: "Fallen acacia branch blocking half the road in Oro Site after last night's wind. Vehicles are counterflowing.", lat: 13.1395, lng: 123.7465, status: "received", priority: "medium", created_at: new Date(Date.now() - 3600000 * 2).toISOString(), barangay: "Oro Site" }
 ];
 
 /** Coarse public hazard map. Coordinates are rounded server-side to ~110 m. */
@@ -256,11 +300,11 @@ export async function getPublicMapReports(maxAgeHours = 168) {
       max_age_hours: maxAgeHours,
     });
     if (error || !data || data.length === 0) {
-      return { data: DEMO_MAP_REPORTS.map(adaptReport), error: null };
+      return { data: enrichPublicMapDemoReports(DEMO_MAP_REPORTS), error: null };
     }
-    return { data: data.map(adaptReport), error: null };
+    return { data: enrichPublicMapDemoReports(data), error: null };
   } catch {
-    return { data: DEMO_MAP_REPORTS.map(adaptReport), error: null };
+    return { data: enrichPublicMapDemoReports(DEMO_MAP_REPORTS), error: null };
   }
 }
 
@@ -625,10 +669,197 @@ const DEMO_STAFF_REPORTS = [
     office_id: "pso-legazpi",
     offices: { short_name: "Public Safety Office", full_name: "Public Safety Office (PSO)" },
     routing_table: { label: "Road Obstruction & Signal Malfunction", is_emergency: false, sla_hours: 12, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-120",
+    tracking_code: "SR-4R8C",
+    category: "coastal_hazard",
+    category_id: "coastal_hazard",
+    description: "Loose fishing skiff recovered from the Dap-Dap breakwater after high tide receded.",
+    lat: 13.1646,
+    lng: 123.7416,
+    status: "resolved",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 34).toISOString(),
+    resolved_at: new Date(Date.now() - 3600000 * 7).toISOString(),
+    barangay_id: "brgy-dapdap",
+    barangays: { name: "Dap-Dap" },
+    office_id: "coastguard-legazpi",
+    offices: { short_name: "Coast Guard Station", full_name: "Philippine Coast Guard - Legazpi Station" },
+    routing_table: { label: "Coastal Storm Surge & Marine Emergency", is_emergency: true, sla_hours: 2, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-121",
+    tracking_code: "SR-6H3E",
+    category: "traffic_obstruction",
+    category_id: "traffic_obstruction",
+    description: "Disabled delivery truck cleared from the Victory Village junction; traffic flow restored.",
+    lat: 13.1422,
+    lng: 123.7537,
+    status: "resolved",
+    priority: "medium",
+    filed_by_verified: false,
+    created_at: new Date(Date.now() - 3600000 * 28).toISOString(),
+    resolved_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+    barangay_id: "brgy-victory",
+    barangays: { name: "Victory Village" },
+    office_id: "pso-legazpi",
+    offices: { short_name: "Public Safety Office", full_name: "Public Safety Office (PSO)" },
+    routing_table: { label: "Road Obstruction & Signal Malfunction", is_emergency: false, sla_hours: 12, resolution_proof: "photo" }
+  },
+  {
+    id: "demo-122",
+    tracking_code: "SR-2Q7N",
+    category: "crime",
+    category_id: "crime",
+    description: "Public disturbance at Rawis was attended and documented by the responding patrol unit.",
+    lat: 13.1606,
+    lng: 123.7506,
+    status: "resolved",
+    priority: "high",
+    filed_by_verified: true,
+    created_at: new Date(Date.now() - 3600000 * 18).toISOString(),
+    resolved_at: new Date(Date.now() - 3600000 * 3).toISOString(),
+    resolution_reason: "attended_no_action",
+    resolution_reference: "PNP-BLOTTER-2026-0811-04",
+    barangay_id: "brgy-rawis",
+    barangays: { name: "Rawis" },
+    office_id: "pnp-legazpi",
+    offices: { short_name: "PNP Legazpi", full_name: "Philippine National Police - Legazpi Station" },
+    routing_table: { label: "Public Order & Crime Incident", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
+  },
+  /* Emergency SOS presses. The SOS screen is about how long somebody waited, so
+     the demo carries one still unanswered, one being worked, and one finished —
+     an empty queue would make the screen look broken rather than calm. */
+  {
+    id: "demo-130",
+    tracking_code: "SR-9S1A",
+    category: "emergency_unspecified",
+    category_id: "emergency_unspecified",
+    description: "SOS held down. No description sent.",
+    lat: 13.1441,
+    lng: 123.7452,
+    status: "received",
+    priority: "high",
+    filed_by_verified: false,
+    reporter_device_id: "dev-sos-bitano-4417",
+    created_at: new Date(Date.now() - 60000 * 11).toISOString(),
+    barangay_id: "brgy-bitano",
+    barangays: { name: "Bitano" },
+    office_id: "legazpi-911",
+    offices: { short_name: "Legazpi 911", full_name: "Legazpi 911 Emergency Command Center" },
+    routing_table: { label: "Emergency — SOS Alert", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
+  },
+  {
+    id: "demo-131",
+    tracking_code: "SR-9S1B",
+    category: "emergency_unspecified",
+    category_id: "emergency_unspecified",
+    description: "Someone collapsed near the Gogon basketball court, an ambulance is needed.",
+    lat: 13.1489,
+    lng: 123.7383,
+    status: "in_progress",
+    priority: "high",
+    filed_by_verified: true,
+    reporter_device_id: "dev-sos-gogon-2210",
+    created_at: new Date(Date.now() - 60000 * 34).toISOString(),
+    barangay_id: "brgy-gogon",
+    barangays: { name: "Gogon" },
+    office_id: "legazpi-911",
+    offices: { short_name: "Legazpi 911", full_name: "Legazpi 911 Emergency Command Center" },
+    routing_table: { label: "Emergency — SOS Alert", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
+  },
+  {
+    id: "demo-132",
+    tracking_code: "SR-9S1C",
+    category: "emergency_unspecified",
+    category_id: "emergency_unspecified",
+    description: "SOS from the Rawis shoreline. Caller reached by phone, family already moved to the shelter.",
+    lat: 13.1614,
+    lng: 123.7538,
+    status: "closed_confirmed",
+    priority: "high",
+    filed_by_verified: true,
+    reporter_device_id: "dev-sos-rawis-8890",
+    created_at: new Date(Date.now() - 3600000 * 9).toISOString(),
+    resolved_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+    resolution_reason: "attended_no_action",
+    resolution_reference: "911-DISPATCH-2026-0812-31",
+    barangay_id: "brgy-rawis",
+    barangays: { name: "Rawis" },
+    office_id: "legazpi-911",
+    offices: { short_name: "Legazpi 911", full_name: "Legazpi 911 Emergency Command Center" },
+    routing_table: { label: "Emergency — SOS Alert", is_emergency: true, sla_hours: 1, resolution_proof: "reference" }
   }
 ];
 
-export async function getReports({ status, category, barangayId, limit = 500 } = {}) {
+function toResidentDemoReport(report) {
+  return adaptReport({
+    ...report,
+    category_label: report.routing_table?.label || report.category,
+    barangay: report.barangays?.name || "Legazpi City",
+    assigned_office: report.offices?.short_name || null,
+  });
+}
+
+/** Existing built-in demo reports that remain visible on the public Map. */
+export function getOriginalMapDemoReports() {
+  return DEMO_STAFF_REPORTS
+    .map(toResidentDemoReport)
+    .filter((report) => !report.status?.startsWith("closed") && !isArchivedReport(report));
+}
+
+/**
+ * Attach safe built-in demo tracking data only to matching seeded Map rows.
+ * Public RPC rows stay coarse; non-demo resident reports never receive a code.
+ */
+function enrichPublicMapDemoReports(rows) {
+  const demos = getOriginalMapDemoReports();
+  const usedDemoIds = new Set();
+
+  /* get_public_map_reports returns a narrow projection with no id — see
+     20260807000400_clustering_and_rpc.sql. Without one, React keys collapse and
+     pin popups cannot tell their own members apart, so every row leaves here
+     with a stable identity even when it never gets a tracking code. */
+  return assignReportKeys((rows ?? []).map(adaptReport)).map((row) => {
+    const roundedLat = Math.round(Number(row.lat) * 1000) / 1000;
+    const roundedLng = Math.round(Number(row.lng) * 1000) / 1000;
+    const demo = demos.find((candidate) =>
+      !usedDemoIds.has(candidate.id) &&
+      candidate.category === row.category &&
+      Math.round(Number(candidate.lat) * 1000) / 1000 === roundedLat &&
+      Math.round(Number(candidate.lng) * 1000) / 1000 === roundedLng
+    );
+
+    if (!demo) return row;
+    usedDemoIds.add(demo.id);
+    return {
+      ...row,
+      id: demo.id,
+      tracking_code: demo.tracking_code,
+      /* The row's own words win. Enrichment only fills a description in when the
+         source had none — it never replaces what the resident actually wrote. */
+      description: row.description?.trim() ? row.description : demo.description,
+      category_label: row.category_label || demo.category_label,
+      barangay: demo.barangay,
+      assigned_office: demo.assigned_office,
+      priority: demo.priority,
+      cluster_id: row.cluster_id || demo.cluster_id,
+    };
+  });
+}
+
+/**
+ * Staff report reads, narrowed to the caller's jurisdiction.
+ *
+ * `scope` comes from `useAuth().viewerScope`. Passing it is not optional in
+ * spirit: Postgres RLS decides what a live query may return, but the demo
+ * fallback below never reaches Postgres, so an unscoped call hands a barangay
+ * official the whole city. Callers that genuinely want every row (the admin
+ * oversight screens) get that from an admin scope, not from omitting one.
+ */
+export async function getReports({ status, category, barangayId, limit = 500, scope } = {}) {
   try {
     let query = supabase
       .from("reports")
@@ -648,17 +879,24 @@ export async function getReports({ status, category, barangayId, limit = 500 } =
     if (status) query = query.eq("status", status);
     if (category) query = query.eq("category", category);
     if (barangayId) query = query.eq("barangay_id", barangayId);
+    query = applyReportScopeToQuery(query, scope);
 
     const { data, error } = await query;
     if (error || !data || data.length === 0) {
       let filtered = DEMO_STAFF_REPORTS;
       if (status) filtered = filtered.filter((r) => r.status === status);
       if (category) filtered = filtered.filter((r) => r.category === category);
-      return { data: filtered.map(adaptReport), error: null };
+      if (barangayId) filtered = filtered.filter((r) => r.barangay_id === barangayId);
+      /* The demo rows never passed a policy, so this filter is the only thing
+         standing between Brgy. Bitano and Brgy. Bonot's reports. */
+      return { data: scopeReports(scope, filtered).map(adaptReport), error: null };
     }
-    return { data: (data ?? []).map(adaptReport), error: null };
+    /* Scoped again on the way out. The query narrowed and RLS enforced, but a
+       coordinator's widening lives here, and a second pass over rows that are
+       already correct costs nothing. */
+    return { data: scopeReports(scope, (data ?? []).map(adaptReport)), error: null };
   } catch {
-    return { data: DEMO_STAFF_REPORTS.map(adaptReport), error: null };
+    return { data: scopeReports(scope, DEMO_STAFF_REPORTS).map(adaptReport), error: null };
   }
 }
 
@@ -681,14 +919,11 @@ const DEMO_HISTORY_MAP = {
   ]
 };
 
-const DEMO_MEDIA_MAP = {
-  "demo-101": [
-    { id: "m-101-1", report_id: "demo-101", kind: "submission", signed_url: "https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=800&q=80" }
-  ],
-  "demo-102": [
-    { id: "m-102-1", report_id: "demo-102", kind: "submission", signed_url: "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80" }
-  ]
-};
+/* Offline fallback only. Photo evidence lives in Supabase — report_media rows
+   pointing at the report-photos bucket — so there are no stock images here
+   standing in for hazards they have nothing to do with. Reports filed on this
+   device while offline add their own entries at runtime. */
+const DEMO_MEDIA_MAP = {};
 
 export async function getReportById(reportId) {
   if (!reportId) return fail("Report id is required");
@@ -817,6 +1052,39 @@ export async function createReport(payload) {
 }
 
 /**
+ * Add resident-provided details to the report created by an active S.O.S.
+ *
+ * This deliberately has a separate name from createReport(): callers cannot
+ * accidentally turn an S.O.S. continuation into a second INSERT. The database
+ * function verifies the report UUID, tracking code and device bearer token,
+ * and never accepts category, status or creation timestamps as inputs.
+ */
+export async function updateSosReportDetails(payload) {
+  const reportId = payload.report_id ?? payload.id;
+  const trackingCode = payload.tracking_code?.trim().toUpperCase();
+  const deviceId = payload.device_fingerprint ?? payload.reporter_device_id;
+
+  if (!reportId) return fail("The active S.O.S. report id is missing.");
+  if (!trackingCode) return fail("The active S.O.S. tracking code is missing.");
+  if (!deviceId) return fail("A device id is required to update this S.O.S.");
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc("update_sos_report_details", {
+    p_report_id: reportId,
+    p_tracking_code: trackingCode,
+    p_device_id: deviceId,
+    p_description: (payload.description ?? "").trim(),
+    p_lat: Number(payload.lat),
+    p_lng: Number(payload.lng),
+    p_barangay_id: payload.barangay_id ?? null,
+  });
+
+  if (rpcError) return fail(rpcError.message);
+  const updated = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+  if (!updated) return fail("The active S.O.S. report could not be updated.");
+  return { data: updated, error: null };
+}
+
+/**
  * A signed-in resident's own reports, across every status.
  *
  * This is a direct table SELECT, not an RPC: residents have a real RLS policy
@@ -922,7 +1190,7 @@ export async function updateReportStatus(reportId, newStatus, proof = {}) {
       if (!media?.length) {
         return fail("A resolution photo is required before this report can be resolved.");
       }
-    } else if (required === "reference_code") {
+    } else if (required === "reference") {
       if (!proof.reason) return fail("Choose the reason code that matches what happened.");
       if ((proof.reference ?? "").trim().length < 4) {
         return fail("Add the dispatch number, blotter entry, or receiving unit.");
@@ -976,6 +1244,159 @@ export async function updateReportStatus(reportId, newStatus, proof = {}) {
   // wrote a SECOND row for the same change, so every advance appeared twice in
   // the resident's timeline and in the audit trail. The trigger is the single
   // writer; nothing else should append to that table.
+  return { data, error: null };
+}
+
+/**
+ * Move a report to another office, with the reason recorded.
+ *
+ * The city administrator's one write on an individual report. It changes no
+ * status — a misrouted fire is still a fire at the same stage — so nothing in
+ * the ordinary trigger path would notice it happened. `reassign_report` writes
+ * the reason into the append-only history itself, which is why this goes
+ * through an RPC rather than a table update.
+ */
+export async function reassignReport(reportId, officeId, reason) {
+  if (!reportId || !officeId) return fail("A report and a receiving office are required.");
+  if ((reason ?? "").trim().length < 8) {
+    return fail("Say why this is being reassigned — at least a short sentence.");
+  }
+
+  if (String(reportId).startsWith("demo-")) {
+    const demoReport = DEMO_STAFF_REPORTS.find((report) => report.id === reportId);
+    if (!demoReport) return fail("Report not found");
+    const fromOffice = demoReport.offices?.short_name ?? "unrouted";
+    const toOffice = DEMO_OFFICES.find((office) => office.id === officeId);
+    demoReport.office_id = officeId;
+    demoReport.assigned_office_id = officeId;
+    demoReport.offices = toOffice
+      ? { short_name: toOffice.short_name, full_name: toOffice.full_name }
+      : demoReport.offices;
+
+    if (!DEMO_HISTORY_MAP[reportId]) DEMO_HISTORY_MAP[reportId] = [];
+    DEMO_HISTORY_MAP[reportId].push({
+      id: `h-demo-${Date.now()}`,
+      report_id: reportId,
+      from_status: demoReport.status,
+      status: demoReport.status,
+      note: `Reassigned from ${fromOffice} to ${toOffice?.short_name ?? "unrouted"} by city administrator. Reason: ${reason.trim()}`,
+      changed_at: new Date().toISOString(),
+    });
+    saroEvents.emit("report:updated", { reportId });
+    return { data: demoReport, error: null };
+  }
+
+  const { data, error } = await supabase.rpc("reassign_report", {
+    p_report_id: reportId,
+    p_office_id: officeId,
+    p_reason: reason.trim(),
+  });
+
+  if (error) return fail(error.message);
+  saroEvents.emit("report:updated", { reportId });
+  return { data: Array.isArray(data) ? data[0] : data, error: null };
+}
+
+/**
+ * A barangay official's signed note on a report in their own barangay.
+ *
+ * Endorsement is not a transition. The status goes in and comes back out
+ * unchanged — the row is the record that somebody accountable for that street
+ * went and looked, which is the thing an office in a city hall cannot do for
+ * itself. Moving the report along the pipeline stays with the handling office.
+ */
+export async function endorseReport(reportId, { note, status } = {}) {
+  if (!reportId) return fail("Report id is required");
+  if ((note ?? "").trim().length < 4) {
+    return fail("Add what you saw — a few words is enough.");
+  }
+
+  if (String(reportId).startsWith("demo-")) {
+    const demoReport = DEMO_STAFF_REPORTS.find((report) => report.id === reportId);
+    if (!demoReport) return fail("Report not found");
+    if (!DEMO_HISTORY_MAP[reportId]) DEMO_HISTORY_MAP[reportId] = [];
+    DEMO_HISTORY_MAP[reportId].push({
+      id: `h-demo-${Date.now()}`,
+      report_id: reportId,
+      from_status: demoReport.status,
+      status: demoReport.status,
+      note: `Barangay endorsement: ${note.trim()}`,
+      changed_at: new Date().toISOString(),
+    });
+    saroEvents.emit("report:updated", { reportId });
+    return { data: demoReport, error: null };
+  }
+
+  const { data: userData } = await supabase.auth.getUser();
+  const uid = userData?.user?.id;
+  if (!uid) return fail("Sign in again — your session has expired.");
+
+  /* The status is read back from the row rather than trusted from the caller:
+     the RLS policy only admits a history row whose status matches the report's
+     current one, and a stale value in a browser tab would be rejected. */
+  const { data: current, error: readError } = await supabase
+    .from("reports")
+    .select("status")
+    .eq("id", reportId)
+    .maybeSingle();
+
+  if (readError) return fail(readError.message);
+  if (!current) return fail("That report is not in your barangay.");
+
+  const { data, error } = await supabase
+    .from("report_status_history")
+    .insert({
+      report_id: reportId,
+      from_status: current.status ?? status ?? null,
+      status: current.status,
+      changed_by: uid,
+      note: `Barangay endorsement: ${note.trim()}`,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    return fail(
+      error.code === "PGRST116" || error.code === "42501"
+        ? "You can only endorse reports inside your own barangay."
+        : error.message
+    );
+  }
+
+  saroEvents.emit("report:updated", { reportId });
+  return { data, error: null };
+}
+
+/** Permanently remove one report through the admin-only database RPC. */
+export async function deleteReport(reportId) {
+  if (!reportId) return fail("Report id is required");
+
+  if (String(reportId).startsWith("demo-")) {
+    const index = DEMO_STAFF_REPORTS.findIndex((report) => report.id === reportId);
+    if (index < 0) return fail("Report not found");
+    const [data] = DEMO_STAFF_REPORTS.splice(index, 1);
+    delete DEMO_HISTORY_MAP[reportId];
+    saroEvents.emit("report:updated", { reportId, deleted: true });
+    return { data, error: null };
+  }
+
+  const { data: media, error: mediaError } = await supabase
+    .from("report_media")
+    .select("object_path")
+    .eq("report_id", reportId);
+  if (mediaError) return fail(mediaError.message);
+
+  const objectPaths = (media ?? []).map((item) => item.object_path).filter(Boolean);
+  if (objectPaths.length > 0) {
+    const { error: storageError } = await supabase.storage
+      .from(REPORT_PHOTO_BUCKET)
+      .remove(objectPaths);
+    if (storageError) return fail(storageError.message);
+  }
+
+  const { data, error } = await supabase.rpc("delete_report", { p_report_id: reportId });
+  if (error) return fail(error.message);
+  saroEvents.emit("report:updated", { reportId, deleted: true });
   return { data, error: null };
 }
 
@@ -1395,8 +1816,8 @@ export async function deleteRoutingRule(category) {
  * Clusters
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/** Clusters with their member reports attached, newest first. */
-export async function getClustersWithReports() {
+/** Clusters with their member reports attached, newest first, scoped to the viewer. */
+export async function getClustersWithReports({ scope } = {}) {
   const { data: clusters, error } = await supabase
     .from("clusters")
     .select("*")
@@ -1429,20 +1850,32 @@ export async function getClustersWithReports() {
   }
 
   return {
-    data: clusters.map((cluster) => {
-      const members = byCluster.get(cluster.id) ?? [];
-      return {
-        ...cluster,
-        reports: members,
-        report_count: members.length,
-        // Confidence is how strongly these look like one incident rather than
-        // several. More independent reports of the same thing in the same place
-        // in the same hour is the strongest signal a dispatcher has that it is
-        // real, so it rises with the count and saturates — the difference
-        // between five reports and six is not meaningful.
-        confidence: Math.min(0.35 + members.length * 0.15, 0.98),
-      };
-    }),
+    data: clusters
+      .map((cluster) => {
+        /* A cluster is only ever as visible as its members. A barangay official
+           looking at an incident that spans two barangays sees their own half
+           and a count that matches it, rather than a total drawn from reports
+           they may not read. */
+        const members = scopeReports(scope, byCluster.get(cluster.id) ?? []);
+        /* What corroborates this group, as measurements rather than as a
+           percentage. The old `confidence` field was `0.35 + members × 0.15`
+           — arithmetic on a count, displayed to dispatchers as though it were
+           a measure of certainty. Three reports always scored 80%, whether
+           they described one fire or three. */
+        const corroboration = describeCorroboration(members);
+        return {
+          ...cluster,
+          reports: members,
+          report_count: members.length,
+          spread_meters: corroboration.spreadMeters,
+          span_minutes: corroboration.spanMinutes,
+          corroboration_label: corroborationLabel(members),
+        };
+      })
+      /* A cluster whose every member is out of jurisdiction is not an empty
+         cluster, it is somebody else's incident. Drop it rather than showing a
+         card with a zero. */
+      .filter((cluster) => cluster.report_count > 0),
     error: null,
   };
 }
@@ -1456,6 +1889,25 @@ export async function getClustersWithReports() {
  */
 export async function splitFromCluster(clusterId, reportId) {
   if (!clusterId || !reportId) return fail("Cluster id and report id are required");
+
+  /* Demo rows carry cluster ids too (`cluster-fire-bitano`), and on the pilot
+     they are what an operator is actually clicking. Without this branch the
+     call went to Postgres, matched nothing, and the button did nothing — which
+     is the bug this path is here to fix, not to reproduce. */
+  if (String(reportId).startsWith("demo-") || String(clusterId).startsWith("cluster-")) {
+    const target = DEMO_STAFF_REPORTS.find((report) => report.id === reportId);
+    if (!target) return fail("Report not found");
+
+    target.cluster_id = null;
+    const remaining = DEMO_STAFF_REPORTS.filter((report) => report.cluster_id === clusterId);
+    /* A cluster of one is not a duplicate group. Same rule as the server. */
+    if (remaining.length <= 1) {
+      for (const report of remaining) report.cluster_id = null;
+    }
+
+    saroEvents.emit("report:updated", { reportId });
+    return { data: { dissolved: remaining.length <= 1 }, error: null };
+  }
 
   const { error } = await supabase
     .from("cluster_reports")
@@ -1502,15 +1954,32 @@ export async function splitFromCluster(clusterId, reportId) {
  * it is has chosen the wrong side of the error.
  */
 export async function getPanicFlags({ limit = 100 } = {}) {
-  return wrap(
-    await supabase
-      .from("panic_flags")
-      .select("*")
-      .order("flag_count", { ascending: false })
-      .order("last_flagged_at", { ascending: false })
-      .limit(limit)
-  );
+  const { data, error } = await supabase
+    .from("panic_flags")
+    .select("*")
+    .order("flag_count", { ascending: false })
+    .order("last_flagged_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data || data.length === 0) {
+    /* One device, pressed twice. It pairs with the unanswered SOS in
+       DEMO_STAFF_REPORTS, because the point the screen makes is that a repeat
+       press usually means nobody came — and that point cannot be made against
+       an empty table. */
+    return { data: DEMO_SOS_FLAGS.map((flag) => ({ ...flag })), error: null };
+  }
+  return { data, error: null };
 }
+
+const DEMO_SOS_FLAGS = [
+  {
+    device_token: "dev-sos-bitano-4417",
+    flag_count: 2,
+    last_flagged_at: new Date(Date.now() - 60000 * 4).toISOString(),
+    is_blocked: false,
+    created_at: new Date(Date.now() - 60000 * 11).toISOString(),
+  },
+];
 
 /** The reports a flagged device actually filed, so a reviewer can judge. */
 export async function getReportsForDevice(deviceToken) {
@@ -1540,21 +2009,28 @@ export async function getReportsForDevice(deviceToken) {
  * set they can see everywhere else in the app. Pushing it into a SECURITY
  * DEFINER function for the distance maths would quietly widen that.
  */
-export async function getReportsNearPoint({ lat, lng, radiusMeters = 150 }) {
+export async function getReportsNearPoint({ lat, lng, radiusMeters = 150, scope }) {
   if (typeof lat !== "number" || typeof lng !== "number") {
     return fail("A latitude and longitude are required.");
   }
 
-  const { data, error } = await supabase
+  /* `assigned_office_id` and `barangay_id` are selected so jurisdiction can be
+     checked at all: without them every row looks unowned and the scope filter
+     has nothing to compare. */
+  let query = supabase
     .from("reports")
     .select(
       `id, tracking_code, category, description, status, lat, lng, created_at,
        resolved_at, resolution_reason, resolution_reference,
+       assigned_office_id, barangay_id,
        offices:assigned_office_id ( short_name, full_name ),
        barangays:barangay_id ( name ),
        routing_table:category ( label )`
     )
     .order("created_at", { ascending: true });
+
+  query = applyReportScopeToQuery(query, scope);
+  const { data, error } = await query;
 
   if (error) return fail(error.message);
 
@@ -1564,7 +2040,7 @@ export async function getReportsNearPoint({ lat, lng, radiusMeters = 150 }) {
   const EARTH_R = 6_371_000;
   const toRad = (deg) => (deg * Math.PI) / 180;
 
-  const near = (data ?? [])
+  const near = scopeReports(scope, data ?? [])
     .map((row) => {
       const x = toRad(row.lng - lng) * Math.cos(toRad((lat + row.lat) / 2));
       const y = toRad(row.lat - lat);
@@ -1654,6 +2130,9 @@ const DEMO_STAFF_ACCOUNTS = [
     full_name: "Marites Oliva",
     role: "office",
     is_active: true,
+    /* The coordinating office: reads every emergency-tier report citywide,
+       writes only its own queue. See 20260812000600_coordinator_scope.sql. */
+    is_coordinator: true,
     office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
     office_name: "CDRRMO",
     barangay_id: null,
@@ -1709,7 +2188,7 @@ const DEMO_STAFF_ACCOUNTS = [
     created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
   },
   {
-    id: "00000000-0000-0000-0000-000000000007",
+    id: "00000000-0000-0000-0000-000000000005",
     email: "bitano@saro.legazpi.gov.ph",
     full_name: "Kap. Elena Sarmiento",
     role: "barangay_official",
@@ -1721,9 +2200,9 @@ const DEMO_STAFF_ACCOUNTS = [
     created_at: new Date(Date.now() - 86400000 * 40).toISOString(),
   },
   {
-    id: "00000000-0000-0000-0000-000000000008",
+    id: "00000000-0000-0000-0000-000000000006",
     email: "rawis@saro.legazpi.gov.ph",
-    full_name: "Kap. Ramon Perez",
+    full_name: "Kap. Noel Mercado",
     role: "barangay_official",
     is_active: true,
     office_id: null,
@@ -2044,7 +2523,7 @@ export async function deleteResidentAccount({ userId, reason, adminId, adminName
 
   try {
     await supabase.from("resident_deletion_logs").insert([auditEntry]);
-  } catch (e) {
+  } catch {
     // Fallback: stored in DEMO_RESIDENT_DELETION_LOGS memory
   }
 
@@ -2173,11 +2652,11 @@ export async function setVolcanicAlert({ alertLevel, summary, bulletinUrl }) {
     .single();
 
   if (error) {
-    DEMO_VOLCANIC_ALERT.alert_level = level;
-    if (summary !== undefined) DEMO_VOLCANIC_ALERT.summary = summary?.trim() || null;
-    if (bulletinUrl !== undefined) DEMO_VOLCANIC_ALERT.bulletin_url = bulletinUrl?.trim() || DEMO_VOLCANIC_ALERT.bulletin_url;
-    DEMO_VOLCANIC_ALERT.last_verified_at = patch.last_verified_at;
-    return { data: DEMO_VOLCANIC_ALERT, error: null };
+    MOCK_LIVE_VOLCANIC_ALERT.alert_level = level;
+    if (summary !== undefined) MOCK_LIVE_VOLCANIC_ALERT.summary = summary?.trim() || null;
+    if (bulletinUrl !== undefined) MOCK_LIVE_VOLCANIC_ALERT.bulletin_url = bulletinUrl?.trim() || MOCK_LIVE_VOLCANIC_ALERT.bulletin_url;
+    MOCK_LIVE_VOLCANIC_ALERT.last_verified_at = patch.last_verified_at;
+    return { data: MOCK_LIVE_VOLCANIC_ALERT, error: null };
   }
   return { data, error: null };
 }
@@ -2216,38 +2695,146 @@ export async function getEvacuationCenters() {
 
   if (error || !data || data.length === 0) {
     return {
-      data: [
-        { id: "ec-1", name: "Legazpi City Evacuation Center (Ibalong Center)", address: "Bitano, Legazpi City", lat: 13.1425, lng: 123.7485, capacity: 800, current_occupancy: 0, status: "ready", notes: "Primary multi-purpose disaster shelter" },
-        { id: "ec-2", name: "Rawis Multi-Purpose Evacuation Center", address: "Barangay Rawis, Legazpi City", lat: 13.1610, lng: 123.7540, capacity: 500, current_occupancy: 0, status: "ready", notes: "Barangay disaster resilience hall" },
-        { id: "ec-3", name: "Banquerohan Disaster Operations Center", address: "Banquerohan, Legazpi City", lat: 13.1180, lng: 123.7220, capacity: 650, current_occupancy: 0, status: "ready", notes: "High-ground shelter for Mayon evacuees" },
-        { id: "ec-4", name: "Tapo-Tapo Elementary Shelter", address: "Barangay Tapo-Tapo, Legazpi City", lat: 13.1350, lng: 123.7150, capacity: 350, current_occupancy: 0, status: "ready", notes: "Secondary designated evacuation site" },
-      ],
+      /* `barangay_id` is part of the demo shape too: it decides which shelters a
+         barangay official may take a headcount for, and a demo row without one
+         would make that permission untestable on the pilot. */
+      data: DEMO_EVACUATION_CENTERS.map((center) => ({ ...center })),
       error: null,
     };
   }
   return wrap({ data, error });
 }
 
+const DEMO_EVACUATION_CENTERS = [
+  { id: "ec-1", name: "Legazpi City Evacuation Center (Ibalong Center)", address: "Bitano, Legazpi City", barangay_id: "brgy-bitano", lat: 13.1425, lng: 123.7485, capacity: 800, current_occupancy: 0, status: "ready", notes: "Primary multi-purpose disaster shelter" },
+  { id: "ec-2", name: "Rawis Multi-Purpose Evacuation Center", address: "Barangay Rawis, Legazpi City", barangay_id: "brgy-rawis", lat: 13.1610, lng: 123.7540, capacity: 500, current_occupancy: 0, status: "ready", notes: "Barangay disaster resilience hall" },
+  { id: "ec-3", name: "Banquerohan Disaster Operations Center", address: "Banquerohan, Legazpi City", barangay_id: null, lat: 13.1180, lng: 123.7220, capacity: 650, current_occupancy: 0, status: "ready", notes: "High-ground shelter for Mayon evacuees" },
+  { id: "ec-4", name: "Tapo-Tapo Elementary Shelter", address: "Barangay Tapo-Tapo, Legazpi City", barangay_id: null, lat: 13.1350, lng: 123.7150, capacity: 350, current_occupancy: 0, status: "ready", notes: "Secondary designated evacuation site" },
+];
+
+/**
+ * Set a shelter's headcount, and say when and by whom.
+ *
+ * Separate from the registry edit for a reason: during a typhoon this is the
+ * only field that changes, it changes hourly, and the person changing it is
+ * often a barangay official who has no business renaming the shelter or moving
+ * its coordinates. Postgres enforces that split in
+ * `set_evacuation_occupancy`; this is its client.
+ */
+export async function setEvacuationOccupancy(centerId, occupancy, status) {
+  if (!centerId) return fail("Which shelter?");
+  const headcount = Number(occupancy);
+  if (!Number.isFinite(headcount) || headcount < 0) {
+    return fail("Enter the number of people currently sheltering.");
+  }
+
+  const demo = DEMO_EVACUATION_CENTERS.find((center) => center.id === centerId);
+  if (demo) {
+    demo.current_occupancy = headcount;
+    if (status) demo.status = status;
+    demo.occupancy_updated_at = new Date().toISOString();
+    return { data: { ...demo }, error: null };
+  }
+
+  const { data, error } = await supabase.rpc("set_evacuation_occupancy", {
+    p_center_id: centerId,
+    p_occupancy: headcount,
+    p_status: status ?? null,
+  });
+
+  if (error) return fail(error.message);
+  return { data: Array.isArray(data) ? data[0] : data, error: null };
+}
+
+/** Demo blackspots, used whenever the live tables are unreachable or empty.
+ *
+ * Each carries dated `incidents` rather than only an all-time scalar, so the
+ * rolling window is exercised by the fallback path too — Yawa Bridge has enough
+ * recent history to qualify, Washington Drive is a site that has gone quiet and
+ * whose remaining incidents sit outside the window.
+ */
+function demoAccidentBlackspots(now = Date.now()) {
+  const monthsAgo = (m) => {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - m);
+    return d.toISOString();
+  };
+  const hoursAgo = (h) => new Date(now - h * 3600000).toISOString();
+
+  return [
+    {
+      id: "bs-1", name: "Yawa Bridge Intersection Blackspot",
+      location_label: "Yawa Bridge, Rawis Highway",
+      lat: 13.1550, lng: 123.7480, incident_count: 14, severity: "critical",
+      last_reported_at: hoursAgo(2),
+      incidents: [
+        { occurred_at: hoursAgo(2) }, { occurred_at: monthsAgo(3) },
+        { occurred_at: monthsAgo(9) }, { occurred_at: monthsAgo(18) },
+        { occurred_at: monthsAgo(31) }, { occurred_at: monthsAgo(44) },
+      ],
+    },
+    {
+      id: "bs-2", name: "Legazpi Port-Tahao Road Curve",
+      location_label: "Tahao Road, Barangay 15",
+      lat: 13.1385, lng: 123.7410, incident_count: 9, severity: "high",
+      last_reported_at: hoursAgo(24),
+      incidents: [
+        { occurred_at: hoursAgo(24) }, { occurred_at: monthsAgo(7) },
+        { occurred_at: monthsAgo(20) }, { occurred_at: monthsAgo(29) },
+      ],
+    },
+    {
+      id: "bs-3", name: "Washington Drive Junction",
+      location_label: "Washington Drive, Bitano",
+      lat: 13.1460, lng: 123.7380, incident_count: 6, severity: "moderate",
+      last_reported_at: monthsAgo(27),
+      incidents: [
+        { occurred_at: monthsAgo(27) }, { occurred_at: monthsAgo(33) },
+        { occurred_at: monthsAgo(41) },
+      ],
+    },
+  ];
+}
+
 /**
  * Fetch Accident-Prone Blackspots live from Supabase with resilient fallbacks.
+ *
+ * Prefers the windowed RPC, which returns `recent_incident_count` — incidents
+ * inside the trailing ACCIDENT_ROLLING_WINDOW_MONTHS only. `incident_count`
+ * comes back untouched alongside it, so staff views can still show the all-time
+ * figure while the map threshold uses the recent one.
+ *
+ * Falls back to a plain table read when the RPC is not deployed yet. Those rows
+ * carry no incident dates, so `evaluateAccidentArea` reports `windowed: false`
+ * for them rather than passing an all-time tally off as a windowed count.
  */
-export async function getAccidentBlackspots() {
-  const { data, error } = await supabase
-    .from("accident_blackspots")
-    .select("*")
-    .order("incident_count", { ascending: false });
-
-  if (error || !data || data.length === 0) {
-    return {
-      data: [
-        { id: "bs-1", name: "Yawa Bridge Intersection Blackspot", location_label: "Yawa Bridge, Rawis Highway", lat: 13.1550, lng: 123.7480, incident_count: 14, severity: "critical", last_reported_at: new Date(Date.now() - 3600000 * 2).toISOString() },
-        { id: "bs-2", name: "Legazpi Port-Tahao Road Curve", location_label: "Tahao Road, Barangay 15", lat: 13.1385, lng: 123.7410, incident_count: 9, severity: "high", last_reported_at: new Date(Date.now() - 3600000 * 24).toISOString() },
-        { id: "bs-3", name: "Washington Drive Junction", location_label: "Washington Drive, Bitano", lat: 13.1460, lng: 123.7380, incident_count: 6, severity: "moderate", last_reported_at: new Date(Date.now() - 3600000 * 72).toISOString() },
-      ],
-      error: null,
-    };
+export async function getAccidentBlackspots(windowMonths = ACCIDENT_ROLLING_WINDOW_MONTHS) {
+  try {
+    const { data, error } = await supabase.rpc("get_accident_blackspots_windowed", {
+      window_months: windowMonths,
+    });
+    if (!error && data && data.length > 0) {
+      const sorted = [...data].sort(
+        (a, b) => Number(b.recent_incident_count ?? 0) - Number(a.recent_incident_count ?? 0)
+      );
+      return { data: sorted, error: null };
+    }
+  } catch {
+    /* RPC missing or unreachable — fall through to the plain table read. */
   }
-  return wrap({ data, error });
+
+  try {
+    const { data, error } = await supabase
+      .from("accident_blackspots")
+      .select("*")
+      .order("incident_count", { ascending: false });
+
+    if (!error && data && data.length > 0) return wrap({ data, error });
+  } catch {
+    /* Table unreachable too — fall through to the demo set. */
+  }
+
+  return { data: demoAccidentBlackspots(), error: null };
 }
 
 /**

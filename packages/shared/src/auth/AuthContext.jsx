@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase/client.js";
 import { ROLE_GUEST } from "../constants.js";
+import { makeViewerScope } from "../scope.js";
 
 // Authentication for both apps, backed by Supabase Auth. Email + password
 // throughout, but arrived at from two opposite directions:
@@ -27,6 +28,18 @@ import { ROLE_GUEST } from "../constants.js";
 
 const AuthContext = createContext(null);
 
+// A display name derived from an email local part arrives lowercase
+// ("resident@example.com" -> "resident"), and it is rendered next to
+// "Signed in" in the account widget. Title-case each word so the sidebar reads
+// "Resident", not "resident".
+function titleCaseName(raw) {
+  return (raw ?? "")
+    .split(/([.\-_\s]+)/)
+    .map((part) => (part.charAt(0).toUpperCase() + part.slice(1)))
+    .join("")
+    .trim();
+}
+
 const DEMO_PROFILES = {
   "admin@saro.legazpi.gov.ph": {
     id: "00000000-0000-0000-0000-000000000001",
@@ -42,7 +55,10 @@ const DEMO_PROFILES = {
     id: "00000000-0000-0000-0000-000000000002",
     full_name: "Marites Oliva",
     role: "office",
-    is_coordinator: false,
+    /* CDRRMO coordinates the citywide response, so it reads every emergency-tier
+       hazard — including the ones BFP or PNP hold. Read only: the queue it can
+       act on is still its own. Every other office keeps this false. */
+    is_coordinator: true,
     office_id: "5d3f5bf3-77e0-423a-ad37-a78b1a43f444",
     office_name: "CDRRMO",
     barangay_id: null,
@@ -68,6 +84,10 @@ const DEMO_PROFILES = {
     barangay_id: null,
     barangay_name: null,
   },
+  /* The barangay ids are not decoration. Every jurisdiction check compares ids,
+     so a profile carrying only a name matched nothing and the screens fell back
+     to showing the whole city — which is how Brgy. Bitano could read Brgy.
+     Bonot's reports. These match DEMO_BARANGAYS in the api module. */
   "bitano@saro.legazpi.gov.ph": {
     id: "00000000-0000-0000-0000-000000000005",
     full_name: "Kap. Elena Sarmiento",
@@ -75,7 +95,7 @@ const DEMO_PROFILES = {
     is_coordinator: false,
     office_id: null,
     office_name: null,
-    barangay_id: null,
+    barangay_id: "brgy-bitano",
     barangay_name: "Bitano",
   },
   "rawis@saro.legazpi.gov.ph": {
@@ -85,7 +105,7 @@ const DEMO_PROFILES = {
     is_coordinator: false,
     office_id: null,
     office_name: null,
-    barangay_id: null,
+    barangay_id: "brgy-rawis",
     barangay_name: "Rawis",
   },
   "resident@example.com": {
@@ -144,7 +164,16 @@ export function AuthProvider({ children }) {
             const saved = JSON.parse(raw);
             if (saved?.session && saved?.profile) {
               setSession(saved.session);
-              setProfile(saved.profile);
+              /* A session saved before names were title-cased still holds the
+                 raw email local part ("resident"), and it is rendered next to
+                 "Signed in". Only an all-lowercase name is touched, so a real
+                 name someone typed is left exactly as they typed it. */
+              const savedName = saved.profile.full_name ?? "";
+              setProfile(
+                savedName && savedName === savedName.toLowerCase()
+                  ? { ...saved.profile, full_name: titleCaseName(savedName) }
+                  : saved.profile
+              );
             }
           }
         } catch (e) {
@@ -189,7 +218,7 @@ export function AuthProvider({ children }) {
     if (password === "demo123") {
       const demoProf = DEMO_PROFILES[cleanEmail] || {
         id: `demo-res-${Date.now()}`,
-        full_name: cleanEmail.split("@")[0] || "Demo Resident",
+        full_name: titleCaseName(cleanEmail.split("@")[0]) || "Demo Resident",
         role: "resident",
         is_coordinator: false,
         office_id: null,
@@ -240,7 +269,7 @@ export function AuthProvider({ children }) {
     if (password === "demo123" || (data?.user && !data?.session)) {
       const demoProf = {
         id: data?.user?.id || `demo-res-${Date.now()}`,
-        full_name: (fullName ?? "").trim() || cleanEmail.split("@")[0],
+        full_name: (fullName ?? "").trim() || titleCaseName(cleanEmail.split("@")[0]),
         role: "resident",
         is_coordinator: false,
         office_id: null,
@@ -315,6 +344,11 @@ export function AuthProvider({ children }) {
       officeName: profile?.office_name ?? null,
       barangayId: profile?.barangay_id ?? null,
       barangayName: profile?.barangay_name ?? null,
+      isCoordinator: Boolean(profile?.is_coordinator),
+      /* One object every screen filters reports through, so jurisdiction is a
+         thing a screen receives rather than a rule it has to remember. See
+         scope.js — Postgres RLS is still the boundary this only mirrors. */
+      viewerScope: makeViewerScope(profile),
       loading,
       error,
       signIn,

@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Shield, ArrowRight, Phone, Clock, MapPin, Radio, Flame, Waves, Construction, Activity, HeartPulse, Droplet, Anchor, Share2, X, Lock } from "lucide-react";
 import { Wordmark, StatusTag, HazardMap } from "@saro/ui";
-import { getPublicMapReports, getCategories, LEGAZPI_CENTER, saroEvents } from "@saro/shared";
+import {
+  getPublicMapReports, getCategories, LEGAZPI_CENTER, saroEvents,
+  isReportActiveOnMap, groupReportsIntoPins,
+} from "@saro/shared";
 
 /** MapLibre takes [lng, lat]. */
 const LEGAZPI_CENTER_LNGLAT = [LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]];
@@ -36,21 +39,12 @@ export default function LandingPage({ onOpenLogin }) {
 
   const getCatName = (id) => categories.find((c) => c.id === id)?.name || id;
 
-  // Deduplicate clustered reports for live preview
-  const clusterMap = new Map();
-  const displayReports = [];
-
-  reports.forEach((r) => {
-    if (!r.lat || !r.lng) return;
-    if (r.cluster_id) {
-      if (!clusterMap.has(r.cluster_id)) {
-        clusterMap.set(r.cluster_id, { report: r, count: r.confidence_score || 1 });
-      }
-    } else {
-      displayReports.push({ report: r, count: 1 });
-    }
-  });
-  clusterMap.forEach((val) => displayReports.push(val));
+  /* Same source, archive rule and grouping as the resident map, so the pin
+     count in the header is the number of pins actually drawn below it. The old
+     version kept only the first report of each cluster and took its count from
+     `confidence_score`, a column the public map RPC never returns. */
+  const activeReports = reports.filter((r) => isReportActiveOnMap(r));
+  const displayReports = groupReportsIntoPins(activeReports);
 
   return (
     <div className="min-h-screen bg-canvas text-ink font-sans flex flex-col justify-between selection:bg-brand-wash selection:text-brand">
@@ -140,7 +134,7 @@ export default function LandingPage({ onOpenLogin }) {
                     </span>
                   </div>
                   <span className="t-micro bg-brand-bright/20 text-brand-edge border border-brand-edge/30 px-2.5 py-0.5 rounded font-mono font-bold">
-                    {reports.length} Active Incident Pins
+                    {displayReports.length} Active Incident Pins · {activeReports.length} Reports
                   </span>
                 </div>
 
@@ -152,13 +146,18 @@ export default function LandingPage({ onOpenLogin }) {
                     zoom={13}
                     showToggles={false}
                     hidden={["rain"]}
-                    reports={displayReports.map(({ report: r, count }) => ({
-                      id: r.cluster_id || r.id,
+                    reports={displayReports.map(({ id, report: r, count, members }) => ({
+                      id,
                       lat: typeof r.lat === "string" ? parseFloat(r.lat) : r.lat,
                       lng: typeof r.lng === "string" ? parseFloat(r.lng) : r.lng,
                       priority: r.priority,
                       color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
+                      count,
+                      categoryName: getCatName(r.category_id || r.category),
+                      barangayName: r.barangay || "Legazpi City",
+                      members,
                       onSelect: () => setSelectedReport({ ...r, clusterCount: count }),
+                      onSelectMember: (member) => setSelectedReport({ ...member, clusterCount: 1 }),
                     }))}
                   />
 

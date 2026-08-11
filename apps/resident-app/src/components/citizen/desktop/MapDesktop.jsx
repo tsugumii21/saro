@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { PlusCircle, Loader2, MapPin, ChevronRight, Layers, Activity } from "lucide-react";
-import { HazardMap, AlertLevelBadge, IncidentPinCard, StatusTag, TrackingCode } from "@saro/ui";
+import { Loader2, MapPin, BadgeCheck } from "lucide-react";
+import { HazardMap, AlertLevelBadge, IncidentPinCard, StatusTag } from "@saro/ui";
+import PublicReportDetail from "../PublicReportDetail";
 import {
   getPublicMapReports, getCategories, getBarangays,
   getRainfall, getVolcanicAlert, getEvacuationCenters, getAccidentBlackspots,
-  LEGAZPI_CENTER, saroEvents, isArchivedReport,
+  LEGAZPI_CENTER, saroEvents, isReportActiveOnMap,
+  groupReportsIntoPins, groupPinsByLocation, countReportsByStatus, getCategoryTier,
+  useAuth,
 } from "@saro/shared";
+import {
+  loadMyReportKeys, matchOwnership, decorateGroupsWithOwnership, EMPTY_REPORT_KEYS,
+} from "../../../lib/myReports";
 
 const LEGAZPI_CENTER_LNGLAT = [LEGAZPI_CENTER[1], LEGAZPI_CENTER[0]];
 
@@ -44,6 +50,7 @@ function timeSince(dateStr) {
  */
 export default function MapDesktop() {
   const navigate = useNavigate();
+  const { isResident } = useAuth();
   const [reports, setReports] = useState([]);
   const [categories, setCategories] = useState([]);
   const [barangays, setBarangays] = useState([]);
@@ -57,6 +64,25 @@ export default function MapDesktop() {
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  /* The full report opened from a pin. A tracking code goes to Check a report;
+     everything else opens the read-only public detail by id. */
+  const [detailReport, setDetailReport] = useState(null);
+  /* Every hazard at one point, when the popup's short list is not the whole
+     story. */
+  const [locationList, setLocationList] = useState(null);
+  /* Which pins are the reader's own. Ids only — the map never carries codes. */
+  const [myKeys, setMyKeys] = useState(EMPTY_REPORT_KEYS);
+
+  /* Only the reader's own report goes to Track, because Track is where a report
+     is confirmed or disputed. Everyone else's opens the read-only detail by id. */
+  const openFullReport = useCallback(({ trackingCode, reportId, report, isMine }) => {
+    setLocationList(null);
+    if (isMine && trackingCode) {
+      navigate(`/track?code=${encodeURIComponent(trackingCode)}`);
+      return;
+    }
+    if (reportId) setDetailReport({ id: reportId, report });
+  }, [navigate]);
 
   const loadData = useCallback(async () => {
     setLoadError("");
@@ -85,12 +111,22 @@ export default function MapDesktop() {
     if (bsRes.data) setAccidentBlackspots(bsRes.data);
   }, []);
 
+  const loadOwnership = useCallback(async () => {
+    setMyKeys(await loadMyReportKeys({ isResident }));
+  }, [isResident]);
+
   useEffect(() => {
     loadData();
     const unsub1 = saroEvents.on("report:created", loadData);
     const unsub2 = saroEvents.on("report:updated", loadData);
     return () => { unsub1(); unsub2(); };
   }, [loadData]);
+
+  useEffect(() => {
+    loadOwnership();
+    const unsub = saroEvents.on("report:created", loadOwnership);
+    return () => { unsub(); };
+  }, [loadOwnership]);
 
   const getCategoryName = (catId) => {
     const cat = categories.find((c) => c.id === catId);
@@ -102,44 +138,20 @@ export default function MapDesktop() {
     return brgy ? brgy.name : "Legazpi City";
   };
 
-  const activeReports = reports.filter((r) => !isArchivedReport(r));
+  /* Same time-based visibility rule as the mobile map, so both agree. */
+  const activeReports = reports.filter((r) => isReportActiveOnMap(r));
   const filteredReports = statusFilter
     ? activeReports.filter((r) => r.status === statusFilter)
     : activeReports;
 
-  // Spatial cluster grouping
-  const displayReports = [];
-  const processed = new Set();
-
-  filteredReports.forEach((r, idx) => {
-    if (!r.lat || !r.lng || processed.has(idx)) return;
-    const rLat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
-    const rLng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
-
-    const clusterMembers = [r];
-    processed.add(idx);
-
-    filteredReports.forEach((other, oIdx) => {
-      if (processed.has(oIdx) || !other.lat || !other.lng) return;
-      const oLat = typeof other.lat === "string" ? parseFloat(other.lat) : Number(other.lat);
-      const oLng = typeof other.lng === "string" ? parseFloat(other.lng) : Number(other.lng);
-
-      const isClusterIdMatch = r.cluster_id && other.cluster_id && r.cluster_id === other.cluster_id;
-      const dist = Math.sqrt(Math.pow(rLat - oLat, 2) + Math.pow(rLng - oLng, 2));
-      const isProximityMatch = dist < 0.005;
-
-      if (isClusterIdMatch || isProximityMatch) {
-        clusterMembers.push(other);
-        processed.add(oIdx);
-      }
-    });
-
-    displayReports.push({
-      report: r,
-      count: Math.max(clusterMembers.length, r.confidence_score || 1),
-      members: clusterMembers,
-    });
+  /* Same shared grouping the mobile map uses, so both surfaces draw the same
+     pins with the same counts from the same rows — including the second pass
+     that collapses everything sharing a rounded coordinate into one marker, so
+     this list and the map can never point at different reports. */
+  const displayReports = groupPinsByLocation(groupReportsIntoPins(filteredReports), {
+    tierOf: (r) => getCategoryTier(r?.category_id || r?.category),
   });
+  const statusCounts = countReportsByStatus(activeReports, STATUS_ORDER);
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-canvas font-sans">
@@ -168,7 +180,8 @@ export default function MapDesktop() {
           {/* Status Filter Pills */}
           <div className="flex flex-col gap-2">
             <span className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">
-              Filter Status ({filteredReports.length})
+              Filter Status
+              {statusFilter ? ` — showing ${filteredReports.length} of ${activeReports.length}` : ""}
             </span>
             <div className="flex flex-wrap gap-1.5">
               <button
@@ -183,7 +196,7 @@ export default function MapDesktop() {
               </button>
               {STATUS_ORDER.map((status) => {
                 const isActive = statusFilter === status;
-                const count = activeReports.filter((r) => r.status === status).length;
+                const count = statusCounts[status];
                 return (
                   <button
                     key={status}
@@ -229,13 +242,19 @@ export default function MapDesktop() {
             )}
 
             <div className="flex flex-col gap-2.5">
-              {displayReports.map(({ report: r, count, members }) => {
-                const isSelected = Boolean(selectedReport) && (
-                  selectedReport === r ||
-                  (Boolean(r.id) && Boolean(selectedReport.id) && String(r.id) === String(selectedReport.id)) ||
-                  (Boolean(r.tracking_code) && Boolean(selectedReport.tracking_code) && String(r.tracking_code) === String(selectedReport.tracking_code)) ||
-                  (Boolean(r.lat) && Boolean(selectedReport.lat) && Number(r.lat) === Number(selectedReport.lat) && Number(r.lng) === Number(selectedReport.lng))
-                );
+              {displayReports.map(({ id: pinId, report: r, count, members, groups }) => {
+                /* A pin can stand for several kinds of hazard filed on the same
+                   point, so the card says so rather than naming only the lead
+                   one and quietly disagreeing with the marker. */
+                const otherHazards = (groups?.length ?? 1) - 1;
+                /* Pins carry a stable id from the shared grouping, so selection
+                   is one comparison rather than a chain of coordinate guesses. */
+                const isSelected = selectedReport?.pinId === pinId;
+                /* The feed says whose report a row is for the same reason the
+                   marker does: this list and the map point at the same pins. */
+                const feedIsMine =
+                  matchOwnership(myKeys, r).isMine ||
+                  (groups ?? []).some((group) => matchOwnership(myKeys, group.report).isMine);
 
                 const handleCardClick = () => {
                   if (isSelected) {
@@ -246,8 +265,9 @@ export default function MapDesktop() {
                   const lng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
                   setSelectedReport({
                     ...r,
+                    pinId,
                     clusterCount: count,
-                    members: (members || [r]).slice(0, 3),
+                    members,
                     categoryName: getCategoryName(r.category_id || r.category),
                     barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
                     timeSinceStr: timeSince(r.created_at),
@@ -259,7 +279,7 @@ export default function MapDesktop() {
 
                 return (
                   <button
-                    key={r.id || r.tracking_code || `${r.lat}-${r.lng}`}
+                    key={pinId}
                     type="button"
                     onClick={handleCardClick}
                     aria-current={isSelected ? "true" : undefined}
@@ -280,7 +300,14 @@ export default function MapDesktop() {
                           isSelected ? "font-extrabold text-brand" : "font-semibold text-ink"
                         }`}>
                           {getCategoryName(r.category_id || r.category)}
+                          {otherHazards > 0 ? ` +${otherHazards} more` : ""}
                         </span>
+                        {feedIsMine && (
+                          <span className="flex shrink-0 items-center gap-1 rounded border border-brand-edge bg-brand-wash px-1.5 py-px text-[10px] font-bold text-brand">
+                            <BadgeCheck className="h-2.5 w-2.5" aria-hidden="true" />
+                            Yours
+                          </span>
+                        )}
                       </div>
                       <div className="pointer-events-none shrink-0">
                         <StatusTag status={r.status} size="sm" />
@@ -297,7 +324,7 @@ export default function MapDesktop() {
                       </div>
                       {count > 1 && (
                         <span className="text-[10px] font-mono font-bold bg-brand-wash text-brand border border-brand-edge/60 px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
-                          ⚡ {Math.min(count, 3)} reports
+                          ⚡ {count} reports
                         </span>
                       )}
                     </div>
@@ -314,59 +341,104 @@ export default function MapDesktop() {
         <HazardMap
           className="h-full w-full"
           center={mapCenter}
-          selectedId={selectedReport?.cluster_id || selectedReport?.id}
-          onClearSelectedReport={() => setSelectedReport(null)}
+          selectedId={selectedReport?.pinId ?? null}
+          renderReportPopup={(pin, { close }) => (
+            <IncidentPinCard
+              report={pin}
+              categoryName={pin.categoryName || getCategoryName(pin.category_id || pin.category)}
+              barangayName={pin.barangayName || getBarangayName(pin.barangay_id) || "Legazpi City"}
+              timeSinceStr={pin.timeSinceStr}
+              onClose={() => {
+                close();
+                setSelectedReport(null);
+              }}
+              onViewReport={openFullReport}
+              onShowAll={(locationPin) => {
+                close();
+                setLocationList(locationPin);
+              }}
+            />
+          )}
           zoom={13}
           rainfall={rainfall}
           evacuationCenters={evacuationCenters}
           accidentBlackspots={accidentBlackspots}
           showToggles={true}
           hidden={hiddenLayers}
-          reports={displayReports.map(({ report: r, count, members }) => ({
-            id: r.cluster_id || r.id,
-            lat: r.lat,
-            lng: r.lng,
-            priority: r.priority,
-            color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
-            count: count,
-            category: r.category_id || r.category,
-            categoryName: getCategoryName(r.category_id || r.category),
-            barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
-            timeSinceStr: timeSince(r.created_at),
-            status: r.status,
-            members: (members || [r]).slice(0, 3).map(m => ({
-              ...m,
-              categoryName: getCategoryName(m.category_id || m.category)
-            })),
-            onTrackClick: (code) => navigate(`/track?code=${code}`),
-            onActionClick: () => navigate(`/report?category=${r.category_id || r.category}`),
-            onSelect: () => {
-              const lat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
-              const lng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
-              setSelectedReport({ ...r, clusterCount: count, members: (members || [r]).slice(0, 3) });
-              if (!isNaN(lat) && !isNaN(lng) && lat && lng) {
-                setMapCenter([lng, lat]);
-              }
-            },
-          }))}
-        />
+          reports={displayReports.map(({ id, report: r, count, members, groups }) => {
+            const lead = matchOwnership(myKeys, r);
+            const owned = decorateGroupsWithOwnership(
+              myKeys,
+              (groups ?? []).map((group) => ({
+                ...group,
+                report: {
+                  ...group.report,
+                  report_id: group.report.id,
+                  categoryName: getCategoryName(group.report.category_id || group.report.category),
+                  barangayName: getBarangayName(group.report.barangay_id) || group.report.barangay || "Legazpi City",
+                  timeSinceStr: timeSince(group.report.created_at),
+                },
+              }))
+            );
 
-        {/* Floating Incident & Cluster Details Overlay Card */}
-        {selectedReport && (
-          <div className="absolute bottom-6 left-6 z-30 w-full max-w-md shadow-2xl animate-fade-in">
-            <IncidentPinCard
-              report={selectedReport}
-              categoryName={getCategoryName(selectedReport.category_id || selectedReport.category)}
-              barangayName={getBarangayName(selectedReport.barangay_id) || selectedReport.barangay || "Legazpi City"}
-              timeSinceStr={timeSince(selectedReport.created_at)}
-              onClose={() => setSelectedReport(null)}
-              onTrackClick={(code) => navigate(`/track?code=${code}`)}
-              onActionClick={() => navigate(`/report?category=${selectedReport.category_id || selectedReport.category}`)}
-              actionLabel="Report Another Hazard Here"
-            />
-          </div>
-        )}
+            return {
+              id,
+              /* The row id, kept beside the pin id so the popup can load this
+                 report's photo evidence. */
+              report_id: r.id,
+              /* One entry per kind of hazard filed at this point; the popup draws
+                 a row and an action for each. */
+              groups: owned.groups,
+              /* Ownership: the marker is ringed when anything under it is the
+                 reader's, and the card carries the code that opens it in Track. */
+              isMine: lead.isMine || owned.anyMine,
+              is_mine: lead.isMine,
+              my_tracking_code: lead.trackingCode,
+              lat: r.lat,
+              lng: r.lng,
+              priority: r.priority,
+              color: STATUS_COLORS[r.status] || STATUS_COLORS.received,
+              count: count,
+              category: r.category_id || r.category,
+              categoryName: getCategoryName(r.category_id || r.category),
+              barangayName: getBarangayName(r.barangay_id) || r.barangay || "Legazpi City",
+              timeSinceStr: timeSince(r.created_at),
+              status: r.status,
+              tracking_code: r.tracking_code,
+              description: r.description,
+              created_at: r.created_at,
+              members,
+              onSelect: () => {
+                const lat = typeof r.lat === "string" ? parseFloat(r.lat) : Number(r.lat);
+                const lng = typeof r.lng === "string" ? parseFloat(r.lng) : Number(r.lng);
+                setSelectedReport({ ...r, pinId: id, report_id: r.id, clusterCount: count, members });
+                if (!isNaN(lat) && !isNaN(lng) && lat && lng) {
+                  setMapCenter([lng, lat]);
+                }
+              },
+            };
+          })}
+        />
+        {/* The floating detail card that used to sit over the map is gone: the
+            pin popup carries the whole report, photo evidence included. */}
       </div>
+
+      {locationList && (
+        <PublicReportDetail
+          locationGroups={locationList.groups}
+          locationLabel={locationList.barangayName}
+          onOpenReport={openFullReport}
+          onClose={() => setLocationList(null)}
+        />
+      )}
+
+      {detailReport && (
+        <PublicReportDetail
+          reportId={detailReport.id}
+          fallbackReport={detailReport.report}
+          onClose={() => setDetailReport(null)}
+        />
+      )}
     </div>
   );
 }

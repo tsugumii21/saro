@@ -38,12 +38,19 @@ export const FALLBACK_POSITION = { lat: 13.1391, lng: 123.7438, precise: false }
  * target="_self" and a tel: scheme is handled by the OS as an external handoff
  * and leaves the document alone.
  *
+ * The number comes from the city's own routing — routing_table picks the office
+ * for the chosen emergency and offices.hotline supplies its line. It defaults to
+ * the national emergency number so a missing or unrouted category still reaches
+ * somebody rather than dialling nothing.
+ *
+ * @param {string} [number] Digits to hand the dialer. Defaults to EMERGENCY_NUMBER.
  * @returns {boolean} whether the handoff was attempted
  */
-export function placeEmergencyCall() {
+export function placeEmergencyCall(number = EMERGENCY_NUMBER) {
   try {
+    const dial = String(number || EMERGENCY_NUMBER).trim() || EMERGENCY_NUMBER;
     const link = document.createElement("a");
-    link.href = `tel:${EMERGENCY_NUMBER}`;
+    link.href = `tel:${dial}`;
     link.rel = "noopener";
     link.style.display = "none";
     document.body.appendChild(link);

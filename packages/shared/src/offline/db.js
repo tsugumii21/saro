@@ -108,8 +108,8 @@ async function withStore(storeName, mode, fn, fallback = null) {
  * millisecond, so it costs the user nothing and means no report can be lost to
  * a connection that dies mid-request.
  *
- * @param {object} payload createReport() arguments
- * @param {object} [meta]  { kind: "panic" | "describe" }
+ * @param {object} payload createReport() or updateSosReportDetails() arguments
+ * @param {object} [meta]  { kind: "panic" | "describe" | "sos_details", operation?: "update_sos" }
  * @returns {Promise<string>} the queue id
  */
 export async function enqueueReport(payload, meta = {}) {
@@ -118,6 +118,7 @@ export async function enqueueReport(payload, meta = {}) {
     id,
     payload,
     kind: meta.kind ?? "describe",
+    operation: meta.operation ?? "create",
     created_at: new Date().toISOString(),
     attempts: 0,
     last_error: null,

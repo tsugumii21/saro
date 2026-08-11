@@ -14,6 +14,16 @@ import {
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
+function timeAgo(iso) {
+  if (!iso) return "never";
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (!Number.isFinite(minutes)) return "never";
+  if (minutes < 60) return `${Math.max(1, minutes)}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 function roleBadge(role) {
   if (role === "admin") {
     return (
@@ -50,7 +60,7 @@ const ALL_CONNECTED_OFFICES = [
 ];
 
 export default function OfficesAndAccounts() {
-  const { profile, isAdmin, signOut } = useAuth();
+  const { profile, isAdmin, signOut, viewerScope } = useAuth();
   const [offices, setOffices] = useState([]);
   const [categories, setCategories] = useState([]);
   const [barangays, setBarangays] = useState([]);
@@ -103,7 +113,9 @@ export default function OfficesAndAccounts() {
       getOffices(),
       getCategories(),
       getBarangays(),
-      getReports(),
+      /* Admin-only screen, so this is city-wide — but it asks with a scope like
+         every other read, so the answer is a decision rather than an omission. */
+      getReports({ scope: viewerScope }),
       getProfiles(),
       getResidentAccounts(),
       getResidentDeletionLogs(),
@@ -119,7 +131,7 @@ export default function OfficesAndAccounts() {
     if (resAccRes.data) setResidentAccounts(resAccRes.data);
     if (delLogsRes.data) setResidentDeletionLogs(delLogsRes.data);
     setLoading(false);
-  }, []);
+  }, [viewerScope]);
 
   useEffect(() => {
     loadData();
@@ -185,7 +197,18 @@ export default function OfficesAndAccounts() {
       });
 
       const totalCount = officeReports.length;
-      const slaRate = totalCount > 0 ? Math.round(((totalCount - overdue) / totalCount) * 100) : 98;
+      /* Null, not 98. An office with no reports has no compliance rate, and the
+         old default invented a flattering one — a brand-new office displayed
+         "98% SLA" before it had ever been sent anything. */
+      const slaRate = totalCount > 0 ? Math.round(((totalCount - overdue) / totalCount) * 100) : null;
+
+      /* When this office last did anything. An office with two open reports and
+         no activity for a week is a different problem from one with twenty and
+         hourly updates, and the count alone cannot tell them apart. */
+      const lastActivityAt = officeReports.reduce((latest, report) => {
+        const stamp = report.updated_at || report.created_at;
+        return !latest || (stamp && stamp > latest) ? stamp : latest;
+      }, null);
 
       metrics[off.id] = {
         office: off,
@@ -193,8 +216,11 @@ export default function OfficesAndAccounts() {
         open,
         overdue,
         slaRate,
+        onTime: totalCount - overdue,
+        lastActivityAt,
         categories: assignedCats,
         staff: assignedStaff,
+        coordinators: assignedStaff.filter((p) => p.is_coordinator),
       };
     }
     return metrics;
@@ -424,7 +450,10 @@ export default function OfficesAndAccounts() {
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {combinedOffices.map((off) => {
-            const m = officeMetrics[off.id] || { open: 0, overdue: 0, slaRate: 100, categories: [], staff: [] };
+            const m = officeMetrics[off.id] || {
+              open: 0, overdue: 0, slaRate: null, total: 0, onTime: 0,
+              lastActivityAt: null, categories: [], staff: [], coordinators: [],
+            };
             return (
               <div key={off.id} className="saro-card p-4 flex flex-col justify-between border border-line bg-white shadow-xs hover:border-brand-edge transition-colors">
                 <div>
@@ -436,13 +465,28 @@ export default function OfficesAndAccounts() {
                       <h3 className="t-body-sm font-bold text-ink mt-1.5">{off.short_name}</h3>
                       <p className="text-[11px] text-ink-muted line-clamp-1">{off.full_name}</p>
                     </div>
-                    <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
-                      m.slaRate >= 90
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : "bg-amber-50 text-amber-700 border-amber-200"
-                    }`}>
-                      {m.slaRate}% SLA
-                    </span>
+                    {/* A percentage with no denominator is not a measurement.
+                        "50% SLA" over two reports and over two hundred are
+                        different facts, and an office with nothing in its queue
+                        has no rate at all rather than a flattering default. */}
+                    {m.slaRate === null ? (
+                      <span className="rounded border border-line bg-sunken px-2 py-0.5 font-mono text-[11px] font-bold text-ink-faint">
+                        No reports yet
+                      </span>
+                    ) : (
+                      <span
+                        className={`rounded border px-2 py-0.5 text-right font-mono text-[11px] font-bold ${
+                          m.slaRate >= 90
+                            ? "border-status-resolved-tab bg-status-resolved-wash text-status-resolved-ink"
+                            : m.slaRate >= 50
+                            ? "border-status-assigned-tab bg-status-assigned-wash text-status-assigned-ink"
+                            : "border-alert bg-alert-wash text-alert"
+                        }`}
+                        title={`${m.onTime} of ${m.total} reports answered inside their SLA`}
+                      >
+                        {m.onTime}/{m.total} on time
+                      </span>
+                    )}
                   </div>
 
                   {/* Office Status Bar */}
@@ -483,13 +527,25 @@ export default function OfficesAndAccounts() {
                   </div>
                 </div>
 
-                {/* Staff count footer */}
-                <div className="mt-4 pt-2.5 border-t border-line flex items-center justify-between text-xs text-ink-muted">
+                {/* Staff, coordination role, and when this office last moved
+                    anything — "Managed" said nothing at all. */}
+                <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-2.5 text-xs text-ink-muted">
                   <span className="flex items-center gap-1.5">
                     <Users width={13} height={13} className="text-ink-faint" />
                     {m.staff.length} active account{m.staff.length === 1 ? "" : "s"}
                   </span>
-                  <span className="text-[10px] font-bold text-brand">Managed</span>
+                  {m.coordinators.length > 0 ? (
+                    <span
+                      className="rounded border border-brand-edge bg-brand-wash px-1.5 py-0.5 text-[10px] font-bold text-brand"
+                      title="Reads every emergency-tier report citywide. Read-only."
+                    >
+                      Coordinating office
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-ink-faint">
+                      {m.lastActivityAt ? `Last activity ${timeAgo(m.lastActivityAt)}` : "No activity yet"}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -559,7 +615,14 @@ export default function OfficesAndAccounts() {
               {/* Search and Filters */}
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="relative">
-                  <Search width={14} height={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+                  <Search
+                    width={14}
+                    height={14}
+                    strokeWidth={2.25}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                    style={{ color: "var(--color-ink-muted)" }}
+                    aria-hidden="true"
+                  />
                   <input
                     type="text"
                     value={searchQuery}
@@ -704,7 +767,14 @@ export default function OfficesAndAccounts() {
 
               {/* Resident Search Input */}
               <div className="relative">
-                <Search width={14} height={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+                <Search
+                  width={14}
+                  height={14}
+                  strokeWidth={2.25}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--color-ink-muted)" }}
+                  aria-hidden="true"
+                />
                 <input
                   type="text"
                   value={residentSearch}
@@ -1127,7 +1197,7 @@ export default function OfficesAndAccounts() {
                       Anonymized Historical Preservation (Audit Safe)
                     </span>
                     <p className="leading-relaxed">
-                      This account has <strong>{deleteHistoryInfo.activityCount} linked operational record(s)</strong> (incident closures, status updates, or panic reviews).
+                      This account has <strong>{deleteHistoryInfo.activityCount} linked operational record(s)</strong> (incident closures, status updates, or SOS reviews).
                     </p>
                     <p className="leading-relaxed text-[11px] text-blue-800">
                       To maintain legal audit logs, the account will be <strong>anonymized as "Former staff member"</strong> and its login credentials permanently revoked. Historical incident records will remain intact.

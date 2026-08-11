@@ -21,7 +21,7 @@
  */
 
 import { listOutbox, removeFromOutbox, recordOutboxFailure } from "./db.js";
-import { createReport } from "../api/index.js";
+import { createReport, updateSosReportDetails } from "../api/index.js";
 import { rememberReport } from "./db.js";
 
 /** Errors that mean "try again later" rather than "this will never work". */
@@ -56,17 +56,22 @@ export async function flushOutbox() {
     const queued = await listOutbox();
 
     for (const row of queued) {
-      const { data, error } = await createReport(row.payload);
+      const write = row.operation === "update_sos"
+        ? updateSosReportDetails
+        : createReport;
+      const { data, error } = await write(row.payload);
 
       if (!error && data) {
         await removeFromOutbox(row.id);
-        await rememberReport({
-          tracking_code: data.tracking_code,
-          category: data.category,
-          status: data.status,
-          kind: row.kind,
-          created_at: data.created_at,
-        });
+        if (row.operation !== "update_sos") {
+          await rememberReport({
+            tracking_code: data.tracking_code,
+            category: data.category,
+            status: data.status,
+            kind: row.kind,
+            created_at: data.created_at,
+          });
+        }
         sent.push({ ...data, queueId: row.id, kind: row.kind });
         continue;
       }

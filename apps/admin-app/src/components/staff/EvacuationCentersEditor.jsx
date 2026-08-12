@@ -85,6 +85,7 @@ export default function EvacuationCentersEditor() {
   const [barangays, setBarangays] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState(BLANK);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [busyOccupancyId, setBusyOccupancyId] = useState("");
   const [error, setError] = useState("");
@@ -93,9 +94,13 @@ export default function EvacuationCentersEditor() {
   const canEditRegistry = isAdmin || isOffice;
 
   const load = useCallback(async () => {
-    const [cRes, bRes] = await Promise.all([getEvacuationCenters(), getBarangays()]);
-    if (cRes.data) setCenters(cRes.data);
-    if (bRes.data) setBarangays(bRes.data);
+    try {
+      const [cRes, bRes] = await Promise.all([getEvacuationCenters(), getBarangays()]);
+      if (cRes.data) setCenters(cRes.data);
+      if (bRes.data) setBarangays(bRes.data);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -516,7 +521,13 @@ export default function EvacuationCentersEditor() {
             {mine.length > 0 ? "Other shelters in the city" : "All shelters"}
           </h2>
         </header>
-        {others.length === 0 ? (
+        {loading ? (
+          <div className="p-8 space-y-4">
+            <div className="h-20 bg-sunken/60 rounded animate-pulse" />
+            <div className="h-20 bg-sunken/60 rounded animate-pulse" />
+            <div className="h-20 bg-sunken/60 rounded animate-pulse" />
+          </div>
+        ) : others.length === 0 ? (
           <p className="px-4 py-8 text-center text-xs text-ink-muted">No shelters on record yet.</p>
         ) : (
           <ul>{others.map(renderCenterRow)}</ul>

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Mail, Lock, LogOut, LayoutDashboard, Building2, ArrowRight, ArrowLeft,
   Layers, Siren, FileDown, MapPin, Map, MessageCircleQuestion, Users,
-  BarChart3, Shield,
+  BarChart3, Shield, Brain, ChevronLeft, ChevronRight
 } from "lucide-react";
 import ResponderDashboard from "./ResponderDashboard.jsx";
 import AdminOversight from "./AdminOversight.jsx";
@@ -15,6 +15,7 @@ import GapLog from "./GapLog.jsx";
 import OfficesAndAccounts from "./OfficesAndAccounts.jsx";
 import AlertLevelEditor from "./AlertLevelEditor.jsx";
 import EvacuationCentersEditor from "./EvacuationCentersEditor.jsx";
+import HazardInsights from "./HazardInsights.jsx";
 import { Wordmark } from "@saro/ui";
 import { useAuth, STAFF_ROLES } from "@saro/shared";
 
@@ -31,22 +32,64 @@ const SECTIONS = [
   { id: "dispatch",   Icon: LayoutDashboard,        label: "Dispatch",           roles: ["office", "barangay_official"] },
   { id: "oversight",  Icon: LayoutDashboard,        label: "Oversight",          roles: ["admin"] },
   { id: "clusters",   Icon: Map,                    label: "Live Map",           roles: ["admin", "office", "barangay_official"] },
-  /* Analytics is admin-only until it is scope-aware. It was offered to every
-     role while AdminDashboard redirects non-admins on sight, so an office
-     clicking it was bounced back with no explanation. Offering nothing beats
-     offering a door that closes in your face. */
+  { id: "insights",   Icon: Brain,                  label: "Insights",           roles: ["admin", "office"] },
   { id: "analytics",  Icon: BarChart3,              label: "Analytics",          roles: ["admin"] },
   { id: "evidence",   Icon: FileDown,               label: "Evidence",           roles: ["admin", "office", "barangay_official"] },
-  { id: "routing",    Icon: Building2,              label: "Routing & Data",     roles: ["admin"] },
-  { id: "evacuation", Icon: Shield,                 label: "Evacuation Centers", roles: ["admin", "office", "barangay_official"] },
-  { id: "accounts",   Icon: Users,                  label: "Offices & Accounts", roles: ["admin"] },
-  { id: "sos",        Icon: Siren,                  label: "Emergency SOS",      roles: ["admin", "office"] },
+  { id: "routing",    Icon: Building2,              label: "Routing",            roles: ["admin"] },
+  { id: "evacuation", Icon: Shield,                 label: "Evacuation",         roles: ["admin", "office", "barangay_official"] },
+  { id: "accounts",   Icon: Users,                  label: "Offices",            roles: ["admin"] },
+  { id: "sos",        Icon: Siren,                  label: "Emergency",          roles: ["admin", "office"] },
   { id: "gaplog",     Icon: MessageCircleQuestion,  label: "Gap Log",            roles: ["admin", "office"] },
 ];
 
 export default function StaffShell() {
   const { profile, role, isAdmin, canManageAccounts, canManageRouting, officeName, barangayName, loading, signOut } = useAuth();
   const [tab, setTab] = useState(null);
+
+  const navRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const scope = officeName || barangayName || "City-wide";
+  const visibleSections = SECTIONS.filter((s) => s.roles.includes(role));
+
+  const updateScrollButtons = useCallback(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollLeft(scrollLeft > 4);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    updateScrollButtons();
+    el.addEventListener("scroll", updateScrollButtons, { passive: true });
+    window.addEventListener("resize", updateScrollButtons);
+    return () => {
+      el.removeEventListener("scroll", updateScrollButtons);
+      window.removeEventListener("resize", updateScrollButtons);
+    };
+  }, [updateScrollButtons, visibleSections]);
+
+  const scrollNav = (direction) => {
+    const el = navRef.current;
+    if (!el) return;
+
+    if (direction === "right") {
+      el.scrollTo({ left: el.scrollWidth + 1000, behavior: "smooth" });
+    } else {
+      el.scrollTo({ left: 0, behavior: "smooth" });
+    }
+  };
+
+  const handleTabClick = (id, e) => {
+    setTab(id);
+    if (e?.currentTarget) {
+      e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    }
+  };
 
   if (loading) {
     return (
@@ -56,24 +99,17 @@ export default function StaffShell() {
     );
   }
 
-  // Authenticated is not authorized: a user with no profile row has no role.
   if (!profile || !STAFF_ROLES.includes(role)) return <StaffLogin />;
 
-  const scope = officeName || barangayName || "City-wide";
-  const visibleSections = SECTIONS.filter((s) => s.roles.includes(role));
-
-  // A tab this role cannot see falls back to their first one rather than
-  // rendering nothing. It cannot be a fixed id any more: "dispatch" does not
-  // exist for an administrator, and hard-coding it left them on a blank page.
   const active = visibleSections.some((s) => s.id === tab)
     ? tab
     : visibleSections[0]?.id ?? null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
+    <div className="flex min-h-screen flex-col bg-canvas overflow-y-scroll">
       <header className="sticky top-0 z-30 border-b border-line bg-surface">
         <div className="flex w-full items-center justify-between gap-4 px-5 py-2.5">
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-5 shrink-0">
             <Wordmark size="sm" context="OPERATIONS" />
             <span className="hidden items-center gap-2 border-l border-line pl-5 sm:flex">
               <span className="t-label text-ink">{scope}</span>
@@ -83,25 +119,63 @@ export default function StaffShell() {
             </span>
           </div>
 
-          <nav className="flex flex-wrap items-center gap-px border border-line bg-line" aria-label="Sections">
-            {visibleSections.map(({ id, Icon, label }) => (
+          {/* Minimalist Segmented Ribbon — Full Size & Full Width */}
+          <div className="relative flex items-center min-w-0 flex-1 w-full">
+            {canScrollLeft && (
               <button
-                key={id}
-                onClick={() => setTab(id)}
-                aria-current={active === id ? "page" : undefined}
-                className="saro-btn saro-btn-sm"
-                style={{
-                  background: active === id ? "var(--color-brand)" : "var(--color-surface)",
-                  color: active === id ? "#fff" : "var(--color-ink-muted)",
-                }}
+                type="button"
+                onClick={() => scrollNav("left")}
+                title="Scroll to start"
+                className="absolute left-1 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-line/80 bg-surface text-ink shadow-md hover:bg-raised transition-all shrink-0"
               >
-                <Icon width={14} height={14} />
-                {label}
+                <ChevronLeft width={15} height={15} />
               </button>
-            ))}
-          </nav>
+            )}
 
-          <div className="flex items-center gap-3">
+            <nav
+              ref={navRef}
+              className="flex items-center gap-1 overflow-x-auto no-scrollbar rounded-md p-1 border border-line/60 bg-sunken/80 w-full"
+              aria-label="Sections"
+            >
+              {visibleSections.map(({ id, Icon, label }) => {
+                const isSos = id === "sos";
+                const isActive = active === id;
+
+                return (
+                  <button
+                    key={id}
+                    onClick={(e) => handleTabClick(id, e)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`px-3.5 py-1.5 text-xs font-semibold shrink-0 whitespace-nowrap transition-all rounded flex items-center gap-1.5 ${
+                      isActive && isSos
+                        ? "bg-panic text-white shadow-2xs"
+                        : isActive
+                        ? "bg-brand text-white shadow-2xs font-bold"
+                        : isSos
+                        ? "bg-panic-wash/80 text-panic border border-panic/20 hover:bg-panic-wash"
+                        : "text-ink-muted hover:text-ink hover:bg-white/70"
+                    }`}
+                  >
+                    <Icon width={14} height={14} className="shrink-0" />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            {canScrollRight && (
+              <button
+                type="button"
+                onClick={() => scrollNav("right")}
+                title="Scroll to end"
+                className="absolute right-1 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-line/80 bg-surface text-ink shadow-md hover:bg-raised transition-all shrink-0"
+              >
+                <ChevronRight width={15} height={15} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
             <span className="hidden text-right md:block">
               <span className="t-body-sm block font-semibold leading-tight">{profile.full_name}</span>
               <span className="t-data-sm block text-ink-faint">{profile.mobile_number || "Legazpi EOC"}</span>
@@ -118,6 +192,7 @@ export default function StaffShell() {
         {active === "dispatch"   && <ResponderDashboard />}
         {active === "oversight"  && <AdminOversight />}
         {active === "clusters"   && <LiveMap />}
+        {active === "insights"   && <HazardInsights />}
         {active === "analytics"  && <AdminDashboard />}
         {active === "evidence"   && <EvidenceExport />}
         {active === "sos"        && <SosReview />}

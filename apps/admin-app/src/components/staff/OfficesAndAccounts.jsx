@@ -458,7 +458,7 @@ export default function OfficesAndAccounts() {
               <div key={off.id} className="saro-card p-4 flex flex-col justify-between border border-line bg-white shadow-xs hover:border-brand-edge transition-colors">
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <span className="text-[10px] font-mono font-bold bg-sunken text-ink-faint px-1.5 py-0.5 rounded uppercase">
                         {off.code || "DEPT"}
                       </span>
@@ -470,12 +470,12 @@ export default function OfficesAndAccounts() {
                         different facts, and an office with nothing in its queue
                         has no rate at all rather than a flattering default. */}
                     {m.slaRate === null ? (
-                      <span className="rounded border border-line bg-sunken px-2 py-0.5 font-mono text-[11px] font-bold text-ink-faint">
+                      <span className="shrink-0 whitespace-nowrap rounded border border-line bg-sunken px-2 py-0.5 font-mono text-[11px] font-bold text-ink-faint">
                         No reports yet
                       </span>
                     ) : (
                       <span
-                        className={`rounded border px-2 py-0.5 text-right font-mono text-[11px] font-bold ${
+                        className={`shrink-0 whitespace-nowrap rounded border px-2 py-0.5 text-right font-mono text-[11px] font-bold ${
                           m.slaRate >= 90
                             ? "border-status-resolved-tab bg-status-resolved-wash text-status-resolved-ink"
                             : m.slaRate >= 50

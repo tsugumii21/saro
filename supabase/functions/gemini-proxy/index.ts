@@ -16,6 +16,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { handlePreflight, jsonResponse } from "../_shared/cors.ts";
 import { askAssistant } from "./assistant.ts";
 import { structureDescription } from "./describe.ts";
+import { synthesizeHazardInsight } from "./insight.ts";
 
 // Injected by the platform. The service role key stays server-side; it is used
 // only to write the gap log and to read the routing table, both of which the
@@ -145,9 +146,25 @@ Deno.serve(async (request) => {
       return jsonResponse(request, result);
     }
 
+    if (mode === "insight") {
+      const report = body.report as any;
+      if (!report || !report.description) {
+        return jsonResponse(request, { error: "report with description is required" }, 400);
+      }
+      const result = await synthesizeHazardInsight({
+        tracking_code: String(report.tracking_code || ""),
+        category: String(report.category || ""),
+        description: String(report.description || ""),
+        barangay: String(report.barangay || ""),
+        status: String(report.status || "received"),
+        created_at: String(report.created_at || new Date().toISOString())
+      });
+      return jsonResponse(request, result);
+    }
+
     return jsonResponse(
       request,
-      { error: 'mode must be "assistant" or "describe"' },
+      { error: 'mode must be "assistant", "describe", or "insight"' },
       400,
     );
   } catch (err) {

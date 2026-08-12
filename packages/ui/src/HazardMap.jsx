@@ -388,6 +388,7 @@ export default function HazardMap({
   const [popupReport, setPopupReport] = useState(null);
   const closeReportPopup = useCallback(() => reportPopup?.remove(), [reportPopup]);
   const [togglesOpen, setTogglesOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState("layers"); // "layers" | "key"
   const [active, setActive] = useState(() =>
     Object.fromEntries(HAZARD_LAYERS.map((l) => [l.id, l.defaultOn]))
   );
@@ -1678,34 +1679,62 @@ export default function HazardMap({
           </button>
 
           {togglesOpen && (
-            <div className="absolute top-11 right-0 z-30 bg-white/95 backdrop-blur border border-line rounded-md p-2.5 shadow-card w-48 sm:w-[220px] max-h-48 sm:max-h-[calc(100vh-140px)] overflow-y-auto animate-fade-in text-ink">
-              <span className="t-label block px-1 pb-1.5 font-bold text-ink uppercase tracking-wider text-[10px] border-b border-line mb-1">
-                Map Layers
-              </span>
-              <div className="flex flex-col gap-0.5">
-                {visibleToggles.map((layer) => (
-                  <label
-                    key={layer.id}
-                    className="t-body-sm flex cursor-pointer items-center gap-1.5 px-1 py-0.5 hover:bg-sunken rounded-xs transition-colors"
+            <div className="absolute top-11 right-0 z-30 bg-white/95 backdrop-blur border border-line rounded-md p-2.5 shadow-card w-56 sm:w-60 max-h-[calc(100vh-160px)] overflow-y-auto animate-fade-in text-ink">
+              {/* Header with Tab Switcher & Explicit Close Button */}
+              <div className="flex items-center justify-between border-b border-line pb-1.5 mb-2">
+                <div className="flex items-center gap-1 bg-sunken p-0.5 rounded border border-line">
+                  <button
+                    type="button"
+                    onClick={() => setPanelTab("layers")}
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${
+                      panelTab === "layers" ? "bg-white text-ink shadow-xs" : "text-ink-muted hover:text-ink"
+                    }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(active[layer.id])}
-                      onChange={() => toggle(layer.id)}
-                      className="h-3 w-3 accent-brand shrink-0"
-                    />
-                    <span className="text-[11px] font-medium text-ink leading-tight">{layer.label}</span>
-                  </label>
-                ))}
+                    Map Layers
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPanelTab("key")}
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${
+                      panelTab === "key" ? "bg-white text-ink shadow-xs" : "text-ink-muted hover:text-ink"
+                    }`}
+                  >
+                    Map Key
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTogglesOpen(false)}
+                  className="text-ink-muted hover:text-ink p-1 rounded hover:bg-sunken transition-colors"
+                  aria-label="Close map settings"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <div className="mt-1.5 border-t border-line pt-1.5">
-                <span className="t-label block px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-                  Map key
-                </span>
-                {/* Every mark the map can draw is named here. A key that lists
-                    only the hazard overlays leaves the reader guessing at the
-                    thing they actually tap: the report pins. */}
-                <div className="space-y-1 px-1 text-[10px] text-ink-muted">
+
+              {/* Tab 1: Map Layers */}
+              {panelTab === "layers" && (
+                <div className="flex flex-col gap-1">
+                  {visibleToggles.map((layer) => (
+                    <label
+                      key={layer.id}
+                      className="t-body-sm flex cursor-pointer items-center gap-2 px-1.5 py-1 hover:bg-sunken rounded-xs transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(active[layer.id])}
+                        onChange={() => toggle(layer.id)}
+                        className="h-3.5 w-3.5 accent-brand shrink-0"
+                      />
+                      <span className="text-[11px] font-medium text-ink leading-tight">{layer.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {/* Tab 2: Map Key */}
+              {panelTab === "key" && (
+                <div className="space-y-1.5 px-0.5 text-[10px] text-ink-muted">
                   {REPORT_STATUS_KEY.map((entry) => (
                     <div key={entry.label} className="flex items-center gap-2">
                       <span
@@ -1741,8 +1770,6 @@ export default function HazardMap({
                   <div className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border border-[#2563EB] bg-[#3B82F6]/15 shrink-0" /> Flood extent</div>
                   <div className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm border border-[#995026] bg-[#A55B2A]/15 shrink-0" /> Volcanic corridor</div>
                   <div className="flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-alert shrink-0" /> Mayon danger boundary</div>
-                  {/* Rain circles grow and darken with the 24-hour total, so the
-                      key shows both ends rather than a single dot. */}
                   <div className="flex items-center gap-1.5">
                     <span className="flex w-4 shrink-0 items-center gap-0.5">
                       <span className="h-1.5 w-1.5 rounded-full border border-white bg-[#CFE3F2]" />
@@ -1755,7 +1782,7 @@ export default function HazardMap({
                     Walking route to a shelter
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>

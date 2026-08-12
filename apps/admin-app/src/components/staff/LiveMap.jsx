@@ -258,76 +258,83 @@ export default function LiveMap() {
   const highPriorityCount = reports.filter((r) => r.priority === "high" && !isArchivedReport(r)).length;
 
   return (
-    <div className="flex flex-col gap-4 font-sans" style={{ height: "calc(100vh - 92px)" }}>
-      {/* ── Control Header & Live Stats ─────────────────────────────────── */}
-      <div className="saro-card flex flex-wrap items-center justify-between gap-4 px-4 py-3 bg-white border border-line shadow-xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="t-heading text-ink font-bold">Live Operations Map</h1>
-            <span className="text-[10px] font-mono font-bold bg-brand-wash text-brand px-2 py-0.5 rounded border border-brand-edge">
-              Auto-Clustering Active
-            </span>
-          </div>
-          <p className="t-body-sm text-ink-muted mt-0.5">
-            Incidents linked by the database on arrival. Reports it left unlinked are drawn together
-            when they fall within {CLUSTER_RADIUS_METERS} m and {CLUSTER_WINDOW_MINUTES} minutes.
-          </p>
+    <div className="flex flex-col gap-2.5 font-sans" style={{ height: "calc(100vh - 92px)" }}>
+      {/* ── Streamlined Control Header & Live Stats (Row 1) ───────────────── */}
+      <div className="saro-card flex flex-wrap items-center justify-between gap-3 px-3.5 py-2 bg-white border border-line shadow-xs shrink-0">
+        <div className="flex items-center gap-2">
+          <h1 className="t-heading text-sm font-bold text-ink">Live Operations Map</h1>
+          <span className="text-[10px] font-mono font-bold bg-brand-wash text-brand px-1.5 py-0.5 rounded border border-brand-edge">
+            Auto-Clustering Active
+          </span>
         </div>
 
-        {/* Operational Counters */}
-        <div className="flex items-center gap-4 text-xs">
-          <div className="flex flex-col items-start border-r border-line pr-4">
-            <span className="text-[10px] uppercase font-bold text-ink-faint">Active Incidents</span>
-            <span className="text-base font-bold font-mono text-brand">{totalActive}</span>
-          </div>
-          <div className="flex flex-col items-start border-r border-line pr-4">
-            <span className="text-[10px] uppercase font-bold text-ink-faint">Linked Incidents</span>
-            <span className="text-base font-bold font-mono text-status-resolved-ink">{savedClusterCount}</span>
-          </div>
-          <div className="flex flex-col items-start border-r border-line pr-4">
-            <span className="text-[10px] uppercase font-bold text-ink-faint">Near Each Other</span>
-            <span className="text-base font-bold font-mono text-ink">{proximityGroupCount}</span>
-          </div>
-          <div className="flex flex-col items-start border-r border-line pr-4">
-            <span className="text-[10px] uppercase font-bold text-ink-faint">In Hazard Zone</span>
-            <span className="text-base font-bold font-mono text-alert">{highPriorityCount}</span>
-          </div>
-          <div className="flex flex-col items-start border-r border-line pr-4">
-            <span className="text-[10px] uppercase font-bold text-ink-faint">Recurring Spots</span>
-            <span className="text-base font-bold font-mono text-ink">{recurringSpots.length}</span>
-          </div>
-          <div className="flex flex-col items-start">
-            <span className="text-[10px] uppercase font-bold text-ink-faint">Archived (&gt;3d)</span>
-            <span className="text-base font-bold font-mono text-slate-500">{archivedCount}</span>
-          </div>
+        {/* Compact Operational Counter Pills */}
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="inline-flex items-center gap-1.5 rounded border border-line bg-sunken px-2 py-0.5 font-mono">
+            <span className="text-[10px] font-sans font-bold uppercase text-ink-faint">Active:</span>
+            <span className="font-bold text-brand">{totalActive}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded border border-line bg-sunken px-2 py-0.5 font-mono">
+            <span className="text-[10px] font-sans font-bold uppercase text-ink-faint">Linked:</span>
+            <span className="font-bold text-status-resolved-ink">{savedClusterCount}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded border border-line bg-sunken px-2 py-0.5 font-mono">
+            <span className="text-[10px] font-sans font-bold uppercase text-ink-faint">Proximity:</span>
+            <span className="font-bold text-ink">{proximityGroupCount}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded border border-line bg-sunken px-2 py-0.5 font-mono">
+            <span className="text-[10px] font-sans font-bold uppercase text-ink-faint">Hazard Zone:</span>
+            <span className="font-bold text-alert">{highPriorityCount}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded border border-line bg-sunken px-2 py-0.5 font-mono">
+            <span className="text-[10px] font-sans font-bold uppercase text-ink-faint">Recurring:</span>
+            <span className="font-bold text-ink">{recurringSpots.length}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded border border-line bg-sunken px-2 py-0.5 font-mono">
+            <span className="text-[10px] font-sans font-bold uppercase text-ink-faint">Archived (&gt;3d):</span>
+            <span className="font-bold text-ink-muted">{archivedCount}</span>
+          </span>
         </div>
       </div>
 
-      {/* ── Toolbar & Filter Controls ───────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* ── Toolbar & Filter Controls (Row 2) ───────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowRecurringSpots(!showRecurringSpots)}
-            className={`saro-btn saro-btn-sm font-bold gap-1.5 ${
-              showRecurringSpots ? "bg-amber-100 text-amber-900 border-amber-300" : "bg-white text-ink-muted border-line"
+            className={`saro-btn saro-btn-sm font-semibold gap-1.5 transition-colors ${
+              showRecurringSpots
+                ? "bg-amber-50 text-amber-900 border-amber-300 shadow-xs"
+                : "bg-white text-ink-muted border-line hover:bg-sunken"
             }`}
+            title={showRecurringSpots ? "Hide recurring hotspots on map" : "Show recurring hotspots on map"}
           >
             <Flame width={14} height={14} className={showRecurringSpots ? "text-amber-600" : "text-ink-faint"} />
-            {showRecurringSpots ? "Hide Recurring Spots" : "Highlight Recurring Spots"}
+            <span>Recurring Spots</span>
+            {showRecurringSpots && (
+              <span className="ml-0.5 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-amber-200/60 text-amber-900">
+                ON
+              </span>
+            )}
           </button>
 
           <button
             type="button"
             onClick={() => setShowArchived(!showArchived)}
-            className={`saro-btn saro-btn-sm font-bold gap-1.5 ${
-              showArchived ? "bg-slate-800 text-white border-slate-700" : "bg-white text-ink-muted border-line"
+            className={`saro-btn saro-btn-sm font-semibold gap-1.5 transition-colors ${
+              showArchived
+                ? "bg-slate-100 text-slate-900 border-slate-300 shadow-xs"
+                : "bg-white text-ink-muted border-line hover:bg-sunken"
             }`}
+            title={showArchived ? "Hide archived reports (>3 days)" : "Show archived reports (>3 days)"}
           >
-            <Archive width={14} height={14} className={showArchived ? "text-amber-400" : "text-ink-faint"} />
-            {showArchived ? "Hide Archived Reports" : "Show Archived (Resolved >3d)"}
+            <Archive width={14} height={14} className={showArchived ? "text-slate-700" : "text-ink-faint"} />
+            <span>Archived (&gt;3d)</span>
             {archivedCount > 0 && (
-              <span className="ml-1 text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-700 text-white">
+              <span className={`ml-0.5 text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full ${
+                showArchived ? "bg-slate-200 text-slate-800" : "bg-sunken text-ink-muted"
+              }`}>
                 {archivedCount}
               </span>
             )}

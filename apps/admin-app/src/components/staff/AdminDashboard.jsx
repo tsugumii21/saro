@@ -311,9 +311,12 @@ function AdminDashboardContent() {
   const reportsByOffice = offices.map((o) => {
     const oReports = rangedReports.filter((r) => {
       const assignedId = r.assigned_office_id || r.offices?.id || r.office_id;
+      const cat = categories.find((c) => c.id === r.category_id || c.category === r.category);
+      const catOfficeId = cat?.office_id;
       const assignedName = r.offices?.short_name || r.office_name;
       return (
         assignedId === o.id ||
+        catOfficeId === o.id ||
         (assignedName && assignedName.toLowerCase() === o.short_name?.toLowerCase())
       );
     });
@@ -586,7 +589,11 @@ function AdminDashboardContent() {
                     >
                       <div className="flex items-center gap-2">
                         <ChevronRight className={`w-4 h-4 text-ink-faint transition-transform ${isCollapsed ? "" : "rotate-90"}`} />
-                        <span>{office.full_name} ({office.short_name})</span>
+                        <span>
+                          {office.full_name?.includes(`(${office.short_name})`) || office.full_name?.includes(office.short_name)
+                            ? office.full_name
+                            : `${office.full_name} (${office.short_name})`}
+                        </span>
                       </div>
                       
                       {/* Rollup Summary Badge Strip */}
@@ -609,13 +616,13 @@ function AdminDashboardContent() {
 
                     {!isCollapsed && (
                       <table className="w-full text-xs">
-                        <thead className="bg-white text-ink-faint border-b border-line uppercase t-micro">
+                        <thead className="bg-sunken/40 text-ink-faint border-b border-line uppercase text-[10px]">
                           <tr>
-                            <th className="text-left px-4 py-2 font-semibold">Category Name</th>
-                            <th className="text-center px-3 py-2 font-semibold">Type</th>
-                            <th className="text-center px-3 py-2 font-semibold">SLA Target</th>
-                            <th className="text-center px-3 py-2 font-semibold">Total Volume</th>
-                            <th className="text-center px-4 py-2 font-semibold">Compliance Rate</th>
+                            <th className="text-left px-4 py-1.5 font-semibold">Category Name</th>
+                            <th className="text-center px-3 py-1.5 font-semibold">Type</th>
+                            <th className="text-center px-3 py-1.5 font-semibold">SLA Target</th>
+                            <th className="text-center px-3 py-1.5 font-semibold">Total Volume</th>
+                            <th className="text-center px-4 py-1.5 font-semibold">Compliance Rate</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-sunken">
@@ -640,9 +647,9 @@ function AdminDashboardContent() {
                                 <td className="px-3 py-2 text-center font-mono font-bold text-ink">{stats.total}</td>
                                 <td className="px-4 py-2 text-center">
                                   <div className="flex items-center justify-center gap-2">
-                                    <div className="w-20 h-2 bg-sunken rounded-full overflow-hidden">
+                                    <div className="w-20 h-2 bg-sunken rounded-full overflow-hidden flex">
                                       <div
-                                        className={`h-full rounded-full ${stats.rate >= 80 ? "bg-status-resolved-tab" : stats.rate >= 50 ? "bg-status-assigned-tab" : "bg-alert"}`}
+                                        className={`h-full rounded-full min-w-[4px] transition-all ${stats.rate >= 80 ? "bg-status-resolved-tab" : stats.rate >= 50 ? "bg-status-assigned-tab" : "bg-alert"}`}
                                         style={{ width: `${stats.rate}%` }}
                                       />
                                     </div>

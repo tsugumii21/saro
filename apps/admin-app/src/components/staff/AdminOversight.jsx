@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Building2, Inbox, Clock3, RefreshCw } from "lucide-react";
+import { AlertTriangle, Building2, Inbox, Clock3, RefreshCw, CheckCircle2 } from "lucide-react";
 import { StatusTag, TrackingCode } from "@saro/ui";
 import {
   getReports, getCategories, getBarangays, getOffices, saroEvents,
@@ -44,15 +44,22 @@ function ageLabel(hours) {
   return `${Math.floor(hours / 24)}d`;
 }
 
-/** One number and its name. Colour carries meaning, so it is used sparingly. */
-function Stat({ label, value, tone, hint }) {
+/** One number and its name, styled as a SARO tabbed card. */
+function Stat({ label, value, tabColor, tone, hint, alertWash }) {
   return (
-    <div className="flex min-w-[128px] flex-col gap-0.5 border-l border-line px-4 py-1 first:border-l-0 first:pl-0">
-      <span className="t-label text-[10px] font-bold uppercase tracking-wider text-ink-faint">{label}</span>
-      <span className="text-2xl font-bold leading-none tabular-nums" style={{ color: tone }}>
-        {value}
-      </span>
-      {hint && <span className="text-[10px] text-ink-faint">{hint}</span>}
+    <div
+      className={`flex min-w-[130px] flex-1 flex-col gap-1 rounded border border-line p-3 shadow-2xs transition-all ${
+        alertWash ? "bg-alert-wash border-alert/40" : "bg-surface"
+      }`}
+      style={{ borderLeftWidth: "4px", borderLeftColor: tabColor }}
+    >
+      <span className="t-label text-[10px] font-bold uppercase tracking-wider text-ink-muted">{label}</span>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-2xl font-extrabold leading-none tabular-nums" style={{ color: tone }}>
+          {value}
+        </span>
+        {hint && <span className="text-[10px] font-medium text-ink-faint shrink-0">{hint}</span>}
+      </div>
     </div>
   );
 }
@@ -78,20 +85,33 @@ function AttentionList({ title, description, Icon, tone, reports, emptyLabel, se
       </header>
 
       {reports.length === 0 ? (
-        <p className="px-4 py-6 text-center text-xs text-ink-muted">{emptyLabel}</p>
+        <div className="flex items-center gap-3 p-4 bg-status-resolved-wash/60 border-t border-status-resolved-tab/20 text-status-resolved-ink">
+          <CheckCircle2 width={18} height={18} className="shrink-0 text-status-resolved-ink" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <span className="block text-xs font-bold uppercase tracking-wider">All Clear</span>
+            <p className="text-xs text-status-resolved-ink/90 font-medium leading-tight mt-0.5">{emptyLabel}</p>
+          </div>
+        </div>
       ) : (
         <ul className="max-h-72 min-h-0 overflow-y-auto">
           {reports.map((report) => {
             const office = officeBy[report.assigned_office_id];
             const isSelected = String(selectedId) === String(report.id);
+            const hrs = hoursSince(report.created_at);
+            const isSevereBreach = hrs >= 24 || report.priority === "high";
+
             return (
               <li key={report.id} className="border-b border-line last:border-0">
                 <button
                   type="button"
                   onClick={() => onSelect(report)}
                   aria-current={isSelected ? "true" : undefined}
-                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                    isSelected ? "bg-brand-wash" : "hover:bg-raised"
+                  className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors border-l-4 ${
+                    isSelected
+                      ? "border-brand bg-brand-wash"
+                      : isSevereBreach
+                      ? "border-alert bg-alert-wash/40 hover:bg-alert-wash/70"
+                      : "border-transparent hover:bg-raised"
                   }`}
                 >
                   <span className="shrink-0">
@@ -107,8 +127,14 @@ function AttentionList({ title, description, Icon, tone, reports, emptyLabel, se
                       {office?.short_name ?? "Unrouted"}
                     </span>
                   </span>
-                  <span className="shrink-0 font-mono text-[11px] font-bold tabular-nums text-ink-muted">
-                    {ageLabel(hoursSince(report.created_at))}
+                  <span
+                    className={`shrink-0 rounded font-mono text-[11px] font-bold tabular-nums px-2 py-0.5 ${
+                      isSevereBreach
+                        ? "bg-alert-wash text-alert border border-alert/30"
+                        : "bg-sunken text-ink-muted border border-line/60"
+                    }`}
+                  >
+                    {ageLabel(hrs)}
                   </span>
                   <span className="shrink-0">
                     <StatusTag status={report.status} size="sm" />
@@ -241,22 +267,39 @@ export default function AdminOversight() {
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="saro-card flex flex-wrap items-center justify-between gap-4 px-4 py-3">
+      <div className="saro-card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="t-heading">City Oversight</h1>
+          <h1 className="t-heading text-ink font-bold">City Oversight</h1>
           <p className="t-body-sm text-ink-muted">
             City-wide · {reports.length} report{reports.length === 1 ? "" : "s"} on record
           </p>
         </div>
-        <div className="flex flex-wrap items-stretch">
-          <Stat label="Open" value={open.length} tone="var(--color-status-progress-ink)" />
-          <Stat label="Past SLA" value={breached.length} tone="var(--color-alert)" />
-          <Stat label="Unrouted" value={unrouted.length} tone="var(--color-status-received-ink)" />
+        <div className="grid grid-cols-2 gap-3 sm:flex sm:items-stretch">
+          <Stat
+            label="Open"
+            value={open.length}
+            tabColor="var(--color-status-progress-tab)"
+            tone="var(--color-status-progress-ink)"
+          />
+          <Stat
+            label="Past SLA"
+            value={breached.length}
+            tabColor="var(--color-alert)"
+            tone="var(--color-alert)"
+            alertWash={breached.length > 0}
+          />
+          <Stat
+            label="Unrouted"
+            value={unrouted.length}
+            tabColor="var(--color-status-received-tab)"
+            tone="var(--color-status-received-ink)"
+          />
           <Stat
             label="Stalled"
             value={stalled.length}
+            tabColor="var(--color-status-assigned-tab)"
             tone="var(--color-status-assigned-ink)"
-            hint={`no update in ${STALL_DAYS}d`}
+            hint={`>${STALL_DAYS}d`}
           />
         </div>
       </div>
@@ -331,36 +374,61 @@ export default function AdminOversight() {
                 Open work each office is carrying, and how much of it is late.
               </p>
             </header>
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-line bg-surface">
-                  <th className="t-label px-4 py-2 text-left text-ink-faint">Office</th>
-                  <th className="t-label px-4 py-2 text-right text-ink-faint">Open</th>
-                  <th className="t-label px-4 py-2 text-right text-ink-faint">Overdue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {officeLoad.map((row) => (
-                  <tr key={row.id} className="border-b border-line last:border-0">
-                    <td className="px-4 py-2 font-semibold text-ink">{row.name}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-ink">{row.open}</td>
-                    <td
-                      className="px-4 py-2 text-right font-mono font-bold tabular-nums"
-                      style={{ color: row.overdue > 0 ? "var(--color-alert)" : "var(--color-ink-faint)" }}
-                    >
-                      {row.overdue}
-                    </td>
-                  </tr>
-                ))}
-                {officeLoad.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-ink-muted">
-                      No offices are configured yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            {(() => {
+              const maxOpen = Math.max(...officeLoad.map((r) => r.open), 1);
+              return (
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-line bg-surface">
+                      <th className="t-label px-4 py-2.5 text-left text-ink-faint">Office</th>
+                      <th className="t-label px-4 py-2.5 text-left text-ink-faint">Workload Share</th>
+                      <th className="t-label px-4 py-2.5 text-right text-ink-faint">Open</th>
+                      <th className="t-label px-4 py-2.5 text-right text-ink-faint">Overdue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {officeLoad.map((row) => {
+                      const pct = Math.round((row.open / maxOpen) * 100);
+                      return (
+                        <tr key={row.id} className="border-b border-line last:border-0 hover:bg-raised/60 transition-colors">
+                          <td className="px-4 py-2.5 font-bold text-ink">{row.name}</td>
+                          <td className="px-4 py-2.5 w-1/3 min-w-[120px]">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 flex-1 rounded-full bg-sunken overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-brand-mid transition-all duration-300"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-mono text-ink-faint w-7 text-right">{pct}%</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-ink">{row.open}</td>
+                          <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                            {row.overdue > 0 ? (
+                              <span className="inline-block rounded-full bg-alert-wash px-2 py-0.5 text-[11px] font-bold text-alert border border-alert/30">
+                                {row.overdue}
+                              </span>
+                            ) : (
+                              <span className="inline-block rounded-full bg-sunken/60 px-2 py-0.5 text-[11px] font-bold text-ink-faint">
+                                0
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {officeLoad.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-ink-muted">
+                          No offices are configured yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              );
+            })()}
           </section>
         </div>
 

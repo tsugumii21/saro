@@ -1714,7 +1714,7 @@ export default function HazardMap({
 
               {/* Tab 1: Map Layers */}
               {panelTab === "layers" && (
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 max-h-52 overflow-y-auto pr-1">
                   {visibleToggles.map((layer) => (
                     <label
                       key={layer.id}
@@ -1734,7 +1734,7 @@ export default function HazardMap({
 
               {/* Tab 2: Map Key */}
               {panelTab === "key" && (
-                <div className="space-y-1.5 px-0.5 text-[10px] text-ink-muted">
+                <div className="space-y-1.5 px-0.5 text-[10px] text-ink-muted max-h-52 overflow-y-auto pr-1">
                   {REPORT_STATUS_KEY.map((entry) => (
                     <div key={entry.label} className="flex items-center gap-2">
                       <span

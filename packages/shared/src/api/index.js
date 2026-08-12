@@ -919,11 +919,43 @@ const DEMO_HISTORY_MAP = {
   ]
 };
 
-/* Offline fallback only. Photo evidence lives in Supabase — report_media rows
-   pointing at the report-photos bucket — so there are no stock images here
-   standing in for hazards they have nothing to do with. Reports filed on this
-   device while offline add their own entries at runtime. */
-const DEMO_MEDIA_MAP = {};
+/* Offline fallback & demo evidence photos */
+const makeSampleHazardPhoto = (title, subtitle, color = "#1B2E6B") => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+    <rect width="800" height="600" fill="#0F172A"/>
+    <rect x="20" y="20" width="760" height="560" rx="12" fill="#1E293B" stroke="#334155" stroke-width="2"/>
+    <circle cx="400" cy="240" r="80" fill="${color}" opacity="0.2"/>
+    <circle cx="400" cy="240" r="50" fill="${color}" opacity="0.4"/>
+    <text x="400" y="248" fill="#F8FAFC" font-family="sans-serif" font-size="32" font-weight="bold" text-anchor="middle">⚠️</text>
+    <text x="400" y="360" fill="#F8FAFC" font-family="sans-serif" font-size="24" font-weight="bold" text-anchor="middle">${title}</text>
+    <text x="400" y="400" fill="#94A3B8" font-family="sans-serif" font-size="16" text-anchor="middle">${subtitle}</text>
+    <text x="400" y="530" fill="#64748B" font-family="sans-serif" font-size="13" font-weight="bold" letter-spacing="2" text-anchor="middle">SARO EOC EVIDENCE ATTACHMENT</text>
+  </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+const DEMO_MEDIA_MAP = {
+  "demo-101": [
+    { id: "m-101-1", report_id: "demo-101", kind: "evidence", signed_url: makeSampleHazardPhoto("SR-8F2K · Flooding & Water Inundation", "Bitano Market Roadway Flood — Water rising fast", "#1B2E6B") },
+    { id: "m-101-2", report_id: "demo-101", kind: "evidence", signed_url: makeSampleHazardPhoto("SR-8F2K · Flooding Photo 2", "Inundated alley and store frontage", "#1B2E6B") }
+  ],
+  "demo-102": [
+    { id: "m-102-1", report_id: "demo-102", kind: "evidence", signed_url: makeSampleHazardPhoto("SR-8F2L · Flooding Inundation", "Water covering both lanes outside market", "#1B2E6B") }
+  ],
+  "demo-103": [
+    { id: "m-103-1", report_id: "demo-103", kind: "evidence", signed_url: makeSampleHazardPhoto("SR-8F2M · Ankle Deep Flood", "Bitano residential ground floor water entry", "#1B2E6B") }
+  ],
+  "demo-105": [
+    { id: "m-105-1", report_id: "demo-105", kind: "evidence", signed_url: makeSampleHazardPhoto("SR-2V4K · Soil Erosion Evidence", "Homapon cut slope landslide debris on road", "#D97706") },
+    { id: "m-105-2", report_id: "demo-105", kind: "resolution", signed_url: makeSampleHazardPhoto("SR-2V4K · Clearing Progress", "CDRRMO crew clearing slope debris", "#059669") }
+  ],
+  "demo-106": [
+    { id: "m-106-1", report_id: "demo-106", kind: "evidence", signed_url: makeSampleHazardPhoto("SR-5W8L · Fallen Tree Branch", "Oro Site roadway obstruction photo", "#D97706") }
+  ],
+  "demo-111": [
+    { id: "m-111-1", report_id: "demo-111", kind: "evidence", signed_url: makeSampleHazardPhoto("SR-9F1B · Structural Fire", "Flames visible near bakery in Bitano", "#DC2626") }
+  ]
+};
 
 export async function getReportById(reportId) {
   if (!reportId) return fail("Report id is required");

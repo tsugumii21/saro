@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   FileDown, Table, Crosshair, Loader2, Search, MapPin, Layers, X, Clock,
-  ChevronDown, Printer, Filter, ArrowLeft,
+  ChevronDown, Printer, Filter, ArrowLeft, ChevronLeft, ChevronRight,
+  Camera, Image as ImageIcon, Maximize2, Eye
 } from "lucide-react";
 import { StatusTag, TrackingCode, HazardMap } from "@saro/ui";
 import {
@@ -68,6 +69,69 @@ export default function EvidenceExport() {
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState("");
   const [error, setError] = useState("");
+
+  // Photo Evidence Viewer states
+  const [selectedReportId, setSelectedReportId] = useState(null);
+  const [mediaMap, setMediaMap] = useState({});
+  const [loadingMedia, setLoadingMedia] = useState(false);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  // Fetch photos for all rows whenever rows selection changes
+  useEffect(() => {
+    if (!rows || !rows.length) {
+      setMediaMap({});
+      setSelectedReportId(null);
+      setPhotoIndex(0);
+      return;
+    }
+
+    setSelectedReportId(rows[0].id);
+    setPhotoIndex(0);
+    setLoadingMedia(true);
+
+    let isMounted = true;
+    (async () => {
+      const map = {};
+      await Promise.all(
+        rows.map(async (r) => {
+          const { data } = await getReportMedia(r.id, { expiresInSeconds: 600 });
+          map[r.id] = data ?? [];
+        })
+      );
+      if (isMounted) {
+        setMediaMap(map);
+        setLoadingMedia(false);
+      }
+    })();
+
+    return () => { isMounted = false; };
+  }, [rows]);
+
+  // Handle Lightbox keyboard shortcuts (Esc, Left, Right)
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const currentPhotos = mediaMap[selectedReportId] || [];
+    if (!currentPhotos.length) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setLightboxOpen(false);
+      if (e.key === "ArrowLeft") {
+        setPhotoIndex((prev) => (prev > 0 ? prev - 1 : currentPhotos.length - 1));
+      }
+      if (e.key === "ArrowRight") {
+        setPhotoIndex((prev) => (prev < currentPhotos.length - 1 ? prev + 1 : 0));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxOpen, selectedReportId, mediaMap]);
+
+  const handleSelectReport = (id) => {
+    setSelectedReportId(id);
+    setPhotoIndex(0);
+  };
 
   /* Every read here is scoped to the signed-in viewer. This screen used to call
      getReports() bare and print the viewer's office as a caption, which meant a
@@ -449,7 +513,7 @@ export default function EvidenceExport() {
 
           {searchMode === "smart" && selectedSource && (
             /* Show a confirmation mini-map after selection */
-            <div className="saro-card relative flex-1 min-h-[300px] overflow-hidden border border-line shadow-xs">
+            <div className="saro-card relative flex-1 min-h-[440px] h-[440px] overflow-hidden border border-line shadow-xs">
               <HazardMap
                 className="h-full w-full"
                 center={selectedSource.lng && selectedSource.lat
@@ -463,23 +527,6 @@ export default function EvidenceExport() {
                   color: "#1B2E6B",
                 }))}
               />
-              {/* Floating source badge on map */}
-              <div className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur border border-line rounded shadow-card px-3 py-2 flex items-center gap-2 max-w-[340px]">
-                {typeIcon(selectedSource.type)}
-                <div className="min-w-0 flex-1">
-                  <span className="t-body-sm font-bold text-ink block truncate">{selectedSource.label}</span>
-                  <span className="text-[10px] text-ink-muted">{selectedSource.sublabel}</span>
-                </div>
-                <button
-                  onClick={clearSelection}
-                  className="saro-btn saro-btn-secondary saro-btn-sm ml-auto shrink-0 flex items-center gap-1 text-xs font-bold border-brand-edge text-brand"
-                  title="Clear selection and return to search"
-                >
-                  <ArrowLeft width={12} height={12} />
-                  <span>Back</span>
-                  <X width={12} height={12} />
-                </button>
-              </div>
             </div>
           )}
 
@@ -516,7 +563,7 @@ export default function EvidenceExport() {
                 </button>
               </div>
 
-              <div className="saro-card relative flex-1 min-h-[300px] overflow-hidden border border-line shadow-xs">
+              <div className="saro-card relative flex-1 min-h-[440px] h-[440px] overflow-hidden border border-line shadow-xs">
                 <HazardMap
                   className="h-full w-full"
                   center={radiusPoint
@@ -571,9 +618,9 @@ export default function EvidenceExport() {
 
         {/* ── Right: Evidence summary panel ─────────────────────────────── */}
         {searched && rows.length > 0 && (
-          <aside className="saro-card flex flex-col min-h-0 overflow-hidden bg-white border border-line shadow-xs">
+          <aside className="saro-card flex flex-col min-h-0 overflow-y-auto no-scrollbar bg-white border border-line shadow-xs">
             {/* Summary header */}
-            <div className="border-b border-line px-4 py-3 bg-raised flex items-center justify-between gap-2">
+            <div className="border-b border-line px-4 py-3 bg-raised flex items-center justify-between gap-2 shrink-0">
               <div>
                 <span className="text-[10px] uppercase font-bold tracking-wider text-ink-faint block">
                   Evidence Summary
@@ -583,18 +630,10 @@ export default function EvidenceExport() {
                   report{rows.length === 1 ? "" : "s"}{selectedSource?.type === "radius" ? ` within ${radius}m` : ""}
                 </span>
               </div>
-              <button
-                onClick={clearSelection}
-                className="saro-btn saro-btn-secondary text-xs flex items-center gap-1 font-bold text-brand border-brand-edge shrink-0"
-                title="Return to evidence search"
-              >
-                <ArrowLeft width={13} height={13} />
-                <span>Back</span>
-              </button>
             </div>
 
             {/* Timeline chart */}
-            <div className="px-4 py-3 border-b border-line">
+            <div className="px-4 py-3 border-b border-line shrink-0">
               <span className="text-[10px] uppercase font-bold tracking-wider text-ink-faint block mb-2">
                 <Clock width={11} height={11} className="inline -mt-px mr-1" />
                 Reports Over Time
@@ -615,8 +654,175 @@ export default function EvidenceExport() {
               </div>
             </div>
 
+            {/* ── Photo Evidence Viewer ─────────────────────────────── */}
+            <div className="px-4 py-3 border-b border-line flex flex-col gap-2.5 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-ink-faint flex items-center gap-1">
+                  <Camera width={12} height={12} className="inline -mt-px text-brand" />
+                  Photo Evidence
+                </span>
+                {loadingMedia && (
+                  <span className="text-[10px] text-ink-faint flex items-center gap-1">
+                    <Loader2 width={10} height={10} className="animate-spin" />
+                    Loading photos…
+                  </span>
+                )}
+              </div>
+
+              {/* Auto-Adapting Report Selector */}
+              {rows.length > 1 && (
+                <div>
+                  {rows.length <= 3 ? (
+                    /* Segmented Tab Selector for ≤3 reports */
+                    <div className="flex items-center gap-1 bg-sunken p-1 rounded border border-line">
+                      {rows.map((r) => {
+                        const isSelected = r.id === selectedReportId;
+                        const count = mediaMap[r.id]?.length ?? 0;
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => handleSelectReport(r.id)}
+                            className={`flex-1 px-2 py-1 text-xs font-bold rounded transition-all flex items-center justify-center gap-1.5 ${
+                              isSelected
+                                ? "bg-brand text-white shadow-2xs"
+                                : "text-ink-muted hover:text-ink hover:bg-white/60"
+                            }`}
+                          >
+                            <span>{r.tracking_code}</span>
+                            {count > 0 && (
+                              <span
+                                className={`text-[9px] px-1 py-0.2 rounded-full font-mono ${
+                                  isSelected ? "bg-white/20 text-white" : "bg-raised text-ink-faint"
+                                }`}
+                              >
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Dropdown Select Box for >3 reports */
+                    <div className="relative">
+                      <select
+                        value={selectedReportId || ""}
+                        onChange={(e) => handleSelectReport(e.target.value)}
+                        className="saro-input w-full py-1.5 px-2.5 text-xs font-bold bg-raised border border-line rounded pr-7"
+                      >
+                        {rows.map((r) => {
+                          const count = mediaMap[r.id]?.length ?? 0;
+                          const label = r.routing_table?.label ?? r.category;
+                          return (
+                            <option key={r.id} value={r.id}>
+                              {r.tracking_code} · {label} ({count} photo{count === 1 ? "" : "s"})
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <ChevronDown width={14} height={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Inline Photo Carousel Display */}
+              {(() => {
+                const currentPhotos = mediaMap[selectedReportId] || [];
+                const activeReport = rows.find((r) => r.id === selectedReportId) || rows[0];
+
+                if (!currentPhotos.length) {
+                  return (
+                    <div className="flex flex-col items-center justify-center gap-2 p-5 bg-sunken/60 rounded border border-dashed border-line text-center">
+                      <Camera width={20} height={20} className="text-ink-faint" />
+                      <span className="text-xs font-semibold text-ink-muted">
+                        No photo evidence attached
+                      </span>
+                      <span className="text-[10px] text-ink-faint max-w-[28ch]">
+                        {activeReport?.tracking_code
+                          ? `Report ${activeReport.tracking_code} has no uploaded images.`
+                          : "Select a report to view photo attachments."}
+                      </span>
+                    </div>
+                  );
+                }
+
+                const currentPhoto = currentPhotos[photoIndex] || currentPhotos[0];
+
+                return (
+                  <div className="relative flex flex-col gap-1.5">
+                    {/* Photo Container */}
+                    <div
+                      onClick={() => setLightboxOpen(true)}
+                      className="group relative h-64 w-full overflow-hidden rounded border border-line bg-slate-900 cursor-pointer shadow-xs"
+                      title="Click to expand lightbox"
+                    >
+                      <img
+                        src={currentPhoto.signed_url || currentPhoto.url || currentPhoto.object_path}
+                        alt={`${activeReport?.tracking_code} photo ${photoIndex + 1}`}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+
+                      {/* Overlay gradient & badges */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none" />
+
+                      {/* Top badges */}
+                      <div className="absolute top-2 left-2 right-2 flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur text-white border border-white/20">
+                          {currentPhoto.kind || "evidence"}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur text-white border border-white/20">
+                          {photoIndex + 1} / {currentPhotos.length}
+                        </span>
+                      </div>
+
+                      {/* Hover zoom hint */}
+                      <div className="absolute bottom-2 right-2 flex items-center gap-1 text-[11px] font-bold text-white bg-black/70 backdrop-blur px-2 py-1 rounded opacity-90 group-hover:opacity-100 group-hover:bg-brand transition-all">
+                        <Maximize2 width={12} height={12} />
+                        <span>Expand</span>
+                      </div>
+                    </div>
+
+                    {/* Carousel controls */}
+                    {currentPhotos.length > 1 && (
+                      <div className="flex items-center justify-between px-1">
+                        <button
+                          type="button"
+                          onClick={() => setPhotoIndex((prev) => (prev > 0 ? prev - 1 : currentPhotos.length - 1))}
+                          className="p-1 text-xs font-bold text-ink-muted hover:text-ink hover:bg-raised rounded transition-colors flex items-center gap-1"
+                        >
+                          <ChevronLeft width={14} height={14} />
+                          <span>Previous</span>
+                        </button>
+                        <div className="flex items-center gap-1">
+                          {currentPhotos.map((_, idx) => (
+                            <span
+                              key={idx}
+                              onClick={() => setPhotoIndex(idx)}
+                              className={`h-1.5 rounded-full cursor-pointer transition-all ${
+                                idx === photoIndex ? "w-4 bg-brand" : "w-1.5 bg-line hover:bg-ink-faint"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPhotoIndex((prev) => (prev < currentPhotos.length - 1 ? prev + 1 : 0))}
+                          className="p-1 text-xs font-bold text-ink-muted hover:text-ink hover:bg-raised rounded transition-colors flex items-center gap-1"
+                        >
+                          <span>Next</span>
+                          <ChevronRight width={14} height={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* Export actions */}
-            <div className="px-4 py-3 flex flex-col gap-2 mt-auto">
+            <div className="px-4 py-3 flex flex-col gap-2 shrink-0 mt-auto">
               <button
                 onClick={clearSelection}
                 className="saro-btn saro-btn-secondary saro-btn-block text-xs font-bold text-brand border-brand-edge flex items-center justify-center gap-1.5"
@@ -640,6 +846,110 @@ export default function EvidenceExport() {
             </div>
           </aside>
         )}
+
+        {/* ── Lightbox Modal ──────────────────────────────────────────────────────── */}
+        {lightboxOpen && (() => {
+          const currentPhotos = mediaMap[selectedReportId] || [];
+          const activeReport = rows.find((r) => r.id === selectedReportId) || rows[0];
+          const currentPhoto = currentPhotos[photoIndex] || currentPhotos[0];
+
+          if (!currentPhoto) return null;
+
+          return (
+            <div
+              className="fixed inset-0 z-50 flex flex-col justify-between bg-slate-950/95 backdrop-blur-md p-4 sm:p-6 transition-all"
+              onClick={() => setLightboxOpen(false)}
+            >
+              {/* Lightbox Header */}
+              <div className="flex items-center justify-between gap-4 border-b border-slate-800 pb-3" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-3">
+                  <TrackingCode code={activeReport?.tracking_code} size="md" />
+                  <div>
+                    <span className="text-sm font-bold text-white block">
+                      {activeReport?.routing_table?.label ?? activeReport?.category}
+                    </span>
+                    <span className="text-xs text-slate-400 block">
+                      {activeReport?.barangays?.name ? `Brgy. ${activeReport.barangays.name}` : ""}
+                      {currentPhoto.kind ? ` · ${currentPhoto.kind.toUpperCase()}` : ""}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono font-bold text-slate-400">
+                    {photoIndex + 1} of {currentPhotos.length}
+                  </span>
+                  <button
+                    onClick={() => setLightboxOpen(false)}
+                    className="rounded-full bg-slate-800 p-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                    title="Close Lightbox (Esc)"
+                  >
+                    <X width={18} height={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Lightbox Main Image & Arrow Controls */}
+              <div className="relative flex min-h-0 flex-1 items-center justify-center py-4" onClick={(e) => e.stopPropagation()}>
+                {currentPhotos.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setPhotoIndex((prev) => (prev > 0 ? prev - 1 : currentPhotos.length - 1))}
+                    className="absolute left-2 sm:left-6 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white border border-white/20 shadow-lg hover:bg-brand transition-all"
+                    title="Previous photo (Left Arrow)"
+                  >
+                    <ChevronLeft width={24} height={24} />
+                  </button>
+                )}
+
+                <img
+                  src={currentPhoto.signed_url || currentPhoto.url || currentPhoto.object_path}
+                  alt={`${activeReport?.tracking_code} enlarged photo ${photoIndex + 1}`}
+                  className="max-h-[72vh] max-w-full object-contain rounded-md shadow-2xl border border-slate-800"
+                />
+
+                {currentPhotos.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setPhotoIndex((prev) => (prev < currentPhotos.length - 1 ? prev + 1 : 0))}
+                    className="absolute right-2 sm:right-6 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white border border-white/20 shadow-lg hover:bg-brand transition-all"
+                    title="Next photo (Right Arrow)"
+                  >
+                    <ChevronRight width={24} height={24} />
+                  </button>
+                )}
+              </div>
+
+              {/* Lightbox Bottom Thumbnail Strip */}
+              {currentPhotos.length > 1 && (
+                <div className="flex items-center justify-center border-t border-slate-800 pt-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2 overflow-x-auto max-w-full p-1 no-scrollbar">
+                    {currentPhotos.map((photo, idx) => {
+                      const isSelected = idx === photoIndex;
+                      return (
+                        <button
+                          key={photo.id || idx}
+                          onClick={() => setPhotoIndex(idx)}
+                          className={`relative h-14 w-20 shrink-0 overflow-hidden rounded border transition-all ${
+                            isSelected
+                              ? "border-brand ring-2 ring-brand-light scale-105"
+                              : "border-slate-800 opacity-50 hover:opacity-100"
+                          }`}
+                        >
+                          <img
+                            src={photo.signed_url || photo.url || photo.object_path}
+                            alt={`Thumbnail ${idx + 1}`}
+                            className="h-full w-full object-cover"
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {searched && rows.length === 0 && !error && (
           <aside className="saro-card flex flex-col items-center justify-center gap-2 px-6 py-14 text-center border border-line">
